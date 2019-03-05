@@ -2668,4 +2668,12 @@ public class SelectNode extends ResultSetNode{
 
         return true;
     }
+
+    public boolean getOriginalWhereClauseHadSubqueries() {
+        return this.originalWhereClauseHadSubqueries;
+    }
+
+    public boolean hasHavingClause() {
+        return havingClause != null;
+    }
 }
