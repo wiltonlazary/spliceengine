@@ -17,6 +17,7 @@ package com.splicemachine.derby.impl.sql.execute.operations;
 import com.splicemachine.EngineDriver;
 import com.splicemachine.access.api.SConfiguration;
 import com.splicemachine.client.SpliceClient;
+import com.splicemachine.db.iapi.types.SQLReal;
 import com.splicemachine.derby.iapi.sql.execute.*;
 import com.splicemachine.derby.stream.function.*;
 import com.splicemachine.derby.stream.function.broadcast.BroadcastJoinFlatMapFunction;
@@ -193,9 +194,15 @@ public class BroadcastJoinOperation extends JoinOperation{
 
         SConfiguration configuration= EngineDriver.driver().getConfiguration();
 
-        boolean useDataset = SpliceClient.isClient() ||
+        // Temporarily always use DataSet broadcast join, if it is legal,
+        // to avoid poor performance in large OLAP queries.
+        // SPLICE-2380 will remove this fix make the decision based
+        // on the number of tables in the query and other factors.
+        boolean useDataset = true ||
+                             SpliceClient.isClient() ||
                 rightResultSet.getEstimatedCost() / 1000 > configuration.getBroadcastDatasetCostThreshold() ||
                         rightResultSet.accessExternalTable();
+
         /** For semi-join, it is possible that the right side is a result from complex operations, like a sequence
          * of joins or some aggregations on top of base table. So heuristically it is better to go through the dataset implementation
          * if the rightResultSet is not a simple access of the base table
@@ -218,8 +225,12 @@ public class BroadcastJoinOperation extends JoinOperation{
             useDataset = false;
 
         DataSet<ExecRow> result;
-        if (useDataset && dsp.getType().equals(DataSetProcessor.Type.SPARK) &&
-                (restriction ==null || (!isOuterJoin && !notExistsRightSide))) {
+        boolean usesNativeSparkDataSet =
+           (useDataset && dsp.getType().equals(DataSetProcessor.Type.SPARK) &&
+             (restriction ==null || (!isOuterJoin && !notExistsRightSide && !isOneRowRightSide())) &&
+              !containsUnsafeSQLRealComparison());
+        if (usesNativeSparkDataSet)
+        {
             DataSet<ExecRow> rightDataSet = rightResultSet.getDataSet(dsp);
             if (isOuterJoin)
                 result = leftDataSet.join(operationContext,rightDataSet, DataSet.JoinType.LEFTOUTER,true);
@@ -228,12 +239,16 @@ public class BroadcastJoinOperation extends JoinOperation{
 
             else { // Inner Join
                 if (isOneRowRightSide()) {
-                    result = leftDataSet.join(operationContext,rightDataSet, DataSet.JoinType.LEFTSEMI,true)
-                            .filter(new JoinRestrictionPredicateFunction(operationContext));
+                    result = leftDataSet.join(operationContext,rightDataSet, DataSet.JoinType.LEFTSEMI,true);
                 } else {
-                    result = leftDataSet.join(operationContext,rightDataSet, DataSet.JoinType.INNER,true)
-                            .filter(new JoinRestrictionPredicateFunction(operationContext));
+                    result = leftDataSet.join(operationContext,rightDataSet, DataSet.JoinType.INNER,true);
 
+                }
+                // Adding a filter in this manner disables native spark execution,
+                // so only do it if required.
+                if (restriction != null) {
+                    result = result.filter(new JoinRestrictionPredicateFunction(operationContext));
+                    usesNativeSparkDataSet = false;
                 }
             }
         }
@@ -243,7 +258,7 @@ public class BroadcastJoinOperation extends JoinOperation{
                         .flatMap(new OuterJoinRestrictionFlatMapFunction<SpliceOperation>(operationContext))
                         .map(new SetCurrentLocatedRowFunction<SpliceOperation>(operationContext));
             } else {
-                if (this.leftHashKeys.length != 0)
+                if (this.leftHashKeys.length != 0 && !this.notExistsRightSide)
                     leftDataSet = leftDataSet.filter(new InnerJoinNullFilterFunction(operationContext,this.leftHashKeys));
                 if (this.notExistsRightSide) { // antijoin
                     if (restriction != null) { // with restriction

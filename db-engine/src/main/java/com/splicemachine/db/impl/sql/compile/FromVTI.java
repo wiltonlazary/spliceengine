@@ -245,6 +245,9 @@ public class FromVTI extends FromTable implements VTIEnvironment {
                 costEstimate.setSingleScanRowCount(estimatedRowCount);
                 costEstimate.setLocalCost(estimatedCost);
                 costEstimate.setRemoteCost(estimatedCost);
+                costEstimate.setLocalCostPerPartition(estimatedCost, costEstimate.partitionCount());
+                costEstimate.setRemoteCostPerPartition(estimatedCost, costEstimate.partitionCount());
+
             }
             catch (SQLException sqle)
             {
@@ -279,6 +282,9 @@ public class FromVTI extends FromTable implements VTIEnvironment {
         tempBitSet.or(correlationMap);
 
 		/* Have all of our dependencies been satisified? */
+        if (existsTable || fromSSQ)
+            return (assignedTableMap.getFirstSetBit()!= -1) && tempBitSet.contains(dependencyMap);
+
         return tempBitSet.contains(dependencyMap);
     }
 

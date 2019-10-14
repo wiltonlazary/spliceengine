@@ -15,9 +15,11 @@
 package com.splicemachine.access.configuration;
 
 import com.splicemachine.access.api.SConfiguration;
+import com.splicemachine.db.iapi.sql.compile.CompilerContext;
 import org.apache.log4j.Logger;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -77,6 +79,7 @@ public final class SConfigurationImpl implements SConfiguration {
     private final  long ddlDrainingMaximumWait;
     private final  long ddlRefreshInterval;
     private final  long maxDdlWait;
+    private final long mergeRegionTimeout;
 
     // HConfiguration
     private final  int regionServerHandlerCount;
@@ -94,6 +97,9 @@ public final class SConfigurationImpl implements SConfiguration {
     private final  long backupMaxBandwidthMB;
     private final  boolean backupUseDistcp;
     private final  int backupIOBufferSize;
+    private final  int replicationSnapshotInterval;
+    private final  int replicationSinkPort;
+    private final int replicationProgressUpdateInterval;
 
     // OperationConfiguration
     private final  int sequenceBlockSize;
@@ -150,6 +156,10 @@ public final class SConfigurationImpl implements SConfiguration {
     private final int olapServerMemoryOverhead;
     private final int olapServerVirtualCores;
     private final String olapLog4jConfig;
+    private final Map<String, String> olapServerIsolatedRoles;
+    private final Map<String, String> olapServerYarnQueues;
+    private final boolean olapServerIsolatedCompaction;
+    private final String olapServerIsolatedCompactionQueueName;
 
     // SIConfigurations
     private final  int activeTransactionCacheSize;
@@ -194,6 +204,9 @@ public final class SConfigurationImpl implements SConfiguration {
     private final int nestedLoopJoinBatchSize;
     private final long controlExecutionRowLimit;
     private final int maxCheckTableErrors;
+    private final int recursiveQueryIterationLimit;
+    private String metadataRestrictionEnabled;
+    private CompilerContext.NativeSparkModeType nativeSparkAggregationMode;
 
     // StatsConfiguration
     private final  double fallbackNullFraction;
@@ -213,6 +226,7 @@ public final class SConfigurationImpl implements SConfiguration {
     private final  int splitBlockSize;
     private final  long regionMaxFileSize;
     private final  long tableSplitSleepInterval;
+    private final  int splitsPerTableMin;
 
     // Gateway to hadoop config
     private final ConfigurationSource configSource;
@@ -326,6 +340,10 @@ public final class SConfigurationImpl implements SConfiguration {
     public long getMaxDdlWait() {
         return maxDdlWait;
     }
+    @Override
+    public long getMergeRegionTimeout() {
+        return mergeRegionTimeout;
+    }
 
     // HConfiguration
     @Override
@@ -367,6 +385,18 @@ public final class SConfigurationImpl implements SConfiguration {
     @Override
     public int getBackupIOBufferSize() {
         return backupIOBufferSize;
+    }
+    @Override
+    public int getReplicationSnapshotInterval() {
+        return replicationSnapshotInterval;
+    }
+    @Override
+    public int getReplicationSinkPort() {
+        return replicationSinkPort;
+    }
+    @Override
+    public int getReplicationProgressUpdateInterval() {
+        return replicationProgressUpdateInterval;
     }
     @Override
     public String getCompressionAlgorithm() {
@@ -724,6 +754,14 @@ public final class SConfigurationImpl implements SConfiguration {
     public int getNestedLoopJoinBatchSize() {
         return nestedLoopJoinBatchSize;
     }
+    @Override
+    public int getRecursiveQueryIterationLimit() {
+        return recursiveQueryIterationLimit;
+    }
+    @Override
+    public String getMetadataRestrictionEnabled() {
+        return metadataRestrictionEnabled;
+    }
 
     // StatsConfiguration
     @Override
@@ -790,6 +828,10 @@ public final class SConfigurationImpl implements SConfiguration {
     public long getTableSplitSleepInterval() {
         return tableSplitSleepInterval;
     }
+    @Override
+    public int getSplitsPerTableMin() {
+        return splitsPerTableMin;
+    }
 
     // ===========
 
@@ -824,6 +866,7 @@ public final class SConfigurationImpl implements SConfiguration {
         ddlDrainingMaximumWait = builder.ddlDrainingMaximumWait;
         ddlRefreshInterval = builder.ddlRefreshInterval;
         maxDdlWait = builder.maxDdlWait;
+        mergeRegionTimeout = builder.mergeRegionTimeout;
         authenticationNativeCreateCredentialsDatabase = builder.authenticationNativeCreateCredentialsDatabase;
         authentication = builder.authentication;
         authenticationCustomProvider = builder.authenticationCustomProvider;
@@ -860,6 +903,7 @@ public final class SConfigurationImpl implements SConfiguration {
         splitBlockSize = builder.splitBlockSize;
         regionMaxFileSize = builder.regionMaxFileSize;
         tableSplitSleepInterval = builder.tableSplitSleepInterval;
+        splitsPerTableMin = builder.splitsPerTableMin;
         regionServerHandlerCount = builder.regionServerHandlerCount;
         timestampBlockSize = builder.timestampBlockSize;
         regionLoadUpdateInterval = builder.regionLoadUpdateInterval;
@@ -870,6 +914,9 @@ public final class SConfigurationImpl implements SConfiguration {
         backupMaxBandwidthMB = builder.backupMaxBandwidthMB;
         backupUseDistcp = builder.backupUseDistcp;
         backupIOBufferSize = builder.backupIOBufferSize;
+        replicationSnapshotInterval = builder.replicationSnapshotInterval;
+        replicationSinkPort = builder.replicationSinkPort;
+        replicationProgressUpdateInterval = builder.replicationProgressUpdateInterval;
         compressionAlgorithm = builder.compressionAlgorithm;
         namespace = builder.namespace;
         spliceRootPath = builder.spliceRootPath;
@@ -893,6 +940,7 @@ public final class SConfigurationImpl implements SConfiguration {
         broadcastRegionMbThreshold = builder.broadcastRegionMbThreshold;
         broadcastRegionRowThreshold = builder.broadcastRegionRowThreshold;
         broadcastDatasetCostThreshold = builder.broadcastDatasetCostThreshold;
+        recursiveQueryIterationLimit = builder.recursiveQueryIterationLimit;
         optimizerPlanMaximumTimeout = builder.optimizerPlanMaximumTimeout;
         optimizerPlanMinimumTimeout = builder.optimizerPlanMinimumTimeout;
         determineSparkRowThreshold = builder.determineSparkRowThreshold;
@@ -938,6 +986,10 @@ public final class SConfigurationImpl implements SConfiguration {
         olapCompactionResolutionBufferSize = builder.olapCompactionResolutionBufferSize;
         olapCompactionBlocking = builder.olapCompactionBlocking;
         olapLog4jConfig = builder.olapLog4jConfig;
+        olapServerIsolatedRoles = builder.olapServerIsolatedRoles;
+        olapServerYarnQueues = builder.olapServerYarnQueues;
+        olapServerIsolatedCompaction = builder.olapServerIsolatedCompaction;
+        olapServerIsolatedCompactionQueueName = builder.olapServerIsolatedCompactionQueueName;
         resolutionOnFlushes = builder.resolutionOnFlushes;
         reservedSlotsTimeout = builder.reservedSlotsTimeout;
         storageFactoryHome = builder.storageFactoryHome;
@@ -953,6 +1005,8 @@ public final class SConfigurationImpl implements SConfiguration {
         rollForwardSecondWait = builder.rollForwardSecondWait;
         rollForwardFirstThreads = builder.rollForwardFirstThreads;
         rollForwardSecondThreads = builder.rollForwardSecondThreads;
+        metadataRestrictionEnabled = builder.metadataRestrictionEnabled;
+        nativeSparkAggregationMode = builder.nativeSparkAggregationMode;
     }
 
     private static final Logger LOG = Logger.getLogger("splice.config");
@@ -1027,6 +1081,26 @@ public final class SConfigurationImpl implements SConfiguration {
     }
 
     @Override
+    public Map<String, String> getOlapServerIsolatedRoles() {
+        return olapServerIsolatedRoles;
+    }
+
+    @Override
+    public Map<String, String> getOlapServerYarnQueues() {
+        return olapServerYarnQueues;
+    }
+
+    @Override
+    public boolean getOlapServerIsolatedCompaction() {
+        return olapServerIsolatedCompaction;
+    }
+
+    @Override
+    public String getOlapServerIsolatedCompactionQueueName() {
+        return olapServerIsolatedCompactionQueueName;
+    }
+
+    @Override
     public boolean getResolutionOnFlushes() {
         return resolutionOnFlushes;
     }
@@ -1049,5 +1123,15 @@ public final class SConfigurationImpl implements SConfiguration {
     @Override
     public int getMaxCheckTableErrors() {
         return maxCheckTableErrors;
+    }
+
+    @Override
+    public void setNativeSparkAggregationMode(CompilerContext.NativeSparkModeType newValue) {
+        nativeSparkAggregationMode = newValue;
+    }
+
+    @Override
+    public CompilerContext.NativeSparkModeType getNativeSparkAggregationMode() {
+        return nativeSparkAggregationMode;
     }
 }

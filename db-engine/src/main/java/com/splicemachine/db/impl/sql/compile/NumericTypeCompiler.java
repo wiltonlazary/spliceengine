@@ -31,30 +31,25 @@
 
 package com.splicemachine.db.impl.sql.compile;
 
+
 import com.splicemachine.db.iapi.sql.conn.LanguageConnectionContext;
-
 import com.splicemachine.db.iapi.services.context.ContextService;
-
 import com.splicemachine.db.iapi.services.loader.ClassFactory;
-
 import com.splicemachine.db.iapi.services.sanity.SanityManager;
-
 import com.splicemachine.db.iapi.services.info.JVMInfo;
 import com.splicemachine.db.iapi.services.io.StoredFormatIds;
-
 import com.splicemachine.db.iapi.error.StandardException;
-
 import com.splicemachine.db.iapi.types.DataTypeDescriptor;
-import com.splicemachine.db.iapi.types.NumberDataValue;
 import com.splicemachine.db.iapi.types.TypeId;
-
 import com.splicemachine.db.iapi.sql.compile.TypeCompiler;
-
 import com.splicemachine.db.iapi.reference.ClassName;
-import com.splicemachine.db.iapi.reference.Limits;
 import com.splicemachine.db.iapi.reference.SQLState;
 import com.splicemachine.db.iapi.services.compiler.LocalField;
 import com.splicemachine.db.iapi.services.compiler.MethodBuilder;
+
+import java.sql.Types;
+
+import static com.splicemachine.db.iapi.types.NumberDataValue.*;
 
 /**
  * This class implements TypeId for the SQL numeric datatype.
@@ -63,6 +58,14 @@ import com.splicemachine.db.iapi.services.compiler.MethodBuilder;
 
 public final class NumericTypeCompiler extends BaseTypeCompiler
 {
+	public static boolean supportsDecimal38() {
+	    LanguageConnectionContext lcc = (LanguageConnectionContext)
+		(ContextService.getContext(LanguageConnectionContext.CONTEXT_ID));
+	    boolean supportsDec38 =
+	        lcc != null && lcc.clientSupportsDecimal38();
+	    return supportsDec38;
+	}
+
 	/** @see TypeCompiler#interfaceName */
 	public String interfaceName()
 	{
@@ -189,6 +192,29 @@ public final class NumericTypeCompiler extends BaseTypeCompiler
 		}
 	}
 
+	private boolean integralType(TypeId typeId) {
+		switch (typeId.getJDBCTypeId()) {
+			case java.sql.Types.TINYINT:
+			case java.sql.Types.SMALLINT:
+			case java.sql.Types.INTEGER:
+			case java.sql.Types.BIGINT:
+				return true;
+			default:
+				break;
+		}
+		return false;
+	}
+
+	private boolean
+	shouldCastToDecimal(TypeId leftTypeId, TypeId rightTypeId, String operator) {
+		if (!operator.equals(DIVIDE_OP))
+			return true;
+		if (integralType(leftTypeId) && integralType(rightTypeId))
+			return false;
+
+		return true;
+	}
+
 	/**
 	 * @see TypeCompiler#resolveArithmeticOperation
 	 *
@@ -278,7 +304,7 @@ public final class NumericTypeCompiler extends BaseTypeCompiler
 
 		int highTypeId = higherType.getTypeId().getJDBCTypeId();
 		if (java.sql.Types.TINYINT == highTypeId ||
-			java.sql.Types.SMALLINT == highTypeId ||
+		    java.sql.Types.SMALLINT == highTypeId ||
 		    java.sql.Types.INTEGER == highTypeId)
 		{
 			return new DataTypeDescriptor(
@@ -288,6 +314,7 @@ public final class NumericTypeCompiler extends BaseTypeCompiler
 		}
 		else
 		{
+			TypeId typeId = higherType.getTypeId();
 		
 		
 			/* The calculation of precision and scale should be based upon
@@ -297,8 +324,56 @@ public final class NumericTypeCompiler extends BaseTypeCompiler
 			precision = higherTC.getPrecision(operator, leftType, rightType);
 			scale = higherTC.getScale(operator, leftType, rightType);
 
-			if (higherType.getTypeId().isDecimalTypeId()) 
+			// No need to overflow when averaging something like DEC(37,1),
+			// just use the maximum scale that would still fit.
+			int maxPrecision = higherType.getPrecision() > OLD_MAX_DECIMAL_PRECISION_SCALE ||
+				           supportsDecimal38() ? MAX_DECIMAL_PRECISION_SCALE :
+			                   OLD_MAX_DECIMAL_PRECISION_SCALE;
+			if (typeId.getTypeFormatId() == StoredFormatIds.DECIMAL_TYPE_ID &&
+			    (scale + (precision - higherType.getScale())) >
+			       maxPrecision &&
+		            TypeCompiler.AVG_OP.equals(operator)) {
+				precision = Math.max(higherType.getPrecision(), precision);
+				int precisionDelta = precision - higherType.getPrecision();
+				int newScale = Math.max(higherType.getScale(),
+						  maxPrecision - higherType.getPrecision() + precisionDelta);
+				if (scale > newScale)
+				    scale = newScale;
+			}
+			// Promote REAL to DOUBLE and BIGINT to DECIMAL so we don't overflow
+			// aggregate or arithmetic computations.
+			if (typeId.isRealTypeId()) {
+				typeId = TypeId.getBuiltInTypeId(Types.DOUBLE);
+				maximumWidth = typeId.getMaximumMaximumWidth();
+				precision = typeId.getMaximumPrecision();
+				scale = typeId.getMaximumScale();
+			}
+			else if (typeId.isBigIntTypeId() &&
+			         shouldCastToDecimal(leftTypeId, rightTypeId, operator))
 			{
+				typeId = TypeId.getBuiltInTypeId(Types.DECIMAL);
+				// Leave room for 4 digits right of the decimal place when averaging.
+				// For the old client, use the old size of 31 for consistent behavior.
+				if (supportsDecimal38())
+				    precision = MAX_DECIMAL_PRECISION_WITH_RESERVE_FOR_SCALE;
+				else
+				    precision = OLD_MAX_DECIMAL_PRECISION_SCALE;
+				maximumWidth = precision + 1;
+				scale = 0;
+			}
+			else if (typeId.isDecimalTypeId())
+			{
+				// Use high precision for decimals, so we don't overflow.
+				// But don't use max precision to leave room for 4 digits to
+				// the right of the decimal place for operations like AVG.
+				// For the old client, use the old size of 31 for consistent behavior.
+				int scaleAllowance = Math.max(0, MIN_DECIMAL_DIVIDE_SCALE - Math.max(scale, 0));
+				int maxImplicitCastPrecision = precision > OLD_MAX_DECIMAL_PRECISION_SCALE ||
+				                               supportsDecimal38()  ?
+				      MAX_DECIMAL_PRECISION_WITH_RESERVE_FOR_SCALE + scaleAllowance :
+				      OLD_MAX_DECIMAL_PRECISION_SCALE;
+				if (precision < maxImplicitCastPrecision)
+				    precision = maxImplicitCastPrecision;
 				maximumWidth = (scale > 0) ? precision + 3 : precision + 1;
 
 				/*
@@ -315,7 +390,7 @@ public final class NumericTypeCompiler extends BaseTypeCompiler
 			}
 		
 			return new DataTypeDescriptor(
-					higherType.getTypeId(),
+				    typeId,
 					precision,
 					scale,
 					nullable,
@@ -425,6 +500,11 @@ public final class NumericTypeCompiler extends BaseTypeCompiler
 		long rprec = (long)rightType.getPrecision();
 		long val;
 
+		final int maxPrecision = lprec > OLD_MAX_DECIMAL_PRECISION_SCALE ||
+		                         rprec > OLD_MAX_DECIMAL_PRECISION_SCALE ||
+					 NumericTypeCompiler.supportsDecimal38() ?
+					 MAX_DECIMAL_PRECISION_SCALE :
+					 OLD_MAX_DECIMAL_PRECISION_SCALE;
 		/*
 		** Null means datatype merge.  Take the maximum
 	 	** left of decimal digits plus the scale.
@@ -445,7 +525,7 @@ public final class NumericTypeCompiler extends BaseTypeCompiler
 		}
 		else if (operator.equals(TypeCompiler.DIVIDE_OP))
 		{
-			val = Math.min(NumberDataValue.MAX_DECIMAL_PRECISION_SCALE,
+			val = Math.min(maxPrecision,
 						   this.getScale(operator, leftType, rightType) + lprec - lscale + rprec);
 		}
 		/*
@@ -459,16 +539,16 @@ public final class NumericTypeCompiler extends BaseTypeCompiler
 			*/
 			val = this.getScale(operator, leftType, rightType) +
 					Math.max(lprec - lscale, rprec - rscale) + 1;
-			if (val > Limits.DB2_MAX_DECIMAL_PRECISION_SCALE)
+			if (val > maxPrecision)
 			// then, like DB2, just set it to the max possible.
-				val = Limits.DB2_MAX_DECIMAL_PRECISION_SCALE;
+				val = maxPrecision;
 		}
 
 		if (val > Integer.MAX_VALUE)
 		{
 			val = Integer.MAX_VALUE;
 		}
-		val = Math.min(NumberDataValue.MAX_DECIMAL_PRECISION_SCALE, val);
+		val = Math.min(maxPrecision, val);
 		return (int)val;
 	}
 
@@ -505,7 +585,11 @@ public final class NumericTypeCompiler extends BaseTypeCompiler
 		long rscale = (long)rightType.getScale();
 		long lprec = (long)leftType.getPrecision();
 		long rprec = (long)rightType.getPrecision();
-
+		final int maxPrecision = lprec > OLD_MAX_DECIMAL_PRECISION_SCALE ||
+		                         rprec > OLD_MAX_DECIMAL_PRECISION_SCALE ||
+					 NumericTypeCompiler.supportsDecimal38() ?
+					 MAX_DECIMAL_PRECISION_SCALE :
+					 OLD_MAX_DECIMAL_PRECISION_SCALE;
 		/*
 		** Retain greatest scale, take sum of left
 		** of decimal
@@ -520,18 +604,14 @@ public final class NumericTypeCompiler extends BaseTypeCompiler
 			** Take max left scale + right precision - right scale + 1, 
 			** or 4, whichever is biggest 
 			*/
-			LanguageConnectionContext lcc = (LanguageConnectionContext)
-				(ContextService.getContext(LanguageConnectionContext.CONTEXT_ID)); 
-
-			// Scale: 31 - left precision + left scale - right scale
-				val = Math.max(NumberDataValue.MAX_DECIMAL_PRECISION_SCALE - lprec + lscale - rscale, 
-						NumberDataValue.MIN_DECIMAL_DIVIDE_SCALE);
-
+			// Scale: 38 - left precision + left scale - right scale
+				val = Math.max(maxPrecision - lprec + lscale - rscale,
+						MIN_DECIMAL_DIVIDE_SCALE);
 		}
 		else if (TypeCompiler.AVG_OP.equals(operator))
 		{
 			val = Math.max(Math.max(lscale, rscale),
-						NumberDataValue.MIN_DECIMAL_DIVIDE_SCALE);
+						MIN_DECIMAL_DIVIDE_SCALE);
 		}
 		/*
 		** SUM, -, + all take max(lscale,rscale)
@@ -545,7 +625,7 @@ public final class NumericTypeCompiler extends BaseTypeCompiler
 		{
 			val = Integer.MAX_VALUE;
 		}
-		val = Math.min(NumberDataValue.MAX_DECIMAL_PRECISION_SCALE, val);
+		val = Math.min(maxPrecision, val);
 		return (int)val;
 	}
 

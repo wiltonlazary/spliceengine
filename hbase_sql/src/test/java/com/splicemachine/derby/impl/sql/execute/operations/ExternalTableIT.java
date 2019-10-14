@@ -14,9 +14,11 @@
 
 package com.splicemachine.derby.impl.sql.execute.operations;
 
+import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.derby.test.framework.SpliceSchemaWatcher;
 import com.splicemachine.derby.test.framework.SpliceUnitTest;
 import com.splicemachine.derby.test.framework.SpliceWatcher;
+import com.splicemachine.derby.test.framework.TestConnection;
 import com.splicemachine.homeless.TestUtils;
 import com.splicemachine.test_dao.TriggerBuilder;
 import org.apache.commons.io.FileUtils;
@@ -25,10 +27,12 @@ import org.apache.spark.sql.SparkSession;
 import org.junit.*;
 import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
+
 import java.io.File;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -1749,7 +1753,7 @@ public class ExternalTableIT extends SpliceUnitTest{
         Assert.assertEquals("Error with COLLECT_TABLE_STATISTICS for external table","EXTERNALTABLEIT",  rs.getString(1));
         rs.close();
 
-        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sys.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_ORC'");
+        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sysvw.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_ORC'");
         String expected = "TOTAL_ROW_COUNT |\n" +
                 "------------------\n" +
                 "        3        |";
@@ -1760,7 +1764,7 @@ public class ExternalTableIT extends SpliceUnitTest{
         spliceClassWatcher.executeUpdate("CALL  SYSCS_UTIL.DROP_TABLE_STATISTICS ('EXTERNALTABLEIT', 'T1_ORC')");
 
         // make sure it is clean
-        rs2 = methodWatcher.executeQuery("select total_row_count from sys.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_ORC' ");
+        rs2 = methodWatcher.executeQuery("select total_row_count from sysvw.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_ORC' ");
         Assert.assertEquals("", TestUtils.FormattedResult.ResultFactory.toString(rs2));
         rs2.close();
 
@@ -1774,7 +1778,7 @@ public class ExternalTableIT extends SpliceUnitTest{
         rs.close();
 
         // check the stats again
-        rs2 = methodWatcher.executeQuery("select total_row_count from sys.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_ORC' ");
+        rs2 = methodWatcher.executeQuery("select total_row_count from sysvw.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_ORC' ");
         Assert.assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs2));
         rs2.close();
 
@@ -1782,7 +1786,7 @@ public class ExternalTableIT extends SpliceUnitTest{
         spliceClassWatcher.executeUpdate("CALL  SYSCS_UTIL.DROP_SCHEMA_STATISTICS ('EXTERNALTABLEIT')");
 
         // make sure it is clean
-        rs2 = methodWatcher.executeQuery("select total_row_count from sys.systablestatistics where schemaname = 'EXTERNALTABLEIT' ");
+        rs2 = methodWatcher.executeQuery("select total_row_count from sysvw.systablestatistics where schemaname = 'EXTERNALTABLEIT' ");
         Assert.assertEquals("", TestUtils.FormattedResult.ResultFactory.toString(rs2));
         rs2.close();
     }
@@ -1807,7 +1811,7 @@ public class ExternalTableIT extends SpliceUnitTest{
         Assert.assertEquals("Error with COLLECT_TABLE_STATISTICS for external table","EXTERNALTABLEIT",  rs.getString(1));
         rs.close();
 
-        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sys.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_CSV'");
+        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sysvw.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_CSV'");
         String expected = "TOTAL_ROW_COUNT |\n" +
                 "------------------\n" +
                 "        3        |";
@@ -1835,7 +1839,7 @@ public class ExternalTableIT extends SpliceUnitTest{
         Assert.assertEquals("Error with COLLECT_TABLE_STATISTICS for external table","EXTERNALTABLEIT",  rs.getString(1));
         rs.close();
 
-        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sys.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_PARQ'");
+        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sysvw.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_PARQ'");
         String expected = "TOTAL_ROW_COUNT |\n" +
                 "------------------\n" +
                 "        3        |";
@@ -1863,7 +1867,7 @@ public class ExternalTableIT extends SpliceUnitTest{
         Assert.assertEquals("Error with COLLECT_TABLE_STATISTICS for external table","EXTERNALTABLEIT",  rs.getString(1));
         rs.close();
 
-        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sys.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_AVRO'");
+        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sysvw.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'T1_AVRO'");
         String expected = "TOTAL_ROW_COUNT |\n" +
                 "------------------\n" +
                 "        3        |";
@@ -2442,7 +2446,7 @@ public class ExternalTableIT extends SpliceUnitTest{
         Assert.assertEquals("Error with COLLECT_TABLE_STATISTICS for external table","EXTERNALTABLEIT",  rs.getString(1));
         rs.close();
 
-        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sys.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'PARTITION_PRUNE_ORC'");
+        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sysvw.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'PARTITION_PRUNE_ORC'");
         String expected = "TOTAL_ROW_COUNT |\n" +
                 "------------------\n" +
                 "        3        |";
@@ -2563,7 +2567,7 @@ public class ExternalTableIT extends SpliceUnitTest{
         Assert.assertEquals("Error with COLLECT_TABLE_STATISTICS for external table","EXTERNALTABLEIT",  rs.getString(1));
         rs.close();
 
-        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sys.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'AVRO_DATE_STATS'");
+        ResultSet rs2 = methodWatcher.executeQuery("select total_row_count from sysvw.systablestatistics where schemaname = 'EXTERNALTABLEIT' and tablename = 'AVRO_DATE_STATS'");
         String expected = "TOTAL_ROW_COUNT |\n" +
                 "------------------\n" +
                 "        4        |";
@@ -2947,5 +2951,54 @@ public class ExternalTableIT extends SpliceUnitTest{
                 "PARTITIONED BY (COL1)\n" +
                 "STORED AS AVRO\n" +
                 "LOCATION '" + tablePath + "';", rs.getString(1));
+    }
+
+    @Test
+    public void testConcurrentRead() throws Exception {
+        String tablePath = getExternalResourceDirectory()+"concurrent_test";
+        methodWatcher.execute(String.format("create external table concurrent_test ( a int)" +
+                " stored as parquet location '%s'", tablePath));
+        methodWatcher.execute("insert into concurrent_test values 1,2,3,4");
+        int n = 100;
+        ExtThread[] threads = new ExtThread[n];
+        for (int i = 0; i < n; ++i) {
+            threads[i] = new ExtThread(methodWatcher.createConnection());
+            threads[i].start();
+        }
+
+        for (int i = 0; i < n; ++i) {
+            threads[i].join();
+        }
+
+        for (int i = 0; i < n; ++i) {
+            Assert.assertEquals(true, threads[i].success);
+        }
+    }
+
+    @Test
+    public void testCompactionIgnoresExternalTables() throws Exception {
+        try {
+            methodWatcher.executeUpdate(String.format("CALL SYSCS_UTIL.SYSCS_PERFORM_MAJOR_COMPACTION_ON_SCHEMA('%s')",SCHEMA_NAME));
+        } catch (SQLException | StandardException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static class ExtThread extends Thread{
+        private TestConnection conn;
+        public volatile boolean success = false;
+        public ExtThread(TestConnection conn) {
+            this.conn = conn;
+        }
+        @Override
+        public void run() {
+
+            try {
+                conn.createStatement().execute("select count(*) from concurrent_test");
+                success = true;
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 }

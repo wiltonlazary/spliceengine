@@ -537,7 +537,7 @@ public class SelectivityIT extends SpliceUnitTest {
     public void testSelectColumnStatistics() throws Exception {
         String url = "jdbc:splice://localhost:1527/splicedb;create=true;user=splice;password=admin;useSpark=true";
         Connection connection = DriverManager.getConnection(url, new Properties());
-        PreparedStatement ps = connection.prepareStatement("select * from sys.syscolumnstatistics");
+        PreparedStatement ps = connection.prepareStatement("select * from sysvw.syscolumnstatistics");
         ResultSet rs = ps.executeQuery();
         int count = 0;
         while(rs.next()){
@@ -592,6 +592,18 @@ public class SelectivityIT extends SpliceUnitTest {
         Assert.assertEquals(1000, rowCount, 100);
         rangeRowCount = parseOutputRows(getExplainMessage(3, "explain select * from t1s where c1>30 and c1<=31", methodWatcher));
         Assert.assertTrue(rangeRowCount >= rowCount);
+    }
+
+    @Test
+    public void testEqualityPredicateWithUnknownConstantExpression() throws Exception {
+        double rowCount = parseOutputRows(getExplainMessage(3, "explain select * from t1 where a1=CAST (new java.lang.Object() AS CHAR(10))", methodWatcher));
+        Assert.assertEquals(100, rowCount, 10);
+    }
+
+    @Test
+    public void testNoteEqualPredicateWithUnknownConstantExpression() throws Exception {
+        double rowCount = parseOutputRows(getExplainMessage(3, "explain select * from t1 where a1 != CAST (new java.lang.Object() AS CHAR(10))", methodWatcher));
+        Assert.assertEquals(99900, rowCount, 10);
     }
 
     @Test

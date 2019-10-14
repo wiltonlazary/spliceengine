@@ -31,6 +31,7 @@
 
 package com.splicemachine.db.iapi.sql.compile;
 
+import com.splicemachine.db.catalog.UUID;
 import com.splicemachine.db.iapi.services.context.Context;
 import com.splicemachine.db.iapi.services.compiler.JavaFactory;
 import com.splicemachine.db.iapi.services.loader.ClassFactory;
@@ -48,6 +49,8 @@ import com.splicemachine.db.iapi.types.DataTypeDescriptor;
 import com.splicemachine.db.iapi.store.access.StoreCostController;
 import com.splicemachine.db.iapi.store.access.SortCostController;
 import com.splicemachine.db.impl.sql.compile.subquery.aggregate.AggregateSubqueryFlatteningVisitor;
+import com.splicemachine.system.SimpleSparkVersion;
+import com.splicemachine.system.SparkVersion;
 
 import java.util.List;
 import java.util.Vector;
@@ -81,6 +84,13 @@ public interface CompilerContext extends Context
         FORCED_SPARK // Hinted to use Spark
     }
 
+    enum NativeSparkModeType {
+        SYSTEM, // Use the system-level setting.
+        ON,     // Process the operation using UnSafeRows if the source operation produces them.
+        OFF,    // Process the operation using Derby rows.
+        FORCED  // Convert the source operation's rows into UnSafeRows,
+	        // then process the current operation using UnSafeRows, if possible.
+    }
 
 	/**
 	 * this is the ID we expect compiler contexts
@@ -157,6 +167,10 @@ public interface CompilerContext extends Context
 	int         DEFAULT_MAX_MULTICOLUMN_PROBE_VALUES              = 10000;
 	boolean     DEFAULT_MULTICOLUMN_INLIST_PROBE_ON_SPARK_ENABLED = false;
 	boolean     DEFAULT_CONVERT_MULTICOLUMN_DNF_PREDICATES_TO_INLIST = true;
+	boolean     DEFAULT_DISABLE_PREDICATE_SIMPLIFICATION = false;
+	SparkVersion DEFAULT_SPLICE_SPARK_VERSION = new SimpleSparkVersion("2.2.0");
+	NativeSparkModeType DEFAULT_SPLICE_NATIVE_SPARK_AGGREGATION_MODE = NativeSparkModeType.SYSTEM;
+	boolean     DEFAULT_SPLICE_ALLOW_OVERFLOW_SENSITIVE_NATIVE_SPARK_EXPRESSIONS = true;
 
 	/////////////////////////////////////////////////////////////////////////////////////
 	//
@@ -603,6 +617,8 @@ public interface CompilerContext extends Context
 	 */
 	void addRequiredSchemaPriv(String schema, String aid, int privType);
 
+	void addRequiredAccessSchemaPriv(UUID uuid);
+
 	/**
 	 * Add a routine execute privilege to the list of used routine privileges.
 	 *
@@ -667,4 +683,21 @@ public interface CompilerContext extends Context
 	
 	public boolean getConvertMultiColumnDNFPredicatesToInList();
 
+	public void setDisablePredicateSimplification(boolean newValue);
+
+	public boolean getDisablePredicateSimplification();
+
+	public void setSparkVersion(SparkVersion newValue);
+
+	public SparkVersion getSparkVersion();
+
+	public boolean isSparkVersionInitialized();
+
+	public void setNativeSparkAggregationMode(CompilerContext.NativeSparkModeType newValue);
+
+	public CompilerContext.NativeSparkModeType getNativeSparkAggregationMode();
+
+	public void setAllowOverflowSensitiveNativeSparkExpressions(boolean newValue);
+
+	public boolean getAllowOverflowSensitiveNativeSparkExpressions();
 }

@@ -190,7 +190,7 @@ public class MergeSortJoinOperation extends JoinOperation {
        // operationContext.pushScopeForOp("Prepare Left Side");
         DataSet<ExecRow> leftDataSet2 =
             leftDataSet1.map(new CountJoinedLeftFunction(operationContext));
-        if (!isOuterJoin)
+        if (!isOuterJoin && !notExistsRightSide)
             leftDataSet2 = leftDataSet2.filter(new InnerJoinNullFilterFunction(operationContext,leftHashKeys));
 
         // Prepare Right
@@ -205,7 +205,8 @@ public class MergeSortJoinOperation extends JoinOperation {
                     isOuterJoin ? "outer" : "inner", notExistsRightSide, restriction != null);
                 rightDataSet1.map(new CountJoinedRightFunction(operationContext));
         DataSet<ExecRow> joined;
-        if (dsp.getType().equals(DataSetProcessor.Type.SPARK) && restriction == null && !rightFromSSQ) {
+        if (dsp.getType().equals(DataSetProcessor.Type.SPARK) && restriction == null && !rightFromSSQ &&
+            !containsUnsafeSQLRealComparison()){
             if (isOuterJoin)
                 joined = leftDataSet2.join(operationContext,rightDataSet2, DataSet.JoinType.LEFTOUTER,false);
             else if (notExistsRightSide)
@@ -247,7 +248,7 @@ public class MergeSortJoinOperation extends JoinOperation {
                     return leftDataSet.cogroup(rightDataSet, "Cogroup Left and Right", operationContext).values(operationContext)
                         .flatMap(new CogroupAntiJoinRestrictionFlatMapFunction(operationContext));
                 } else { // No Restriction
-                    return leftDataSet.subtractByKey(rightDataSet, operationContext)
+                    return leftDataSet.subtractByKey(rightDataSet, operationContext).values(operationContext)
                             .map(new AntiJoinFunction(operationContext));
                 }
             } else { // Inner Join

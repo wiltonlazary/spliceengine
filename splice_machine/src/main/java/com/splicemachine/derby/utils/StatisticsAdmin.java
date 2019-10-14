@@ -75,7 +75,7 @@ import static com.splicemachine.derby.utils.EngineUtils.verifyTableExists;
  */
 public class StatisticsAdmin extends BaseAdminProcedures {
     private static final Logger LOG = Logger.getLogger(StatisticsAdmin.class);
-    public static final String TABLEID_FROM_SCHEMA = "select tableid from sys.systables t where t.schemaid = ?";
+    public static final String TABLEID_FROM_SCHEMA = "select tableid from sysvw.systablesView t where t.schemaid = ?";
 
     @SuppressWarnings("UnusedDeclaration")
     public static void DISABLE_COLUMN_STATISTICS(String schema,
@@ -779,6 +779,32 @@ public class StatisticsAdmin extends BaseAdminProcedures {
         row.setColumn(SYSTABLESTATISTICSRowFactory.TIMESTAMP,new SQLTimestamp(new Timestamp(System.currentTimeMillis())));
         row.setColumn(SYSTABLESTATISTICSRowFactory.STALENESS,new SQLBoolean(false));
         row.setColumn(SYSTABLESTATISTICSRowFactory.INPROGRESS,new SQLBoolean(false));
+        row.setColumn(SYSTABLESTATISTICSRowFactory.ROWCOUNT,new SQLLongint(rowCount));
+        row.setColumn(SYSTABLESTATISTICSRowFactory.PARTITION_SIZE,new SQLLongint(partitionSize));
+        row.setColumn(SYSTABLESTATISTICSRowFactory.MEANROWWIDTH,new SQLInteger(meanRowWidth));
+        row.setColumn(SYSTABLESTATISTICSRowFactory.NUMBEROFPARTITIONS,new SQLLongint(numberOfPartitions));
+        row.setColumn(SYSTABLESTATISTICSRowFactory.STATSTYPE,new SQLInteger(statsType));
+        row.setColumn(SYSTABLESTATISTICSRowFactory.SAMPLEFRACTION, new SQLDouble(sampleFraction));
+        return row;
+    }
+
+    public static ExecRow generateRowFromStats(long conglomId,
+                                               String partitionId,
+                                               long timestamp,
+                                               boolean isStale,
+                                               boolean inProgress,
+                                               long rowCount,
+                                               long partitionSize,
+                                               int meanRowWidth,
+                                               long numberOfPartitions,
+                                               int statsType,
+                                               double sampleFraction) throws StandardException {
+        ExecRow row = new ValueRow(SYSTABLESTATISTICSRowFactory.SYSTABLESTATISTICS_COLUMN_COUNT);
+        row.setColumn(SYSTABLESTATISTICSRowFactory.CONGLOMID,new SQLLongint(conglomId));
+        row.setColumn(SYSTABLESTATISTICSRowFactory.PARTITIONID,new SQLVarchar(partitionId));
+        row.setColumn(SYSTABLESTATISTICSRowFactory.TIMESTAMP,new SQLTimestamp(new Timestamp(timestamp)));
+        row.setColumn(SYSTABLESTATISTICSRowFactory.STALENESS,new SQLBoolean(isStale));
+        row.setColumn(SYSTABLESTATISTICSRowFactory.INPROGRESS,new SQLBoolean(inProgress));
         row.setColumn(SYSTABLESTATISTICSRowFactory.ROWCOUNT,new SQLLongint(rowCount));
         row.setColumn(SYSTABLESTATISTICSRowFactory.PARTITION_SIZE,new SQLLongint(partitionSize));
         row.setColumn(SYSTABLESTATISTICSRowFactory.MEANROWWIDTH,new SQLInteger(meanRowWidth));

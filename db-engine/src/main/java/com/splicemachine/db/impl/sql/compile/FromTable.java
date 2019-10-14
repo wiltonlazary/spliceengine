@@ -279,6 +279,19 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         return considerSortAvoidancePath;
     }
 
+    public static boolean isNonCoveringIndex(Optimizable innerTable) {
+        try {
+            AccessPath path = innerTable.getCurrentAccessPath();
+            if (path != null) {
+                ConglomerateDescriptor cd = path.getConglomerateDescriptor();
+                return (cd != null && cd.isIndex() && !innerTable.isCoveringIndex(cd));
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("could not determine if index is covering", e);
+        }
+        return false;
+    }
+
     @Override
     public void rememberJoinStrategyAsBest(AccessPath ap){
         Optimizer optimizer=ap.getOptimizer();
@@ -1206,6 +1219,28 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
             dependencyMap = null;
     }
 
+    /* tableNumber is 0-based */
+    public void addToDependencyMap(int tableNumber) {
+        if (tableNumber < 0 || tableNumber >= getCompilerContext().getMaximalPossibleTableCount())
+            return;
+
+        if (dependencyMap == null) {
+            dependencyMap = new JBitSet(getCompilerContext().getMaximalPossibleTableCount());
+        }
+        dependencyMap.set(tableNumber);
+    }
+
+    public void addToDependencyMap(JBitSet newSet) {
+        if (newSet == null)
+            return;
+
+        if (dependencyMap == null) {
+            dependencyMap = new JBitSet(getCompilerContext().getMaximalPossibleTableCount());
+        }
+
+        dependencyMap.or(newSet);
+    }
+
     private FormatableBitSet buildDefaultRow(ResultColumnList defaultRow) throws StandardException {
         FormatableBitSet defaultValueMap = new FormatableBitSet(resultColumns.size());
 
@@ -1280,4 +1315,16 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         mb.push(defaultValueItem);
         return 2;
     }
+
+    public boolean isAboveSparkThreshold(CostEstimate costEstimate) {
+        long sparkRowThreshold = getLanguageConnectionContext().getOptimizerFactory().
+                                 getDetermineSparkRowThreshold();
+        return (costEstimate.getScannedBaseTableRows() > sparkRowThreshold ||
+                costEstimate.getEstimatedRowCount() > sparkRowThreshold);
+    }
+
+    public boolean isAboveSparkThreshold(AccessPath accessPath) {
+        return isAboveSparkThreshold(accessPath.getCostEstimate());
+    }
+
 }

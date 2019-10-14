@@ -471,6 +471,7 @@ public class ProtoUtil {
                 .setReferencesPerm(permissionsDescriptor.getReferencesPriv())
                 .setTriggerPerm(permissionsDescriptor.getTriggerPriv())
                 .setModifyPerm(permissionsDescriptor.getModifyPriv())
+                .setAccessPerm(permissionsDescriptor.getAccessPriv())
                 .setGrantor(permissionsDescriptor.getGrantor())
                 .setGrantee(permissionsDescriptor.getGrantee())
                 .setPermObjectId(transferDerbyUUID((BasicUUID) permissionsDescriptor.getUUID()))
@@ -569,6 +570,14 @@ public class ProtoUtil {
                 .build();
         return DDLChange.newBuilder().setDdlChangeType(DDLChangeType.REVOKE_PRIVILEGE)
                 .setTxnId(txnId).setRevokePrivilege(revokePrivilege).build();
+    }
+
+    public static DDLChange createUpdateSystemProcedure(long txnId) {
+        return DDLChange.newBuilder()
+                .setDdlChangeType(DDLChangeType.UPDATE_SYSTEM_PROCEDURES)
+                .setTxnId(txnId)
+                .setUpdateSystemProcedures(UpdateSystemProcedures.newBuilder())
+                .build();
     }
 }
 

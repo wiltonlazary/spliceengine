@@ -31,6 +31,8 @@ public class SubqueryITUtil {
     public static final int ZERO_SUBQUERY_NODES = 0;
     public static final int ONE_SUBQUERY_NODE = 1;
     public static final int TWO_SUBQUERY_NODES = 2;
+    public static final int THREE_SUBQUERY_NODES = 3;
+    public static final int FOUR_SUBQUERY_NODES = 4;
 
     /* See SubqueryFlatteningTestTables.sql.  Queries that select from A with predicates that do not eliminate
      * any rows expect this result. */
@@ -80,7 +82,7 @@ public class SubqueryITUtil {
     /**
      * Counts the number of Subquery nodes that appear in the explain plan text for a given query.
      */
-    private static int countSubqueriesInPlan(String a) {
+    public static int countSubqueriesInPlan(String a) {
         Pattern pattern = Pattern.compile("^.*?Subquery\\s*\\(", Pattern.MULTILINE | Pattern.CASE_INSENSITIVE);
         int count = 0;
         Matcher matcher = pattern.matcher(a);

@@ -51,6 +51,13 @@ import static com.google.common.collect.Lists.transform;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import com.splicemachine.access.HConfiguration;
+import com.splicemachine.access.configuration.SQLConfiguration;
+import com.splicemachine.derby.hbase.SpliceIndexObserver;
+import com.splicemachine.si.data.hbase.coprocessor.SIObserver;
+import com.splicemachine.si.data.hbase.coprocessor.TxnLifecycleEndpoint;
+import com.splicemachine.utils.BlockingProbeEndpoint;
+import com.splicemachine.hbase.SpliceReplicationService;
 /**
  * HBase configuration for SpliceTestPlatform and SpliceTestClusterParticipant.
  */
@@ -58,7 +65,8 @@ class SpliceTestPlatformConfig {
 
     private static final List<Class<?>> REGION_SERVER_COPROCESSORS = ImmutableList.<Class<?>>of(
             RegionServerLifecycleObserver.class,
-            BlockingProbeEndpoint.class
+            BlockingProbeEndpoint.class,
+            SpliceReplicationService.class
     );
 
     private static final List<Class<?>> REGION_COPROCESSORS = ImmutableList.<Class<?>>of(
@@ -286,6 +294,15 @@ class SpliceTestPlatformConfig {
         config.set("splice.authentication.impersonation.users", "dgf=splice;splice=*");
         config.setBoolean("splice.authentication.impersonation.enabled", true);
         config.set("splice.authentication.ldap.mapGroupAttr", "jy=splice,dgf=splice");
+        config.setInt("splice.txn.completedTxns.cacheSize", 4096);
+        // below two parameters are needed to test ranger authorization on standalone system
+        // config.set("splice.authorization.scheme", "RANGER");
+        // config.set("splice.metadataRestrictionEnabled", "RANGER");
+
+        // Get more test coverage of the broadcast join Dataset path, as this is the
+        // future of splice OLAP query execution.
+        config.setLong("splice.optimizer.broadcastDatasetCostThreshold", -1);
+
 
         if (derbyPort > SQLConfiguration.DEFAULT_NETWORK_BIND_PORT) {
             // we are a member, let's ignore transactions for testing

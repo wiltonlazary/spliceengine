@@ -150,11 +150,13 @@ public class GenericLanguageConnectionFactory
 		List<String> groupuserlist,
 		String drdaID,
 		String dbname,
+        String rdbIntTkn,
         CompilerContext.DataSetProcessorType type,
 		boolean skipStats,
 		double defaultSelectvityFactor,
 		String ipAddresss,
-        String defaultSchema) throws StandardException {
+		String defaultSchema,
+		Properties sessionProperties) throws StandardException {
 		
 		return new GenericLanguageConnectionContext(cm,
 													tc,
@@ -166,11 +168,13 @@ public class GenericLanguageConnectionFactory
 													getNextLCCInstanceNumber(),
 													drdaID,
 													dbname,
+													rdbIntTkn,
                                                     type,
 				                                    skipStats,
 				                                    defaultSelectvityFactor,
 													ipAddresss,
-                                                    defaultSchema
+                                                    defaultSchema,
+                                                    sessionProperties
 				);
 	}
 

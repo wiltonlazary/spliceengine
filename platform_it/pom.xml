@@ -20,7 +20,7 @@
     <parent>
         <artifactId>spliceengine-parent</artifactId>
         <groupId>com.splicemachine</groupId>
-        <version>2.8.0.1908-SNAPSHOT</version>
+        <version>3.1.0.1932-SNAPSHOT</version>
     </parent>
     <properties>
         <!--Skip server startup-->
@@ -672,7 +672,9 @@
                                 <argument>-XX:MinHeapFreeRatio=10</argument>
                                 <argument>-XX:MaxHeapFreeRatio=50</argument>
                                 <argument>-XX:+CMSClassUnloadingEnabled</argument>
+                                <!-- Uncomment this to enable debugging of zookeeper on standalone via port 4002
                                 <argument>-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=4002</argument>
+                                  -->
                                 <argument>org.apache.zookeeper.server.ZooKeeperServerMain</argument>
                                 <argument>2181</argument>
                                 <argument>${project.build.directory}/zookeeper</argument>
@@ -1167,7 +1169,23 @@
                 <extraDependency3>splice_ee</extraDependency3>
             </properties>
         </profile>
-
+        <profile>
+            <id>mapr6.1.0</id>
+            <properties>
+                <maven.test.skip>true</maven.test.skip>
+                <extraDependency>splice_ee</extraDependency>
+                <extraDependency2>splice_ee</extraDependency2>
+                <extraDependency3>splice_ee</extraDependency3>
+            </properties>
+        </profile>
+        <profile>
+            <id>dbaas</id>
+            <properties>
+                <extraDependency>splice_ee</extraDependency>
+                <extraDependency2>splice_ee</extraDependency2>
+                <extraDependency3>splice_ee</extraDependency3>
+            </properties>
+        </profile>
         <profile>
             <id>ee</id>
             <activation>

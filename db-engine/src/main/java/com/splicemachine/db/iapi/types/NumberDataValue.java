@@ -35,13 +35,18 @@ import com.splicemachine.db.iapi.error.StandardException;
 
 import java.math.BigDecimal;
 
+import static com.splicemachine.db.iapi.reference.Limits.DB2_MAX_DECIMAL_PRECISION_SCALE;
+
 public interface NumberDataValue extends DataValueDescriptor
 {
 	/**
 	 * The minimum scale when dividing Decimals
 	 */
 	int MIN_DECIMAL_DIVIDE_SCALE = 4;
-	int MAX_DECIMAL_PRECISION_SCALE = 31;
+	int MAX_DECIMAL_PRECISION_SCALE = DB2_MAX_DECIMAL_PRECISION_SCALE;
+	int OLD_MAX_DECIMAL_PRECISION_SCALE = 31;
+	int MAX_DECIMAL_PRECISION_WITH_RESERVE_FOR_SCALE = MAX_DECIMAL_PRECISION_SCALE - MIN_DECIMAL_DIVIDE_SCALE;
+	int OLD_MAX_DECIMAL_PRECISION_WITH_RESERVE_FOR_SCALE = OLD_MAX_DECIMAL_PRECISION_SCALE - MIN_DECIMAL_DIVIDE_SCALE;
 
 	/**
 	 * The SQL + operator.
@@ -230,6 +235,8 @@ public interface NumberDataValue extends DataValueDescriptor
 	 * @throws StandardException
 	 */
 	BigDecimal getBigDecimal() throws StandardException;
+
+	StringDataValue digits(NumberDataValue source, int len, StringDataValue result) throws StandardException;
 }
 
 

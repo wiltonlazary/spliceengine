@@ -36,6 +36,7 @@ import com.splicemachine.db.catalog.types.BaseTypeIdImpl;
 import com.splicemachine.db.catalog.types.RowMultiSetImpl;
 import com.splicemachine.db.catalog.types.TypeDescriptorImpl;
 import com.splicemachine.db.iapi.error.StandardException;
+import com.splicemachine.db.iapi.reference.Limits;
 import com.splicemachine.db.iapi.reference.Property;
 import com.splicemachine.db.iapi.reference.SQLState;
 import com.splicemachine.db.iapi.services.io.Formatable;
@@ -100,6 +101,11 @@ public class DataTypeDescriptor implements Formatable{
     public static final DataTypeDescriptor SMALLINT_NOT_NULL=SMALLINT.getNullabilityType(false);
 
     public static final DataTypeDescriptor DOUBLE=new DataTypeDescriptor(TypeId.DOUBLE_ID,true);
+
+    public static final DataTypeDescriptor LONGINT=new DataTypeDescriptor(TypeId.BIGINT_ID,true);
+
+    public static final DataTypeDescriptor LONGINT_NOT_NULL=LONGINT.getNullabilityType(false);
+
     /*
 	** Static creators
 	*/
@@ -214,6 +220,8 @@ public class DataTypeDescriptor implements Formatable{
                 return isNullable?INTEGER:INTEGER_NOT_NULL;
             case Types.SMALLINT:
                 return isNullable?SMALLINT:SMALLINT_NOT_NULL;
+            case Types.BIGINT:
+                return isNullable?LONGINT:LONGINT_NOT_NULL;
             default:
                 break;
         }
@@ -463,11 +471,11 @@ public class DataTypeDescriptor implements Formatable{
 
     private DataTypeDescriptor(DataTypeDescriptor source, int collationType, int collationDerivation){
         //There might be other places, but one place this method gets called
-        //from is ResultColumn.init. When the ResultColumn(RC) is for a 
-        //ColumnDescriptor(CD), the RC's TypeDescriptorImpl(TDI) should get 
+        //from is ResultColumn.init. When the ResultColumn(RC) is for a
+        //ColumnDescriptor(CD), the RC's TypeDescriptorImpl(TDI) should get
         //all the attributes of CD's TDI. So, if the CD is for a user table's
-        //character type column, then this call by RC.init should have CD's 
-        //collation attributes copied into RC along with other attributes. 
+        //character type column, then this call by RC.init should have CD's
+        //collation attributes copied into RC along with other attributes.
         this.typeId=source.typeId;
         typeDescriptor=new TypeDescriptorImpl(source.typeDescriptor,
                 source.getPrecision(),
@@ -683,7 +691,8 @@ public class DataTypeDescriptor implements Formatable{
             assert higherTypeId!=null;
             if(higherTypeId.isDecimalTypeId() && (!lowerTypeId.isStringTypeId())){
                 precision=higherTypeId.getPrecision(this,otherDTS);
-                if(precision>31) precision=31; //db2 silently does this and so do we
+                if(precision> Limits.DB2_MAX_DECIMAL_PRECISION_SCALE)
+                    precision=Limits.DB2_MAX_DECIMAL_PRECISION_SCALE; //db2 silently does this and so do we
                 scale=higherTypeId.getScale(this,otherDTS);
 
 				/* maximumWidth needs to count possible leading '-' and
@@ -734,7 +743,7 @@ public class DataTypeDescriptor implements Formatable{
 
 				/*
 				 * If we are doing an implicit (var)char->decimal conversion
-				 * then the resulting decimal's precision could be as high as 
+				 * then the resulting decimal's precision could be as high as
 				 * 2 * the maximum width (precisely 2mw-1) for the (var)char
 				 * and the scale could be as high as the maximum width
 				 * (precisely mw-1) for the (var)char.
@@ -800,8 +809,6 @@ public class DataTypeDescriptor implements Formatable{
             precision=higherType.getPrecision();
             scale=higherType.getScale();
         }
-
-        lowerType.getChildren();
 
         if (higherType != null && higherType.getChildren() == null && lowerType!=null && lowerType.getChildren()!=null) // set children
             higherType.setChildren(lowerType.getChildren());
@@ -897,6 +904,11 @@ public class DataTypeDescriptor implements Formatable{
      */
     public DataValueDescriptor getNull() throws StandardException{
         DataValueDescriptor returnDVD=typeId.getNull();
+
+        if (returnDVD instanceof SQLChar) {
+            ((SQLChar)returnDVD).setSqlCharSize(typeDescriptor.getMaximumWidth());
+        }
+
         //If we are dealing with default collation, then we have got the
         //right DVD already. Just return it.
         if (typeId.getTypeFormatId() == StoredFormatIds.DECIMAL_TYPE_ID) {
@@ -1375,7 +1387,7 @@ public class DataTypeDescriptor implements Formatable{
 
             case StoredFormatIds.DECIMAL_TYPE_ID:
 				/*
-				** 0.415 converts from number decimal digits to number of 8-bit digits. 
+				** 0.415 converts from number decimal digits to number of 8-bit digits.
 				** Add 1.0 for the sign byte, and 0.5 to force it to round up.
 				*/
                 return (getPrecision()*0.415)+1.5;
@@ -1595,6 +1607,16 @@ public class DataTypeDescriptor implements Formatable{
         return typeDescriptor.toString();
     }
 
+    public String toSparkString() {
+        if (typeDescriptor.getJDBCTypeId() == Types.NUMERIC) {
+            String typeString = typeDescriptor.getSQLstring();
+            String pattern = "(NUMERIC)";
+            typeString = typeString.replaceFirst(pattern, "DECIMAL");
+            return typeString;
+        }
+        return typeDescriptor.getSQLstring();
+    }
+
     // Formatable methods
 
     /**
@@ -1659,7 +1681,7 @@ public class DataTypeDescriptor implements Formatable{
      * him/herself.
      * <p/>
      * DECIMAL: A user can specify a VALUES clause with a constant that
-     * has a precision of greater than 31.  Derby can apparently handle
+     * has a precision of greater than 38.  Derby can apparently handle
      * such a value internally, but the user is not supposed to be able
      * create such a column him/herself.
      *
@@ -1701,7 +1723,7 @@ public class DataTypeDescriptor implements Formatable{
         return sbuf.toString();
     }
 
-    /* Return the typename with the collation name for 
+    /* Return the typename with the collation name for
      * String types.
      */
     public String getSQLTypeNameWithCollation(){

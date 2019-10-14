@@ -31,12 +31,13 @@
 
 package com.splicemachine.db.iapi.types;
 
-import java.sql.Clob;
-import java.text.RuleBasedCollator;
-import com.splicemachine.db.iapi.types.DataValueFactoryImpl.Format;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.io.StoredFormatIds;
 import com.splicemachine.db.iapi.services.sanity.SanityManager;
+import com.splicemachine.db.iapi.types.DataValueFactoryImpl.Format;
+
+import java.sql.Clob;
+import java.text.RuleBasedCollator;
 
 /**
  * SQLVarchar represents a VARCHAR value with UCS_BASIC collation.
@@ -68,7 +69,9 @@ public class SQLVarchar
 	{
 		try
 		{
-			return new SQLVarchar(getString());
+			SQLVarchar ret = new SQLVarchar(getString());
+			ret.setSqlCharSize(super.getSqlCharSize());
+			return ret;
 		}
 		catch (StandardException se)
 		{
@@ -92,7 +95,7 @@ public class SQLVarchar
 	{
 		if (collatorForComparison == null)
 		{//null collatorForComparison means use UCS_BASIC for collation
-		    return this;			
+		    return this;
 		} else {
 			//non-null collatorForComparison means use collator sensitive
 			//implementation of SQLVarchar
@@ -208,10 +211,10 @@ public class SQLVarchar
 	{
 		return TypeId.VARCHAR_PRECEDENCE;
 	}
-    
+
     /**
-     * returns the reasonable minimum amount by 
-     * which the array can grow . See readExternal. 
+     * returns the reasonable minimum amount by
+     * which the array can grow . See readExternal.
      * when we know that the array needs to grow by at least
      * one byte, it is not performant to grow by just one byte
      * instead this amount is used to provide a resonable growby size.
@@ -219,9 +222,9 @@ public class SQLVarchar
      */
     protected final int growBy()
     {
-        return RETURN_SPACE_THRESHOLD;  //seems reasonable for a varchar or clob 
+        return RETURN_SPACE_THRESHOLD;  //seems reasonable for a varchar or clob
     }
-    
+
     public Format getFormat() {
     	return Format.VARCHAR;
     }
@@ -409,5 +412,29 @@ public class SQLVarchar
                 comparison);
     }
 
+    /* Compared to SQLChar, SQLVarchar honors the trailing space of a string */
+    @Override
+	public int hashCode()
+	{
+		if (SanityManager.DEBUG) {
+			SanityManager.ASSERT(!(this instanceof CollationElementsInterface),
+					"SQLVarchar.hashCode() does not work with collation");
+		}
+
+		try {
+			String str = getString();
+
+			if (str == null)
+			{
+				return 0;
+			} else {
+				return str.hashCode();
+			}
+		}
+		catch (StandardException se)
+		{
+			throw new RuntimeException(se);
+		}
+	}
 
 }

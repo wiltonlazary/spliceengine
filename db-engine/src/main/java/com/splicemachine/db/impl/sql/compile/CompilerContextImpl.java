@@ -57,6 +57,7 @@ import com.splicemachine.db.iapi.store.access.SortCostController;
 import com.splicemachine.db.iapi.store.access.StoreCostController;
 import com.splicemachine.db.iapi.types.DataTypeDescriptor;
 import com.splicemachine.db.iapi.util.ReuseFactory;
+import com.splicemachine.system.SparkVersion;
 import com.splicemachine.utils.Pair;
 
 import java.sql.SQLWarning;
@@ -237,7 +238,45 @@ public class CompilerContextImpl extends ContextImpl
 	}
 	
 	public boolean getMulticolumnInlistProbeOnSparkEnabled() { return multicolumnInlistProbeOnSparkEnabled; }
-	
+
+	public void setDisablePredicateSimplification(boolean newValue) {
+		disablePredicateSimplification = newValue;
+	}
+
+	public boolean getDisablePredicateSimplification() {
+		return disablePredicateSimplification;
+	}
+
+	public void setSparkVersion(SparkVersion newValue) {
+		sparkVersionInitialized = true;
+		sparkVersion = newValue;
+	}
+
+	public SparkVersion getSparkVersion() {
+		return sparkVersion;
+	}
+
+	public boolean isSparkVersionInitialized() {
+		return sparkVersionInitialized;
+	}
+
+        public void setNativeSparkAggregationMode(CompilerContext.NativeSparkModeType newValue) {
+		nativeSparkAggregationMode = newValue;
+	}
+
+	public CompilerContext.NativeSparkModeType getNativeSparkAggregationMode() {
+		return nativeSparkAggregationMode;
+	}
+
+	public void setAllowOverflowSensitiveNativeSparkExpressions(boolean newValue) {
+		allowOverflowSensitiveNativeSparkExpressions = newValue;
+	}
+
+	public boolean getAllowOverflowSensitiveNativeSparkExpressions() {
+		return allowOverflowSensitiveNativeSparkExpressions;
+	}
+
+
 	/**
 	 * Get the current next subquery number from this CompilerContext.
 	 *
@@ -847,6 +886,7 @@ public class CompilerContextImpl extends ContextImpl
 		  = (StatementColumnPermission) requiredColumnPrivileges.get( key);
 		if( tableColumnPrivileges == null)
 		{
+			addRequiredAccessSchemaPriv(schemaUUID);
 			tableColumnPrivileges = new StatementColumnPermission( schemaUUID,
 																   tableUUID,
 																   currPrivType,
@@ -890,6 +930,7 @@ public class CompilerContextImpl extends ContextImpl
 		UUID tableUUID 	= table.getUUID();
 		UUID schemaUUID = table.getSchemaDescriptor().getUUID();
 
+		addRequiredAccessSchemaPriv(schemaUUID);
 		StatementTablePermission key = new StatementTablePermission(  schemaUUID, tableUUID, currPrivType);
 		requiredTablePrivileges.put(key, key);
 	}
@@ -943,6 +984,17 @@ public class CompilerContextImpl extends ContextImpl
 		requiredSchemaPrivileges.put(key, key);
 	}
 
+	public void addRequiredAccessSchemaPriv(UUID uuid) {
+		if( requiredSchemaPrivileges == null || uuid == null)
+			return;
+
+		// if schema access restriction is not enabled, no need to add access permission check
+		if (!lcc.getDataDictionary().isMetadataAccessRestrictionEnabled())
+			return;
+
+		StatementSchemaPermission accessPrivileges = new StatementSchemaPermission(uuid, Authorizer.ACCESS_PRIV);
+		requiredSchemaPrivileges.put(accessPrivileges, accessPrivileges);
+	}
 
 	/**
 	 * Add a required role privilege to the list privileges.
@@ -981,6 +1033,7 @@ public class CompilerContextImpl extends ContextImpl
         { size += requiredRolePrivileges.size(); }
 		
 		ArrayList list = new ArrayList( size);
+		ArrayList accessList = new ArrayList();
 		if( requiredRoutinePrivileges != null)
 		{
             for (Object o : requiredRoutinePrivileges.keySet()) {
@@ -1003,7 +1056,13 @@ public class CompilerContextImpl extends ContextImpl
 		}
 		if( requiredSchemaPrivileges != null)
 		{
-			list.addAll(requiredSchemaPrivileges.values());
+			for (Object o: requiredSchemaPrivileges.keySet()) {
+				StatementSchemaPermission sp = (StatementSchemaPermission) o;
+				if (((StatementSchemaPermission) o).getPrivType() == Authorizer.ACCESS_PRIV)
+					accessList.add(requiredSchemaPrivileges.get(sp));
+				else
+					list.add(requiredSchemaPrivileges.get(sp));
+			}
 		}
 		if( requiredColumnPrivileges != null)
 		{
@@ -1013,6 +1072,10 @@ public class CompilerContextImpl extends ContextImpl
 		{
 			list.addAll(requiredRolePrivileges.values());
 		}
+
+		// insert all the access check to the beginning of the list
+		list.addAll(0, accessList);
+
 		return list;
 	} // end of getRequiredPermissionsList
 
@@ -1061,7 +1124,11 @@ public class CompilerContextImpl extends ContextImpl
 	private int                 maxMulticolumnProbeValues = DEFAULT_MAX_MULTICOLUMN_PROBE_VALUES;
 	private boolean             multicolumnInlistProbeOnSparkEnabled = DEFAULT_MULTICOLUMN_INLIST_PROBE_ON_SPARK_ENABLED;
 	private boolean             convertMultiColumnDNFPredicatesToInList= DEFAULT_CONVERT_MULTICOLUMN_DNF_PREDICATES_TO_INLIST;
-
+	private boolean             disablePredicateSimplification = DEFAULT_DISABLE_PREDICATE_SIMPLIFICATION;
+	private SparkVersion        sparkVersion = DEFAULT_SPLICE_SPARK_VERSION;
+	private boolean sparkVersionInitialized = false;
+	private CompilerContext.NativeSparkModeType nativeSparkAggregationMode = DEFAULT_SPLICE_NATIVE_SPARK_AGGREGATION_MODE;
+	private boolean allowOverflowSensitiveNativeSparkExpressions = DEFAULT_SPLICE_ALLOW_OVERFLOW_SENSITIVE_NATIVE_SPARK_EXPRESSIONS;
 	/**
 	 * Saved execution time default schema, if we need to change it
 	 * temporarily.

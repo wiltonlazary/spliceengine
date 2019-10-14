@@ -1413,10 +1413,10 @@ public class BinaryRelationalOperatorNode
         if (leftOperand instanceof ColumnReference && rightOperand instanceof ColumnReference && optTable instanceof FromBaseTable) {
             ConglomerateDescriptor cdLeft = ((ColumnReference) leftOperand).getBaseConglomerateDescriptor();
             ConglomerateDescriptor cdRight = ((ColumnReference) rightOperand).getBaseConglomerateDescriptor();
-            if (cdLeft ==null || cdRight==null)
+            if (cdLeft ==null && cdRight==null)
                 return -1.0d;
-            boolean leftFromBaseTable = cdLeft.equals(((FromBaseTable) optTable).baseConglomerateDescriptor);
-            boolean rightFromBaseTable = cdRight.equals(((FromBaseTable) optTable).baseConglomerateDescriptor);
+            boolean leftFromBaseTable = cdLeft != null && cdLeft.equals(((FromBaseTable) optTable).baseConglomerateDescriptor);
+            boolean rightFromBaseTable = cdRight != null && cdRight.equals(((FromBaseTable) optTable).baseConglomerateDescriptor);
             if (leftFromBaseTable && rightFromBaseTable) {
                 return Math.max(((ColumnReference) leftOperand).columnReferenceEqualityPredicateSelectivity(),((ColumnReference) rightOperand).columnReferenceEqualityPredicateSelectivity());
             } else if (leftFromBaseTable) {
@@ -1424,20 +1424,25 @@ public class BinaryRelationalOperatorNode
             } else if (rightFromBaseTable) {
                 return ((ColumnReference) rightOperand).columnReferenceEqualityPredicateSelectivity();
             }
-        } else if (leftOperand instanceof ColumnReference && rightOperand instanceof ParameterNode) {
-            // it is possible that this is a special case that actually represents an inlist condition, then it is better to facter in the
-            // number of inlist elements in the selectivity estimation
-            int factor = 1;
-            if (inListProbeSource != null) {
-                factor = inListProbeSource.getRightOperandList().size();
+        } else if (leftOperand instanceof ColumnReference) {
+            // generalize the estimation from ParameterNode to any expression
+            double sel = ((ColumnReference) leftOperand).columnReferenceEqualityPredicateSelectivity();
+            if (rightOperand instanceof ParameterNode) {
+                // it is possible that this is a special case that actually represents an inlist condition, then it is better to facter in the
+                // number of inlist elements in the selectivity estimation
+                int factor = 1;
+                if (inListProbeSource != null) {
+                    factor = inListProbeSource.getRightOperandList().size();
+                }
+                sel = factor * sel;
+                // avoid the estimation to go over 1, in case it happens, round down to 0.9 to be consistent with the logic in
+                // InListSelectivity.getSelectivity()
+                if (sel > 0.9d)
+                    sel = 0.9d;
             }
-            double sel = factor * ((ColumnReference) leftOperand).columnReferenceEqualityPredicateSelectivity();
-            // avoid the estimation to go over 1, in case it happens, round down to 0.9 to be consistent with the logic in
-            // InListSelectivity.getSelectivity()
-            if (sel > 0.9d)
-                sel = 0.9d;;
             return sel;
-        } else if (rightOperand instanceof ColumnReference && leftOperand instanceof ParameterNode) {
+        } else if (rightOperand instanceof ColumnReference) {
+            // generalize the estimation from ParameterNode to any expression
             return ((ColumnReference) rightOperand).columnReferenceEqualityPredicateSelectivity();
         }
         return -1.0d;
@@ -1457,6 +1462,11 @@ public class BinaryRelationalOperatorNode
                     return 0.1;
                 return selectivity;
             case RelationalOperator.NOT_EQUALS_RELOP:
+                selectivity = getReferenceSelectivity(optTable);
+                if (selectivity < 0.0d) // No Stats, lets just guess 10%
+                    return 0.9;
+                else
+                    return 1-selectivity;
             case RelationalOperator.LESS_THAN_RELOP:
             case RelationalOperator.LESS_EQUALS_RELOP:
             case RelationalOperator.GREATER_EQUALS_RELOP:
@@ -1502,9 +1512,9 @@ public class BinaryRelationalOperatorNode
                         Math.min(left.nonZeroCardinality(outerRowCount), right.nonZeroCardinality(innerRowCount));
                 selectivity = selectivityJoinType.equals(SelectivityUtil.SelectivityJoinType.INNER) ?
                         selectivity : 1.0d - selectivity;
-                if (optTable instanceof FromBaseTable && ((FromBaseTable) optTable).getExistsTable()) {
+                if (optTable instanceof FromTable && ((FromTable) optTable).getExistsTable()) {
                     selectivity = selectivity * left.nonZeroCardinality(outerRowCount)/outerRowCount;
-                    if (((FromBaseTable) optTable).isAntiJoin()) {
+                    if ((optTable instanceof FromBaseTable) && ((FromBaseTable) optTable).isAntiJoin()) {
                         selectivity = selectivity /(innerRowCount - innerRowCount/right.nonZeroCardinality(innerRowCount) + 1);
                     }
                 }
@@ -1965,6 +1975,7 @@ public class BinaryRelationalOperatorNode
      */
     private boolean valNodeReferencesOptTable(ValueNode valNode,
                                               FromTable optTable,boolean forPush,boolean walkOptTableSubtree){
+        
         // Following call will initialize/reset the btnVis,
         // valNodeBaseTables, and optBaseTables fields of this object.
         initBaseTableVisitor(optTable.getReferencedTableMap().size(),
@@ -1980,6 +1991,15 @@ public class BinaryRelationalOperatorNode
             // or beneath optTable.
             if(walkOptTableSubtree)
                 buildTableNumList(optTable,forPush);
+
+            // If the valNode references a table number in optTable's referencedTableMap,
+            // we know this node references a column from the optTable, no further checking is needed.
+            // For a column referencing the output of a set operation, we may not be able to
+            // trace back the base table from the column reference's source.
+            if (valNode instanceof ColumnReference) {
+                if (valNode.getTableNumber() >= 0 && optBaseTables.get(valNode.getTableNumber()))
+                    return true;
+            }
 
             // Now get the base table numbers that are in valNode's
             // subtree.  In most cases valNode will be a ColumnReference

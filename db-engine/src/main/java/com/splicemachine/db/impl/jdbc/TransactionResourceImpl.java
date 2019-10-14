@@ -132,6 +132,7 @@ public final class TransactionResourceImpl
 	private InternalDriver driver;
 	private String url;
 	private String drdaID;
+	private String rdbIntTkn;
     private CompilerContext.DataSetProcessorType useSpark;
     private boolean skipStats;
     private double defaultSelectivityFactor;
@@ -140,6 +141,7 @@ public final class TransactionResourceImpl
 	// set these up after constructor, called by EmbedConnection
 	protected Database database;
 	protected LanguageConnectionContext lcc;
+	private Properties sessionProperties;
 
 	// Set this when LDAP has groupname
 	protected List<String> groupuserlist;
@@ -154,6 +156,7 @@ public final class TransactionResourceImpl
 							Properties info) throws SQLException 
 	{
 		this.driver = driver;
+		this.sessionProperties = info;
 		csf = driver.getContextServiceFactory();
 		dbname = InternalDriver.getDatabaseName(url, info);
 		this.url = url;
@@ -165,6 +168,7 @@ public final class TransactionResourceImpl
 		username = IdUtil.getUserNameFromURLProps(info);
 
 		drdaID = info.getProperty(Attribute.DRDAID_ATTR, null);
+		rdbIntTkn = info.getProperty(Attribute.RDBINTTKN_ATTR, null);
 		ipAddress = info.getProperty(Property.IP_ADDRESS, null);
 		defaultSchema = info.getProperty("schema", null);
         String useSparkString = info.getProperty("useSpark",null);
@@ -237,8 +241,8 @@ public final class TransactionResourceImpl
 	void startTransaction() throws StandardException, SQLException
 	{
 		// setting up local connection
-		lcc = database.setupConnection(cm, username, groupuserlist, drdaID, dbname,useSpark,
-                skipStats, defaultSelectivityFactor, ipAddress, defaultSchema);
+		lcc = database.setupConnection(cm, username, groupuserlist, drdaID, dbname, rdbIntTkn, useSpark,
+                skipStats, defaultSelectivityFactor, ipAddress, defaultSchema, sessionProperties);
 	}
 
 	/**
@@ -552,6 +556,12 @@ public final class TransactionResourceImpl
 		return (driver.isActive() && ((database == null) || database.isActive()));
 	}
 
+	// Indicate whether the client whose transaction this is
+	// supports reading of decimals with 38 digits of precision.
+	public void setClientSupportsDecimal38(boolean newVal) {
+		if (lcc != null)
+			lcc.setClientSupportsDecimal38(newVal);
+    	}
 }
 
 

@@ -17,7 +17,10 @@ package com.splicemachine.derby.lifecycle;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import com.google.common.net.HostAndPort;
 import com.splicemachine.SqlExceptionFactory;
@@ -44,9 +47,11 @@ import com.splicemachine.management.JmxDatabaseAdminstrator;
 import com.splicemachine.management.Manager;
 import com.splicemachine.olap.AsyncOlapNIOLayer;
 import com.splicemachine.olap.JobExecutor;
+import com.splicemachine.olap.OlapServerProvider;
 import com.splicemachine.olap.TimedOlapClient;
 import com.splicemachine.pipeline.utils.PipelineUtils;
 import com.splicemachine.primitives.Bytes;
+import com.splicemachine.si.constants.SIConstants;
 import com.splicemachine.si.impl.driver.SIDriver;
 import com.splicemachine.uuid.Snowflake;
 import org.apache.log4j.Logger;
@@ -124,10 +129,10 @@ public class HEngineSqlEnv extends EngineSqlEnvironment{
     /*private helper methods*/
     private OlapClient initializeOlapClient(SConfiguration config,Clock clock) {
         int timeoutMillis = config.getOlapClientWaitTime();
-        int retries = config.getOlapClientRetries();
+        final int retries = config.getOlapClientRetries();
         int maxRetries = config.getMaxRetries();
         HBaseConnectionFactory hbcf = HBaseConnectionFactory.getInstance(config);
-        JobExecutor onl = new AsyncOlapNIOLayer(() -> {
+        final OlapServerProvider osp = queue -> {
             try {
                 if (config.getOlapServerExternal()) {
                     String serverName = hbcf.getMasterServer().getServerName();
@@ -137,7 +142,9 @@ public class HEngineSqlEnv extends EngineSqlEnvironment{
                     while (tries < maxRetries) {
                         tries++;
                         try {
-                            bytes = ZkUtils.getData(HConfiguration.getConfiguration().getSpliceRootPath() + HBaseConfiguration.OLAP_SERVER_PATH + "/" + serverName);
+                            bytes = ZkUtils.getData(HConfiguration.getConfiguration().getSpliceRootPath() +
+                                    HBaseConfiguration.OLAP_SERVER_PATH + "/" + serverName + ":" + queue);
+                            break;
                         } catch (IOException e) {
                             catched = e;
                             if (e.getCause() instanceof KeeperException.NoNodeException) {
@@ -168,8 +175,22 @@ public class HEngineSqlEnv extends EngineSqlEnvironment{
                 else
                     throw new IOException(e);
             }
-        },retries);
-        return new TimedOlapClient(onl,timeoutMillis);
+        };
+
+        Stream.Builder<String> queuesBuilder = Stream.builder();
+        queuesBuilder.accept(SIConstants.OLAP_DEFAULT_QUEUE_NAME);
+        if (config.getOlapServerIsolatedCompaction()) {
+            queuesBuilder.accept(config.getOlapServerIsolatedCompactionQueueName());
+        }
+        Stream<String> queues = Stream.concat(config.getOlapServerIsolatedRoles().values().stream(),
+                                              queuesBuilder.build());
+        Map<String, JobExecutor> executorMap = new HashMap<>();
+        queues.forEach(queue -> {
+            JobExecutor onl = new AsyncOlapNIOLayer(osp, queue, retries);
+            executorMap.put(queue, onl);
+        });
+
+        return new TimedOlapClient(executorMap,timeoutMillis);
     }
 
     @Override

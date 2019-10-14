@@ -1374,5 +1374,78 @@ public interface Property {
 	String CONVERT_MULTICOLUMN_DNF_PREDICATES_TO_INLIST =
 		"derby.database.convertMultiColumnDNFPredicatesToInList";
 
+	/**
+	 * If true, disable predicate simplification.
+	 * Predicate simplification does the following transformations involving predicate p...
+	 * (p OR FALSE)  ==> (p)
+	 * (p OR TRUE)   ==> TRUE
+	 * (p AND TRUE)  ==> (p)
+	 * (p AND FALSE) ==> (FALSE)
+	 * By default, predicate simplification is enabled.
+	 */
+	String DISABLE_PREDICATE_SIMPLIFICATION =
+		"derby.database.disablePredicateSimplification";
+
 	String BULK_IMPORT_SAMPLE_FRACTION = "splice.bulkImport.sample.fraction";
+
+	/**
+	 * The version of spark the current running splice
+	 * version was compiled against.  Normally, this will
+	 * also be the running version of spark on the cluster.
+	 * This property is not meant to be set by the system administrator.
+	 */
+	String SPLICE_SPARK_COMPILE_VERSION =
+		"splice.spark.compile.version";
+
+	/**
+	 * The current running version of spark on the splice cluster,
+	 * if different from splice.spark.compile.version.
+	 * Example setting: 2.2.0
+	 * Normally, this parameter will not be set, but can be used by
+	 * the system administrator, if the running version of spark
+	 * is not the same as what the running version of splice
+	 * was compiled against.
+	 *
+	 */
+	String SPLICE_SPARK_VERSION =
+		"splice.spark.version";
+
+	/**
+	 * Specify whether aggregation uses unsafe row native spark execution.
+	 *
+	 * Modes: on, off, forced
+	 *
+	 * on:  If the child operation produces a native spark data source,
+	 *      then use native spark aggregation.
+	 * off: Never use native spark aggregation.
+	 * forced: If the aggregation may legally use native spark aggregation,
+	 *         then use it, even if the underlying child operation uses a
+	 *         non-native SparkDataSet.  The source DataSet is converted
+	 *         to a NativeSparkDataSet.  This mode can be used for testing
+	 *         purposes.
+	 *
+	 * There is a system property of the same name.
+	 * Defaults to the system setting, whose default value is forced.
+	 */
+	String SPLICE_NATIVE_SPARK_AGGREGATION_MODE =
+		"splice.execution.nativeSparkAggregationMode";
+
+	/**
+	 * If true, expressions involving Decimals and other
+	 * data types which evaluate to null upon overflow during
+	 * native spark execution will be allowed, and not cause
+	 * reversion to the legacy splice operations path.
+	 *
+	 * As Splice implicitly casts many expressions involving
+	 * integers and BIGINT to decimal to avoid arithmetic overflows,
+	 * it is very restrictive to disallow native Spark evaluation.
+	 * Therefore, the default value is true, as only infrequent
+	 * corner cases will cause a problem.
+	 * This value can be set to false for users with problematic
+	 * data or query expressions.
+	 *
+	 * Defaults to true.
+	 */
+	String SPLICE_ALLOW_OVERFLOW_SENSITIVE_NATIVE_SPARK_EXPRESSIONS =
+		"splice.execution.allowOverflowSensitiveNativeSparkExpressions";
 }

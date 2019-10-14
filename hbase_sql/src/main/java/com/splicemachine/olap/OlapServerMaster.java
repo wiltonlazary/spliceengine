@@ -17,7 +17,6 @@ package com.splicemachine.olap;
 
 import com.google.common.net.HostAndPort;
 import com.splicemachine.access.HConfiguration;
-import com.splicemachine.access.api.SConfiguration;
 import com.splicemachine.access.configuration.HBaseConfiguration;
 import com.splicemachine.access.hbase.HBaseConnectionFactory;
 import com.splicemachine.access.util.NetworkUtils;
@@ -30,6 +29,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.zookeeper.RecoverableZooKeeper;
 import org.apache.hadoop.hbase.zookeeper.ZKUtil;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
@@ -37,6 +38,7 @@ import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.client.api.AMRMClient;
 import org.apache.hadoop.yarn.client.api.async.AMRMClientAsync;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.log4j.Logger;
 import org.apache.spark.deploy.SparkHadoopUtil;
 import org.apache.spark.util.Utils;
@@ -47,16 +49,12 @@ import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooDefs;
 
 import java.io.IOException;
-import java.security.PrivilegedAction;
-import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
+import java.util.Collection;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.apache.zookeeper.KeeperException.Code.NODEEXISTS;
-import static org.apache.zookeeper.KeeperException.Code.NONODE;
 
 
 /**
@@ -67,22 +65,24 @@ public class OlapServerMaster implements Watcher {
     private final ServerName serverName;
     private final AtomicBoolean end = new AtomicBoolean(false);
     private final int port;
+    private final String queueName;
     private RecoverableZooKeeper rzk;
     private String masterPath;
 
     UserGroupInformation ugi;
-    UserGroupInformation yarnUgi;
 
-    public OlapServerMaster(ServerName serverName, int port) {
+    public OlapServerMaster(ServerName serverName, int port, String queueName) {
         this.serverName = serverName;
         this.port = port;
+        this.queueName = queueName;
     }
 
     public static void main(String[] args) throws Exception {
         try {
             final ServerName serverName = ServerName.parseServerName(args[0]);
             final int port = Integer.parseInt(args[1]);
-            new OlapServerMaster(serverName, port).run();
+            final String roleName = args[2];
+            new OlapServerMaster(serverName, port, roleName).run();
         } catch (Throwable t) {
             LOG.error("Failed due to unexpected exception, exiting forcefully", t);
         } finally {
@@ -96,13 +96,11 @@ public class OlapServerMaster implements Watcher {
         // Initialize clients to ResourceManager and NodeManagers
         Configuration conf = HConfiguration.unwrapDelegate();
 
-        UserGroupInformation.isSecurityEnabled();
-        AMRMClientAsync<AMRMClient.ContainerRequest> rmClient = getClient(conf);
-
-        LOG.info("Registered with Resource Manager");
-
         String principal = System.getProperty("splice.spark.yarn.principal");
         String keytab = System.getProperty("splice.spark.yarn.keytab");
+
+        // Original user has the YARN tokens
+        UserGroupInformation original = UserGroupInformation.getCurrentUser();
 
         if (principal != null && keytab != null) {
             try {
@@ -116,7 +114,23 @@ public class OlapServerMaster implements Watcher {
             String user = System.getProperty("splice.spark.yarn.user", "hbase");
             LOG.info("Login with user");
             ugi = UserGroupInformation.createRemoteUser(user);
+            Collection<Token<? extends TokenIdentifier>> tokens = UserGroupInformation.getCurrentUser().getCredentials().getAllTokens();
+            for (Token<? extends TokenIdentifier> token : tokens) {
+                LOG.debug("Token kind is " + token.getKind().toString()
+                        + " and the token's service name is " + token.getService());
+                if (AMRMTokenIdentifier.KIND_NAME.equals(token.getKind())) {
+                    ugi.addToken(token);
+                }
+            }
         }
+
+        // Transfer tokens from original user to the one we'll use from now on
+        SparkHadoopUtil.get().transferCredentials(original, ugi);
+
+        UserGroupInformation.isSecurityEnabled();
+        AMRMClientAsync<AMRMClient.ContainerRequest> rmClient = getClient(conf);
+
+        LOG.info("Registered with Resource Manager");
 
         UserGroupInformation.setLoginUser(ugi);
         ugi.doAs((PrivilegedExceptionAction<Void>) () -> {
@@ -180,8 +194,6 @@ public class OlapServerMaster implements Watcher {
         while(!end.get()) {
             Thread.sleep(10000);
             ugi.checkTGTAndReloginFromKeytab();
-            if (yarnUgi != null)
-                yarnUgi.checkTGTAndReloginFromKeytab();
         }
 
         LOG.info("OlapServerMaster shutting down");
@@ -192,7 +204,7 @@ public class OlapServerMaster implements Watcher {
 
         try {
             HostAndPort hostAndPort = HostAndPort.fromParts(hostname, port);
-            masterPath = root + HBaseConfiguration.OLAP_SERVER_PATH + "/" + serverName;
+            masterPath = root + HBaseConfiguration.OLAP_SERVER_PATH + "/" + serverName + ":" + queueName;
             rzk.create(masterPath, Bytes.toBytes(hostAndPort.toString()), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
             rzk.getData(masterPath, this, null);
         } catch (Exception e) {
@@ -234,35 +246,12 @@ public class OlapServerMaster implements Watcher {
 
     public AMRMClientAsync<AMRMClient.ContainerRequest> getClient(Configuration conf) throws IOException, YarnException, InterruptedException {
 
-        String principal = System.getProperty("splice.spark.yarn.principal");
-        String keytab = System.getProperty("splice.spark.yarn.keytab");
-
-        if (principal != null && keytab != null) {
-            UserGroupInformation original = UserGroupInformation.getCurrentUser();
-            try {
-                LOG.info("Login with principal (" + principal +") and keytab (" + keytab +")");
-                UserGroupInformation.loginUserFromKeytab(principal, keytab);
-
-            } catch (IOException e) {
-                LOG.error("Error while authenticating user " + principal + " with keytab " + keytab, e);
-                throw new RuntimeException(e);
+        return ugi.doAs(new PrivilegedExceptionAction<AMRMClientAsync<AMRMClient.ContainerRequest>>() {
+            @Override
+            public AMRMClientAsync<AMRMClient.ContainerRequest> run() throws Exception {
+                return initClient(conf);
             }
-
-            yarnUgi = UserGroupInformation.getCurrentUser();
-            SparkHadoopUtil.get().transferCredentials(original, yarnUgi);
-        }
-
-
-        if (yarnUgi != null) {
-            return yarnUgi.doAs(new PrivilegedExceptionAction<AMRMClientAsync<AMRMClient.ContainerRequest>>() {
-                @Override
-                public AMRMClientAsync<AMRMClient.ContainerRequest> run() throws Exception {
-                    return initClient(conf);
-                }
-            });
-        } else {
-            return initClient(conf);
-        }
+        });
     }
 
     private AMRMClientAsync<AMRMClient.ContainerRequest> initClient(Configuration conf) throws YarnException, IOException {

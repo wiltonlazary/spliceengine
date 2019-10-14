@@ -946,9 +946,15 @@ public class FromBaseTable extends FromTable {
 
     @Override
     public boolean legalJoinOrder(JBitSet assignedTableMap){
-        // Only an issue for EXISTS FBTs and table converted from SSQ
         /* Have all of our dependencies been satisfied? */
-        return !existsTable && !fromSSQ || assignedTableMap.contains(dependencyMap);
+        if (dependencyMap != null) {
+            if (existsTable || fromSSQ)
+                // the check of getFirstSetBit()!= -1 ensures that exists table or table converted from SSQ won't be the leftmost table
+                return (assignedTableMap.getFirstSetBit()!= -1) && assignedTableMap.contains(dependencyMap);
+            else
+                return assignedTableMap.contains(dependencyMap);
+        }
+        return true;
     }
 
     /**
@@ -1069,7 +1075,12 @@ public class FromBaseTable extends FromTable {
 
                 cvn=(CreateViewNode)parseStatement(vd.getViewText(),false);
 
+                if (cvn.isRecursive()) {
+                    cvn.replaceSelfReferenceForRecursiveView(tableDescriptor);
+                }
+
                 rsn=cvn.getParsedQueryExpression();
+
 
 				/* If the view contains a '*' then we mark the views derived column list
 				 * so that the view will still work, and return the expected results,

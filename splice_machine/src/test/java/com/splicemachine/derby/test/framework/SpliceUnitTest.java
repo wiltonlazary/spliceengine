@@ -14,6 +14,7 @@
 
 package com.splicemachine.derby.test.framework;
 
+import com.splicemachine.homeless.TestUtils;
 import com.splicemachine.utils.Pair;
 import org.junit.Assert;
 import org.junit.runner.Description;
@@ -37,6 +38,7 @@ public class SpliceUnitTest {
 
     private static Pattern overallCostP = Pattern.compile("totalCost=[0-9]+\\.?[0-9]*");
     private static Pattern outputRowsP = Pattern.compile("outputRows=[0-9]+\\.?[0-9]*");
+    private static Pattern scannedRowsP = Pattern.compile("scannedRows=[0-9]+\\.?[0-9]*");
 
 	public String getSchemaName() {
 		Class<?> enclosingClass = getClass().getEnclosingClass();
@@ -218,6 +220,26 @@ public class SpliceUnitTest {
         }
     }
 
+    protected void rowContainsQuery(int[] levels, String query,SpliceWatcher methodWatcher,String[]... contains) throws Exception {
+        try(ResultSet resultSet = methodWatcher.executeQuery(query)){
+            int i=0;
+            int k=0;
+            while(resultSet.next()){
+                i++;
+                for(int level : levels){
+                    if(level==i){
+                        String resultString = resultSet.getString(1);
+                        for (String phrase: contains[k]) {
+                            Assert.assertTrue("failed query at level (" + level + "): \n" + query + "\nExpected: " + phrase + "\nWas: "
+                                    + resultString, resultString.contains(phrase));
+                        }
+                        k++;
+                    }
+                }
+            }
+        }
+    }
+
     protected void rowContainsCount(int[] levels, String query,SpliceWatcher methodWatcher,double[] counts, double[] deltas ) throws Exception {
         try(ResultSet resultSet = methodWatcher.executeQuery(query)){
             int i=0;
@@ -294,6 +316,72 @@ public class SpliceUnitTest {
         return Double.parseDouble(m1.group().substring("outputRows=".length()));
     }
 
+    public static double parseScannedRows(String planMessage) {
+        Matcher m1 = scannedRowsP.matcher(planMessage);
+        Assert.assertTrue("No ScannedRows found!", m1.find());
+        return Double.parseDouble(m1.group().substring("scannedRows=".length()));
+    }
+
+    protected void testQuery(String sqlText, String expected, SpliceWatcher methodWatcher) throws Exception {
+        ResultSet rs = null;
+        try {
+            rs = methodWatcher.executeQuery(sqlText);
+            assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+        }
+        finally {
+            if (rs != null)
+                rs.close();
+        }
+    }
+
+    protected void testQueryUnsorted(String sqlText, String expected, SpliceWatcher methodWatcher) throws Exception {
+        ResultSet rs = null;
+        try {
+            rs = methodWatcher.executeQuery(sqlText);
+            assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+        }
+        finally {
+            if (rs != null)
+                rs.close();
+        }
+    }
+
+    protected void testFail(String sqlText,
+                            List<String> expectedErrors,
+                            SpliceWatcher methodWatcher) throws Exception {
+        ResultSet rs = null;
+        try {
+            rs = methodWatcher.executeQuery(sqlText);
+            String failMsg = format("Query not expected to succeed.\n%s", sqlText);
+            fail(failMsg);
+        }
+        catch (Exception e) {
+            boolean found = expectedErrors.contains(e.getMessage());
+            if (!found)
+                fail(format("\n + Unexpected error message: %s + \n", e.getMessage()));
+        }
+        finally {
+            if (rs != null)
+                rs.close();
+        }
+    }
+
+    protected void testUpdateFail(String sqlText,
+                                  List<String> expectedErrors,
+                                  SpliceWatcher methodWatcher) throws Exception {
+
+        try {
+            methodWatcher.executeUpdate(sqlText);
+            String failMsg = format("Update not expected to succeed.\n%s", sqlText);
+            fail(failMsg);
+        }
+        catch (Exception e) {
+            boolean found = expectedErrors.contains(e.getMessage());
+            if (!found)
+                fail(format("\n + Unexpected error message: %s + \n", e.getMessage()));
+        }
+    }
+
     public static class Contains {
         private List<Pair<Integer,String>> rows = new ArrayList<>();
 
@@ -333,6 +421,15 @@ public class SpliceUnitTest {
         Assert.assertEquals("Incorrect number of files reported!",1,resultSet.getInt(4));
         Assert.assertEquals("Incorrect number of bad records reported!", bad, resultSet.getInt(3));
     }
+
+    protected static void validateMergeResults(ResultSet resultSet, int updated,int inserted, int bad, int file) throws SQLException {
+        Assert.assertTrue("No rows returned!",resultSet.next());
+        Assert.assertEquals("Incorrect number of rows reported!",updated,resultSet.getInt(1));
+        Assert.assertEquals("Incorrect number of rows reported!",inserted,resultSet.getInt(2));
+        Assert.assertEquals("Incorrect number of files reported!",file,resultSet.getInt(4));
+        Assert.assertEquals("Incorrect number of bad records reported!", bad, resultSet.getInt(3));
+    }
+
     public static String printMsgSQLState(String testName, SQLException e) {
         // useful for debugging import errors
         StringBuilder buf =new StringBuilder(testName);
@@ -465,8 +562,14 @@ public class SpliceUnitTest {
     }
 
     public static SpliceUnitTest.TestFileGenerator generateFullRow(File directory, String fileName, int size,
-                                                                    List<int[]> fileData,
-                                                                    boolean duplicateLast) throws IOException {
+                                                                        List<int[]> fileData,
+                                                                        boolean duplicateLast) throws IOException {
+        return generateFullRow(directory,fileName,size,fileData,duplicateLast,false);
+    }
+
+    public static SpliceUnitTest.TestFileGenerator generateFullRow(File directory, String fileName, int size,
+                                                                   List<int[]> fileData,
+                                                                   boolean duplicateLast, boolean emptyLast) throws IOException {
         SpliceUnitTest.TestFileGenerator generator = new SpliceUnitTest.TestFileGenerator(directory, fileName);
         try {
             for (int i = 0; i < size; i++) {
@@ -478,6 +581,9 @@ public class SpliceUnitTest {
                 int[] row = {size - 1, 2 * (size - 1)};
                 fileData.add(row);
                 generator.row(row);
+            }
+            if (emptyLast) {
+                generator.row(new String[]{""});
             }
         } finally {
             generator.close();

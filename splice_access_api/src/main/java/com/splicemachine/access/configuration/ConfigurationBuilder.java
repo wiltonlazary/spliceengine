@@ -15,6 +15,10 @@
 package com.splicemachine.access.configuration;
 
 import com.splicemachine.access.api.SConfiguration;
+import com.splicemachine.db.iapi.sql.compile.CompilerContext;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * A builder containing all Splice subsystem properties that can be used to instantiate an {@link SConfiguration}.
@@ -47,6 +51,7 @@ public class ConfigurationBuilder {
     public long ddlDrainingMaximumWait;
     public long ddlRefreshInterval;
     public long maxDdlWait;
+    public long mergeRegionTimeout;
 
     // AuthenticationConfiguration
     public boolean authenticationNativeCreateCredentialsDatabase;
@@ -73,6 +78,7 @@ public class ConfigurationBuilder {
     public String authorizationScheme;
     public String rangerServiceName;
     public int sentryPollingInterval;
+    public String metadataRestrictionEnabled;
 
     // StatsConfiguration
     public double fallbackNullFraction;
@@ -109,6 +115,9 @@ public class ConfigurationBuilder {
     public long backupMaxBandwidthMB;
     public boolean backupUseDistcp;
     public int backupIOBufferSize;
+    public int replicationSnapshotInterval;
+    public int replicationSinkPort;
+    public int replicationProgressUpdateInterval;
 
     // SQLConfiguration
     public boolean debugDumpBindTree;
@@ -141,6 +150,7 @@ public class ConfigurationBuilder {
     public long broadcastRegionMbThreshold;
     public long broadcastRegionRowThreshold;
     public long broadcastDatasetCostThreshold;
+    public int recursiveQueryIterationLimit;
     public long optimizerPlanMaximumTimeout;
     public long optimizerPlanMinimumTimeout;
     public long determineSparkRowThreshold;
@@ -154,6 +164,8 @@ public class ConfigurationBuilder {
     public int rollForwardSecondWait;
     public int rollForwardFirstThreads;
     public int rollForwardSecondThreads;
+    public CompilerContext.NativeSparkModeType nativeSparkAggregationMode;
+    public int splitsPerTableMin;
 
     // PipelineConfiguration
     public int coreWriterThreads;
@@ -189,6 +201,10 @@ public class ConfigurationBuilder {
     public long controlExecutionRowLimit;
     public int olapShufflePartitions;
     public String olapLog4jConfig;
+    public Map<String,String> olapServerIsolatedRoles;
+    public Map<String,String> olapServerYarnQueues;
+    public boolean olapServerIsolatedCompaction;
+    public String olapServerIsolatedCompactionQueueName;
 
 
     /**

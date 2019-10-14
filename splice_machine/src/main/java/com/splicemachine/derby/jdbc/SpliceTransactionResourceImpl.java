@@ -25,11 +25,13 @@ import com.splicemachine.db.iapi.services.monitor.Monitor;
 import com.splicemachine.db.iapi.sql.compile.CompilerContext;
 import com.splicemachine.db.iapi.sql.conn.LanguageConnectionContext;
 import com.splicemachine.db.iapi.util.IdUtil;
+import com.splicemachine.db.impl.sql.catalog.ManagedCache;
 import com.splicemachine.db.jdbc.InternalDriver;
 import com.splicemachine.derby.impl.db.SpliceDatabase;
 import com.splicemachine.si.api.txn.TxnView;
 import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.log4j.Logger;
+import org.spark_project.guava.base.Optional;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -43,6 +45,7 @@ public final class SpliceTransactionResourceImpl implements AutoCloseable{
     protected String username;
     private String dbname;
     private String drdaID;
+    private String rdbIntTkn;
     protected SpliceDatabase database;
     protected LanguageConnectionContext lcc;
     protected String ipAddress;
@@ -57,6 +60,7 @@ public final class SpliceTransactionResourceImpl implements AutoCloseable{
         dbname=InternalDriver.getDatabaseName(url,info); // Singleton - Not Needed
         username=IdUtil.getUserNameFromURLProps(info); // Static
         drdaID=info.getProperty(Attribute.DRDAID_ATTR,null); // Static
+        rdbIntTkn = info.getProperty(Attribute.RDBINTTKN_ATTR, null);
         ipAddress = info.getProperty(Property.IP_ADDRESS,null);
 
         database=(SpliceDatabase)Monitor.findService(Property.DATABASE_MODULE,dbname);
@@ -74,7 +78,11 @@ public final class SpliceTransactionResourceImpl implements AutoCloseable{
         }
     }
 
-    public boolean marshallTransaction(TxnView txn) throws StandardException, SQLException{
+    public boolean marshallTransaction(TxnView txn) throws StandardException, SQLException {
+        return this.marshallTransaction(txn, null);
+    }
+
+    public boolean marshallTransaction(TxnView txn, ManagedCache<String, Optional<String>> propertyCache) throws StandardException, SQLException{
         boolean updated = false;
         try {
             if (LOG.isDebugEnabled()) {
@@ -87,7 +95,10 @@ public final class SpliceTransactionResourceImpl implements AutoCloseable{
 
             ArrayList<String> grouplist = new ArrayList<>();
             grouplist.add(username);
-            lcc=database.generateLanguageConnectionContext(txn, cm, username,grouplist,drdaID, dbname, CompilerContext.DataSetProcessorType.DEFAULT_CONTROL,false, -1, ipAddress);
+            if (propertyCache != null) {
+                database.getDataDictionary().getDataDictionaryCache().setPropertyCache(propertyCache);
+            }
+            lcc=database.generateLanguageConnectionContext(txn, cm, username,grouplist,drdaID, dbname, rdbIntTkn, CompilerContext.DataSetProcessorType.DEFAULT_CONTROL,false, -1, ipAddress);
 
             return true;
         } catch (Throwable t) {

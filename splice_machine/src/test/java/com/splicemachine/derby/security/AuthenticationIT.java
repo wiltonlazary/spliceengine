@@ -200,10 +200,83 @@ public class AuthenticationIT {
                     assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
                 }
             }
+
+            // test SpliceGroupUserVTI
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI() as b (USERNAME VARCHAR(128))")) {
+                    String expected = "";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+            }
+
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI(1) as b (USERNAME VARCHAR(128))")) {
+                    String expected = "USERNAME |\n" +
+                            "----------\n" +
+                            " PUBLIC  |\n" +
+                            "   TOM   |";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+            }
+
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI(2) as b (USERNAME VARCHAR(128))")) {
+                    String expected = "";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+            }
         }
     }
+
     @Test
-    public void testUserMappingInteractionWithImpersonation() throws SQLException {
+    public void testNoGroupUserSparkPath() throws Exception {
+        String url = "jdbc:splice://localhost:1527/splicedb;user=tom;password=tom;useSpark=true";
+        try (Connection c = DriverManager.getConnection(url, new Properties())) {
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("values USER")) {
+                    assertTrue(rs.next());
+                    assertEquals("TOM", rs.getString(1));
+                }
+            }
+
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("values GROUP_USER")) {
+                    String expected = "1  |\n" +
+                            "------\n" +
+                            "NULL |";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+            }
+
+            // test SpliceGroupUserVTI
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI() as b (USERNAME VARCHAR(128))")) {
+                    String expected = "";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+            }
+
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI(1) as b (USERNAME VARCHAR(128))")) {
+                    String expected = "USERNAME |\n" +
+                            "----------\n" +
+                            " PUBLIC  |\n" +
+                            "   TOM   |";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+            }
+
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI(2) as b (USERNAME VARCHAR(128))")) {
+                    String expected = "";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testUserMappingInteractionWithImpersonation() throws Exception {
         String url = "jdbc:splice://localhost:1527/splicedb;user=splice;password=admin;impersonate=dgf";
         try (Connection c = DriverManager.getConnection(url, new Properties())) {
             try (Statement s = c.createStatement()) {
@@ -217,6 +290,92 @@ public class AuthenticationIT {
                 try (ResultSet rs = s.executeQuery("values GROUP_USER")) {
                     assertTrue(rs.next());
                     assertEquals("\"SPLICE\"", rs.getString(1));
+                }
+
+                // Test that Kryo serialization of the groupUsers list in ActivationHolder
+                // doesn't throw an exception.
+                try (ResultSet rs = s.executeQuery("select count(*) from sys.sysschemas a, sys.systables b --splice-properties joinStrategy=NESTEDLOOP\n" +
+                "where a.SCHEMAID > b.SCHEMAID")) {
+                    while (rs.next());
+                    rs.close();
+                }
+                try (ResultSet rs = s.executeQuery("select count(*) from sys.sysschemas a, sys.systables b --splice-properties joinStrategy=NESTEDLOOP, useSpark=true\n" +
+                "where a.SCHEMAID > b.SCHEMAID")) {
+                    while (rs.next());
+                    rs.close();
+                }
+            }
+
+            // test SpliceGroupUserVTI
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI() as b (USERNAME VARCHAR(128))")) {
+                    String expected = "USERNAME |\n" +
+                            "----------\n" +
+                            " SPLICE  |";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI(1) as b (USERNAME VARCHAR(128))")) {
+                    String expected = "USERNAME |\n" +
+                            "----------\n" +
+                            "   DGF   |\n" +
+                            " PUBLIC  |\n" +
+                            " SPLICE  |";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI(2) as b (USERNAME VARCHAR(128))")) {
+                    String expected = "USERNAME |\n" +
+                            "----------\n" +
+                            " SPLICE  |";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+            }
+        }
+
+    }
+
+    @Test
+    public void testUserMappingInteractionWithImpersonationSparkPath() throws Exception {
+        String url = "jdbc:splice://localhost:1527/splicedb;user=splice;password=admin;impersonate=dgf;useSpark=true";
+        try (Connection c = DriverManager.getConnection(url, new Properties())) {
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("values USER")) {
+                    assertTrue(rs.next());
+                    assertEquals("DGF", rs.getString(1));
+                }
+            }
+
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("values GROUP_USER")) {
+                    assertTrue(rs.next());
+                    assertEquals("\"SPLICE\"", rs.getString(1));
+                }
+            }
+
+            // test SpliceGroupUserVTI
+            try (Statement s = c.createStatement()) {
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI() as b (USERNAME VARCHAR(128))")) {
+                    String expected = "USERNAME |\n" +
+                            "----------\n" +
+                            " SPLICE  |";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI(1) as b (USERNAME VARCHAR(128))")) {
+                    String expected = "USERNAME |\n" +
+                            "----------\n" +
+                            "   DGF   |\n" +
+                            " PUBLIC  |\n" +
+                            " SPLICE  |";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+                }
+
+                try (ResultSet rs = s.executeQuery("select * from new com.splicemachine.derby.vti.SpliceGroupUserVTI(2) as b (USERNAME VARCHAR(128))")) {
+                    String expected = "USERNAME |\n" +
+                            "----------\n" +
+                            " SPLICE  |";
+                    assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
                 }
             }
         }

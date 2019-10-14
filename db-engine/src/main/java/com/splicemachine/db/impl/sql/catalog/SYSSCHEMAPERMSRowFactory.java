@@ -39,11 +39,14 @@ import com.splicemachine.db.iapi.sql.dictionary.*;
 import com.splicemachine.db.iapi.sql.execute.ExecIndexRow;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.sql.execute.ExecutionFactory;
+import com.splicemachine.db.iapi.types.DataTypeDescriptor;
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.iapi.types.DataValueFactory;
 import com.splicemachine.db.iapi.types.SQLChar;
 
 import java.sql.Types;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Factory for creating a SYSTABLEPERMS row.
@@ -66,9 +69,11 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
     private static final int REFERENCESPRIV_COL_NUM = 9;
     private static final int TRIGGERPRIV_COL_NUM = 10;
     private static final int MODIFYPRIV_COL_NUM = 11;
-    private static final int COLUMN_COUNT = 11;
+    private static final int ACCESSPRIV_COL_NUM = 12;
+    private static final int COLUMN_COUNT = 12;
 
     public static final String  MODIFYPRIV_COL_NAME = "MODIFYPRIV";
+    public static final String  ACCESSPRIV_COL_NAME = "ACCESSPRIV";
 
     public static final int GRANTEE_SCHEMA_GRANTOR_INDEX_NUM = 0;
     public static final int SCHEMAPERMSID_INDEX_NUM = 1;
@@ -113,6 +118,7 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
         String referencesPriv = null;
         String triggerPriv = null;
         String modifyPriv = null;
+        String accessPriv = null;
 
         if( pd == null)
         {
@@ -140,6 +146,7 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
             referencesPriv = spd.getReferencesPriv();
             triggerPriv = spd.getTriggerPriv();
             modifyPriv = spd.getModifyPriv();
+            accessPriv = spd.getAccessPriv();
         }
         ExecRow row = getExecutionFactory().getValueRow( COLUMN_COUNT);
         row.setColumn( SCHEMAPERMSID_COL_NUM, new SQLChar(schemaPermID));
@@ -153,6 +160,7 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
         row.setColumn( REFERENCESPRIV_COL_NUM, new SQLChar( referencesPriv));
         row.setColumn( TRIGGERPRIV_COL_NUM, new SQLChar(triggerPriv));
         row.setColumn( MODIFYPRIV_COL_NUM, new SQLChar(modifyPriv));
+        row.setColumn( ACCESSPRIV_COL_NUM, new SQLChar(accessPriv));
 
         return row;
     } // end of makeRow
@@ -181,7 +189,10 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
         // need to consider entries upgraded from versions without the modifyPriv field
         if (modifyPriv == null)
             modifyPriv = "N";
-
+        String accessPriv = row.getColumn( ACCESSPRIV_COL_NUM).getString();
+        // need to consider entries upgraded from versions without the accessPriv field
+        if (accessPriv == null)
+            accessPriv = "N";
         if( SanityManager.DEBUG)
         {
             SanityManager.ASSERT( "y".equals(selectPriv) || "Y".equals(selectPriv) || "N".equals(selectPriv),
@@ -198,6 +209,8 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
                                   "Invalid SYSSCHEMAPERMS.triggerPriv column value: " + triggerPriv);
             SanityManager.ASSERT( "y".equals(modifyPriv) || "Y".equals(modifyPriv) || "N".equals(modifyPriv),
                                   "Invalid SYSSCHEMAPERMS.modifyPriv column value: " + modifyPriv);
+            SanityManager.ASSERT( "y".equals(accessPriv) || "Y".equals(accessPriv) || "N".equals(accessPriv),
+                                  "Invalid SYSSCHEMAPERMS.accessPriv column value: " + accessPriv);
         }
 
 		SchemaPermsDescriptor schemaPermsDesc =
@@ -206,7 +219,7 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
                                          getAuthorizationID( row, GRANTOR_COL_NUM),
                                          schemaUUID,
                                          selectPriv, deletePriv, insertPriv,
-                                         updatePriv, referencesPriv, triggerPriv, modifyPriv);
+                                         updatePriv, referencesPriv, triggerPriv, modifyPriv, accessPriv);
 		schemaPermsDesc.setUUID(schemaPermsUUID);
 		return schemaPermsDesc;
     } // end of buildDescriptor
@@ -226,7 +239,8 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
             SystemColumnImpl.getIndicatorColumn("UPDATEPRIV"),
             SystemColumnImpl.getIndicatorColumn("REFERENCESPRIV"),
             SystemColumnImpl.getIndicatorColumn("TRIGGERPRIV"),
-            SystemColumnImpl.getColumn("MODIFYPRIV", Types.CHAR, true, 1)
+            SystemColumnImpl.getColumn("MODIFYPRIV", Types.CHAR, true, 1),
+            SystemColumnImpl.getColumn("ACCESSPRIV", Types.CHAR, true, 1)
         };
     }
 
@@ -290,6 +304,7 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
         changeCount += orOnePermission( row, colsChanged, REFERENCESPRIV_COL_NUM, schemaPerms.getReferencesPriv());
         changeCount += orOnePermission( row, colsChanged, TRIGGERPRIV_COL_NUM, schemaPerms.getTriggerPriv());
         changeCount += orOnePermission( row, colsChanged, MODIFYPRIV_COL_NUM, schemaPerms.getModifyPriv());
+        changeCount += orOnePermission( row, colsChanged, ACCESSPRIV_COL_NUM, schemaPerms.getAccessPriv());
 
         return changeCount;
     } // end of orPermissions
@@ -306,7 +321,7 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
         DataValueDescriptor existingPermDVD = row.getColumn( column);
         char existingPerm;
 
-        if (column == MODIFYPRIV_COL_NUM && (existingPermDVD == null || existingPermDVD.isNull()))
+        if ((column == MODIFYPRIV_COL_NUM || column == ACCESSPRIV_COL_NUM) && (existingPermDVD == null || existingPermDVD.isNull()))
             existingPerm = 'N';
         else
             existingPerm = existingPermDVD.getString().charAt(0);
@@ -341,7 +356,8 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
             removeOnePermission( row, colsChanged, UPDATEPRIV_COL_NUM, schemaPerms.getUpdatePriv()) |
             removeOnePermission( row, colsChanged, REFERENCESPRIV_COL_NUM, schemaPerms.getReferencesPriv()) |
             removeOnePermission( row, colsChanged, TRIGGERPRIV_COL_NUM, schemaPerms.getTriggerPriv()) |
-            removeOnePermission( row, colsChanged, MODIFYPRIV_COL_NUM, schemaPerms.getModifyPriv()));
+            removeOnePermission( row, colsChanged, MODIFYPRIV_COL_NUM, schemaPerms.getModifyPriv())) |
+            removeOnePermission( row, colsChanged, ACCESSPRIV_COL_NUM, schemaPerms.getAccessPriv());
         if( ! permissionsLeft)
             return -1;
         for (boolean aColsChanged : colsChanged) {
@@ -356,7 +372,7 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
     {
         DataValueDescriptor existingPermDVD = row.getColumn( column);
         char existingPerm;
-        if (column == MODIFYPRIV_COL_NUM && (existingPermDVD == null || existingPermDVD.isNull()))
+        if ((column == MODIFYPRIV_COL_NUM || column == ACCESSPRIV_COL_NUM) && (existingPermDVD == null || existingPermDVD.isNull()))
             existingPerm = 'N';
         else
             existingPerm = existingPermDVD.getString().charAt(0);
@@ -383,4 +399,68 @@ public class SYSSCHEMAPERMSRowFactory extends PermissionsCatalogRowFactory
         DataValueDescriptor existingPermDVD = row.getColumn(SCHEMAPERMSID_COL_NUM);
         perm.setUUID(getUUIDFactory().recreateUUID(existingPermDVD.getString()));
     }
+
+    public List<ColumnDescriptor[]> getViewColumns(TableDescriptor view, UUID viewId) throws StandardException {
+
+        List<ColumnDescriptor[]> cdsl = new ArrayList<>();
+        cdsl.add(
+                new ColumnDescriptor[]{
+                        new ColumnDescriptor("SCHEMAPERMSID",1,1, DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.CHAR, false, 36),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("GRANTEE",2,2,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.VARCHAR, false, 128),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("GRANTOR",3,3,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.VARCHAR, false, 128),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("SCHEMAID",4,4,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.CHAR, false, 36),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("SELECTPRIV",5,5,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.CHAR, false, 1),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("DELETEPRIV",6,6,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.CHAR, false, 1),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("INSERTPRIV",7,7,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.CHAR, false, 1),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("UPDATEPRIV",8,8,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.CHAR, false, 1),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("REFERENCESPRIV",9,9,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.CHAR, false, 1),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("TRIGGERPRIV",10,10,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.CHAR, false, 1),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("MODIFYPRIV",11,11,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.CHAR, true, 1),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("ACCESSPRIV",12,12,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.CHAR, true, 1),
+                                null,null,view,viewId,0,0,0),
+                        new ColumnDescriptor("SCHEMANAME",13,13,
+                                DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.VARCHAR, false, 128),
+                                null,null,view,viewId,0,0,0)
+                });
+        return cdsl;
+    }
+
+    /* The two branches of UNION-ALL cover both the regular user case and the admin user case.
+       A regular user should only see privileges granted to him/her, the groups he/she belongs to, or the roles directly/indirectly
+       granted to him/her.
+       An admin user should see all the privileges.
+       We can do a union-all as the two branches are mutually exclusive
+     */
+    public static String SYSSCHEMAPERMS_VIEW_SQL = "create view SYSSCHEMAPERMSVIEW as \n" +
+            "SELECT P.*, S.SCHEMANAME FROM SYS.SYSSCHEMAPERMS P, SYSVW.SYSSCHEMASVIEW S "+
+            "WHERE S.SCHEMAID = P.SCHEMAID AND " +
+            "P.grantee in (select name from sysvw.sysallroles)\n" +
+
+            "UNION ALL \n" +
+
+            "SELECT P.*, S.SCHEMANAME FROM SYS.SYSSCHEMAPERMS P, SYSVW.SYSSCHEMASVIEW S "+
+            "WHERE S.SCHEMAID = P.SCHEMAID AND 'SPLICE' = (select name from new com.splicemachine.derby.vti.SpliceGroupUserVTI(2) as b (NAME VARCHAR(128)))";
+
 }

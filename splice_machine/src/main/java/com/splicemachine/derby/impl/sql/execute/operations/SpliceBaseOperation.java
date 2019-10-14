@@ -203,16 +203,13 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
             if(LOG_CLOSE.isTraceEnabled() && isOpen)
                 LOG_CLOSE.trace(String.format("closing operation %s",this));
             if (remoteQueryClient != null) {
-                if (!isKilled && !isTimedout) {
-                    // wait for completion, it should be quick
-                    try {
-                        remoteQueryClient.waitForCompletion(1, TimeUnit.MINUTES);
-                    } catch (InterruptedException | TimeoutException | ExecutionException e) {
-                        // ignore, continue closing
-                        LOG.warn("Exception while waiting for remote query client to wrap up", e);
-                    }
+                if (isKilled || isTimedout) {
+                    // interrupt it
+                    remoteQueryClient.interrupt();
+                } else {
+                    // close gracefully
+                    remoteQueryClient.close();
                 }
-                remoteQueryClient.close();
             }
             synchronized (this) {
                 isOpen=false;
@@ -276,13 +273,14 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
             LOG.trace(String.format("open operation %s",this));
         try {
             DataSetProcessor dsp = EngineDriver.driver().processorFactory().chooseProcessor(activation, this);
-            uuid = EngineDriver.driver().getOperationManager().registerOperation(this, Thread.currentThread(),new Date(), dsp.getType());
+            String intTkn = activation.getLanguageConnectionContext().getRdbIntTkn();
+            uuid = EngineDriver.driver().getOperationManager().registerOperation(this, Thread.currentThread(),new Date(), dsp.getType(), intTkn);
             logExecutionStart(dsp);
             openCore();
         } catch (Exception e) {
             EngineDriver.driver().getOperationManager().unregisterOperation(uuid);
             checkInterruptedException(e);
-            throw e;
+            throw Exceptions.parseException(e);
         }
     }
 
@@ -955,7 +953,7 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
         getActivation().getLanguageConnectionContext().getStatementContext().cancel();
         if (remoteQueryClient != null) {
             try {
-                remoteQueryClient.close();
+                remoteQueryClient.interrupt();
             } catch (Exception e) {
                 throw Exceptions.parseException(e);
             }
@@ -967,7 +965,7 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
         this.isTimedout = true;
         if (remoteQueryClient != null) {
             try {
-                remoteQueryClient.close();
+                remoteQueryClient.interrupt();
             } catch (Exception e) {
                 throw Exceptions.parseException(e);
             }
@@ -1003,5 +1001,12 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
     @Override
     public ScanInformation<ExecRow> getScanInformation() {
         throw new RuntimeException("getScanInformation not implemented");
+    }
+
+    @Override
+    public void setRecursiveUnionReference(NoPutResultSet recursiveUnionReference) {
+        for(SpliceOperation op : getSubOperations()){
+            op.setRecursiveUnionReference(recursiveUnionReference);
+        }
     }
 }

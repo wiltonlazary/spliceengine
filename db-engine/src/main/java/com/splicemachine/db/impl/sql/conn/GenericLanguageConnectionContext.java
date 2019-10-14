@@ -150,6 +150,7 @@ public class GenericLanguageConnectionContext extends ContextImpl implements Lan
     private final int instanceNumber;
     private String drdaID;
     private String dbname;
+    private String rdbIntTkn;
 
     private Object lastQueryTree; // for debugging
 
@@ -186,6 +187,12 @@ public class GenericLanguageConnectionContext extends ContextImpl implements Lan
      * nested user transaction.
      */
     private int queryNestingDepth;
+
+    /**
+     * True if the connected client application can read decimal data
+     * up to 38 digits of precision.
+     */
+    private boolean clientSupportsDecimal38 = false;
 
     protected DataValueFactory dataFactory;
     protected LanguageFactory langFactory;
@@ -347,11 +354,13 @@ public class GenericLanguageConnectionContext extends ContextImpl implements Lan
             int instanceNumber,
             String drdaID,
             String dbname,
+            String rdbIntTkn,
             CompilerContext.DataSetProcessorType type,
             boolean skipStats,
             double defaultSelectivityFactor,
             String ipAddress,
-            String defaultSchema
+            String defaultSchema,
+            Properties connectionProperties
             ) throws StandardException{
         super(cm,ContextId.LANG_CONNECTION);
         acts=new ArrayList<>();
@@ -369,12 +378,13 @@ public class GenericLanguageConnectionContext extends ContextImpl implements Lan
         this.instanceNumber=instanceNumber;
         this.drdaID=drdaID;
         this.dbname=dbname;
+        this.rdbIntTkn=rdbIntTkn;
         this.commentStripper = lcf.newCommentStripper();
         this.defaultSchema = defaultSchema;
 
         /* Find out whether or not to log info on executing statements to error log
          */
-        String logStatementProperty=PropertyUtil.getServiceProperty(getTransactionCompile(),"derby.language.logStatementText");
+        String logStatementProperty=PropertyUtil.getCachedDatabaseProperty(this,"derby.language.logStatementText");
         logStatementText=logStatementProperty == null || Boolean.valueOf(logStatementProperty);
         // log statements by default
         if (!logStatementText) {
@@ -385,7 +395,7 @@ public class GenericLanguageConnectionContext extends ContextImpl implements Lan
         maxStatementLogLen = maxStatementLogLenStr == null ? -1 : Integer.valueOf
                 (maxStatementLogLenStr);
 
-        String logQueryPlanProperty=PropertyUtil.getServiceProperty(getTransactionCompile(),"derby.language.logQueryPlan");
+        String logQueryPlanProperty=PropertyUtil.getCachedDatabaseProperty(this,"derby.language.logQueryPlan");
         logQueryPlan=Boolean.valueOf(logQueryPlanProperty);
 
         lockEscalationThreshold=Property.DEFAULT_LOCKS_ESCALATION_THRESHOLD;
@@ -398,6 +408,12 @@ public class GenericLanguageConnectionContext extends ContextImpl implements Lan
             this.sessionProperties.setProperty(SessionProperties.PROPERTYNAME.SKIPSTATS, new Boolean(skipStats).toString());
         if (defaultSelectivityFactor > 0)
             this.sessionProperties.setProperty(SessionProperties.PROPERTYNAME.DEFAULTSELECTIVITYFACTOR, new Double(defaultSelectivityFactor).toString());
+        if (connectionProperties != null) {
+            String olapQueue = connectionProperties.getProperty("olapQueue");
+            if (olapQueue != null) {
+                this.sessionProperties.setProperty(SessionProperties.PROPERTYNAME.OLAPQUEUE, olapQueue);
+            }
+        }
 
         String ignoreCommentOptEnabledStr = PropertyUtil.getCachedDatabaseProperty(this, MATCHING_STATEMENT_CACHE_IGNORING_COMMENT_OPTIMIZATION_ENABLED);
         ignoreCommentOptEnabled = Boolean.valueOf(ignoreCommentOptEnabledStr);
@@ -3190,6 +3206,11 @@ public class GenericLanguageConnectionContext extends ContextImpl implements Lan
     }
 
     @Override
+    public String getRdbIntTkn() {
+        return rdbIntTkn;
+    }
+
+    @Override
     public void setDrdaID(String drdaID){
         this.drdaID=drdaID;
     }
@@ -3250,6 +3271,16 @@ public class GenericLanguageConnectionContext extends ContextImpl implements Lan
     @Override
     public String getCurrentUserId(Activation a) {
         return getCurrentSQLSessionContext(a).getCurrentUser();
+    }
+
+    @Override
+    public void setCurrentUser(Activation a, String userName) {
+        getCurrentSQLSessionContext(a).setUser(userName);
+    }
+
+    @Override
+    public void setCurrentGroupUser(Activation a, List<String> groupUsers) {
+        getCurrentSQLSessionContext(a).setCurrentGroupUser(groupUsers);
     }
 
     @Override
@@ -3845,5 +3876,11 @@ public class GenericLanguageConnectionContext extends ContextImpl implements Lan
 
     public boolean getIgnoreCommentOptEnabled() {
         return ignoreCommentOptEnabled;
+    }
+
+    public boolean clientSupportsDecimal38() { return clientSupportsDecimal38; }
+
+    public void setClientSupportsDecimal38(boolean newVal) {
+        clientSupportsDecimal38 = newVal;
     }
 }

@@ -43,6 +43,7 @@ import com.splicemachine.db.impl.sql.execute.JarUtil;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Locale;
+import java.util.Properties;
 
 /**
  * The com.splicemachine.db.iapi.db.Database
@@ -87,11 +88,13 @@ public interface Database extends com.splicemachine.db.database.Database, Locale
 	 * @exception StandardException thrown if unable to create the connection.
 	 */
 	public LanguageConnectionContext setupConnection(ContextManager cm, String user, List<String> groupuserlist, String drdaID, String dbname,
+													 String rdbIntTkn,
 													 CompilerContext.DataSetProcessorType dataSetProcessorType,
 													 boolean skipStats,
 													 double defaultSelectivityFactor,
 													 String ipAddress,
-                                                     String defaultSchema
+													 String defaultSchema,
+													 Properties sessionProperties
                                                      ) throws StandardException;
 
 	/**

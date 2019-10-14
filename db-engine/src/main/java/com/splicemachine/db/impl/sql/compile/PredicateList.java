@@ -38,6 +38,7 @@ import com.splicemachine.db.iapi.services.classfile.VMOpcode;
 import com.splicemachine.db.iapi.services.compiler.LocalField;
 import com.splicemachine.db.iapi.services.compiler.MethodBuilder;
 import com.splicemachine.db.iapi.services.context.ContextManager;
+import com.splicemachine.db.iapi.services.io.FormatableArrayHolder;
 import com.splicemachine.db.iapi.services.sanity.SanityManager;
 import com.splicemachine.db.iapi.sql.compile.*;
 import com.splicemachine.db.iapi.sql.dictionary.ConglomerateDescriptor;
@@ -233,11 +234,12 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
                 ap.getConglomerateDescriptor(),
                 true,
                 ap.getNonMatchingIndexScan(),
-                ap.getCoveringIndexScan());
+                ap.getCoveringIndexScan(),
+                true);
     }
 
     @Override
-    public void classify(Optimizable optTable,ConglomerateDescriptor cd) throws StandardException{
+    public void classify(Optimizable optTable,ConglomerateDescriptor cd, boolean considerJoinPredicateAsKey) throws StandardException{
 		/*
 		** Don't push the predicates - at this point, we are only determining
 		** which predicates are useful.  Also, we don't know yet whether
@@ -245,7 +247,7 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
 		** this method call will help determine that.  So, let's say they're
 		** false for now.
 		*/
-        orderUsefulPredicates(optTable,cd,false,false,false);
+        orderUsefulPredicates(optTable,cd,false,false,false, considerJoinPredicateAsKey);
     }
 
     @Override
@@ -670,7 +672,8 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
                                        ConglomerateDescriptor cd,
                                        boolean pushPreds,
                                        boolean nonMatchingIndexScan,
-                                       boolean coveringIndexScan) throws StandardException{
+                                       boolean coveringIndexScan,
+                                       boolean considerJoinPredicateAsKey) throws StandardException{
         boolean primaryKey=false;
         int[] baseColumnPositions=null;
         boolean[] isAscending=null;
@@ -809,6 +812,11 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
 		*/
 		Integer inlistPosition = -2;
 
+        boolean multiColumnMultiProbeEnabled =
+            (optTable instanceof FromBaseTable &&
+            !((FromBaseTable) optTable).isSpark(((FromBaseTable) optTable).getDataSetProcessorType())) ||
+                getCompilerContext().getMulticolumnInlistProbeOnSparkEnabled();
+
         TreeMap<Integer, Predicate> inlistPreds = new TreeMap<>();
         List<Predicate> predicates=new ArrayList<>();
         for(int index=0;index<size;index++){
@@ -817,10 +825,14 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
             if(position!=null){
                 if (pred.isInListProbePredicate()) {
                     inlistPreds.put(position, pred);
-                    if (position >= 0)
+                    if (position >= 0 && multiColumnMultiProbeEnabled)
                         isEquality[position] = true;
-                    //we keep track of the inlist at highest index position excluding rowid whose position is -1
-                    if (inlistPosition == -2 || inlistPosition < position) {
+                    // we keep track of the inlist at highest index position excluding rowid whose position is -1
+                    // if MultiProbeScan on multiple columns is enabled, otherwise we keep track
+                    // of the lowest index position.
+                    if (inlistPosition == -2 ||
+                        (multiColumnMultiProbeEnabled && inlistPosition < position) ||
+                        (!multiColumnMultiProbeEnabled && inlistPosition > position)) {
                         inlistPosition = position;
                     }
                 } else {
@@ -840,6 +852,8 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
                 }
             }
         }
+        if (inlistPosition >= 0)
+            isEquality[inlistPosition] = true;
 
         /** inlistPosition of -1 means inlist on rowid, however, currently MultiProbeTableScan for inlist on rowid
 		  returns wrong result, so do not consider MultiProbeTableScan for inlist on rowid.
@@ -888,6 +902,9 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
                 }
             }
         } else
+            inlistQualified = false;
+
+        if (inlistPreds.isEmpty())
             inlistQualified = false;
     
         if (usefulCount > 0) {
@@ -961,10 +978,7 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
                                    C_NodeTypes.VALUE_NODE_LIST,
                                    getContextManager());
             boolean multiColumnInListBuilt = false;
-            if (optTable instanceof FromBaseTable &&
-                (!((FromBaseTable) optTable).isSpark(((FromBaseTable) optTable).getDataSetProcessorType()) ||
-                   getCompilerContext().getMulticolumnInlistProbeOnSparkEnabled()) &&
-                  firstPred != lastPred &&
+            if (firstPred != lastPred &&
                 addConstantsToList(optTable, null, groupedConstants, predsForNewInList, 0)) {
                 if (numConstants != groupedConstants.size())
                     SanityManager.THROWASSERT("Wrong number of constants built for IN list.");
@@ -1141,7 +1155,8 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
 				** We're working on a new index column for the start position.
 				** Is it just one more than the previous position?
 				*/
-                if((thisIndexPosition-currentStartPosition)> numColsInStartPred){
+                if((thisIndexPosition-currentStartPosition)> numColsInStartPred ||
+                        !considerJoinPredicateAsKey && thisPred.isJoinPredicate()){
 					/*
 					** There's a gap in the start positions.  Don't mark any
 					** more predicates as start predicates.
@@ -1183,7 +1198,8 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
 
 			/* Same as above, except for stop keys */
             if(currentStopPosition + numColsInStopPred <= thisIndexPosition || thisIndexPosition == -1){
-                if((thisIndexPosition-currentStopPosition)> numColsInStopPred){
+                if((thisIndexPosition-currentStopPosition)> numColsInStopPred ||
+                        !considerJoinPredicateAsKey && thisPred.isJoinPredicate()){
                     gapInStopPositions=true;
                 }
 
@@ -1679,6 +1695,13 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
             return node instanceof ConstantNode || node instanceof ParameterNode;
     }
 
+    private boolean canPruneForPredicatePushedToUnion(DataTypeDescriptor unionType, DataTypeDescriptor branchType) {
+        if (unionType.getTypeName().equals(TypeId.VARCHAR_NAME) && branchType.getTypeName().equals(TypeId.CHAR_NAME))
+            return true;
+
+        return false;
+    }
+
     /**
      * Push all predicates, which can be pushed, into the underlying select.
      * A predicate can be pushed into an underlying select if the source of
@@ -1722,7 +1745,7 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
             if(!state)
                 continue;
 
-            if(copyPredicate){
+            if(copyPredicate){ // this path is for push predicate into union branches
                 // Copy this predicate and push this instead
                 AndNode andNode=predicate.getAndNode();
                 ValueNode leftOperand;
@@ -1738,7 +1761,7 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
                     opNode=(BinaryRelationalOperatorNode)andNode.getLeftOperand();
                     // Investigate using invariant interface to check rightOperand
                     if(!(opNode.getLeftOperand() instanceof ColumnReference)
-                            || !isConstantOrParameterNode(opNode.getRightOperand()))
+                            || !opNode.getRightOperand().isConstantOrParameterTreeNode())
                         continue;
 
                     crNode=(ColumnReference)opNode.getLeftOperand();
@@ -1747,7 +1770,10 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
                     // Don't push multicolumn IN list into a SELECT for now.
                     if (inNode.leftOperandList.size() > 1)
                         continue;
-                    if(!(inNode.getRightOperandList().isConstantExpression()))
+                    if(!(inNode.getRightOperandList().containsOnlyConstantAndParamNodes()))
+                        continue;
+
+                    if (!(inNode.getLeftOperand() instanceof ColumnReference))
                         continue;
 
                     crNode=(ColumnReference)inNode.getLeftOperand();
@@ -1755,7 +1781,10 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
                     continue;
 
                 // Remap this crNode to underlying column reference in the select, if possible.
-                ColumnReference newCRNode=select.findColumnReferenceInResult(crNode.columnName);
+                // At this point, the column references in the predicate points to the result column
+                // of the union node, we need it to point to the result column of the SELECT node
+                // corresponding to the branch underneath the union node
+                ColumnReference newCRNode=select.findColumnReferenceInUnionSelect(crNode);
                 if(newCRNode==null)
                     continue;
 
@@ -1763,6 +1792,7 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
                 // <column> <relop> <value> AND TRUE
                 ContextManager contextManager = getContextManager();
                 if(andNode.getLeftOperand() instanceof BinaryRelationalOperatorNode){
+                    boolean unsatisfiableCondition = false;
 					/* If the operator is a binary relational operator that was
 					 * created for a probe predicate then we have to make a
 					 * copy of the underlying IN-list as well, so that we can
@@ -1778,27 +1808,65 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
                             continue;
                         inNode=inNode.shallowCopy();
                         inNode.setLeftOperand(newCRNode);
+
+                        // extra processing and optimization for predicate on char type
+                        if (canPruneForPredicatePushedToUnion(crNode.getTypeServices(), newCRNode.getTypeServices())) {
+                            ValueNodeList newValueNodeList = (ValueNodeList)getNodeFactory().getNode(C_NodeTypes.VALUE_NODE_LIST, contextManager);
+                            ValueNodeList oldValueNodeList = inNode.getRightOperandList();
+                            int columnLen = newCRNode.getTypeServices().getMaximumWidth();
+                            for (int i=0; i < oldValueNodeList.size(); i++) {
+                                ValueNode valueNode = (ValueNode)oldValueNodeList.elementAt(i);
+                                if (valueNode instanceof CharConstantNode) {
+                                    DataValueDescriptor dvd = ((CharConstantNode) valueNode).getValue();
+                                    // for fixed char type, discard string value of length different
+                                    // from that defined in the column definition
+                                    if (dvd.getLength() != columnLen)
+                                        continue;
+                                }
+                                newValueNodeList.addValueNode(valueNode);
+                            }
+                            inNode.setRightOperandList(newValueNodeList);
+                            if (newValueNodeList.isEmpty())
+                                unsatisfiableCondition = true;
+
+                            // we may push down an inlist against a varchar to a branch with fixed char column, so we cannot assume
+                            // the inlist elements have no duplicates and are sorted
+                            inNode.markAsOrdered(false);
+                        }
                     }
 
-                    BinaryRelationalOperatorNode newRelop=(BinaryRelationalOperatorNode)
-                            getNodeFactory().getNode(
-                                    opNode.getNodeType(),
-                                    newCRNode,
-                                    opNode.getRightOperand(),
-                                    inNode,
-                                    contextManager);
-                    newRelop.bindComparisonOperator();
-                    leftOperand=newRelop;
+                    ValueNode rightOp = opNode.getRightOperand();
+                    // equality predicate for char column can be pruned with length mismatch
+                    if (opNode.getOperator() == RelationalOperator.EQUALS_RELOP &&
+                            canPruneForPredicatePushedToUnion(crNode.getTypeServices(), newCRNode.getTypeServices())) {
+                        if (rightOp instanceof CharConstantNode) {
+                            DataValueDescriptor dvd = ((CharConstantNode) rightOp).getValue();
+                            if (dvd.getLength() != newCRNode.getTypeServices().getMaximumWidth())
+                                unsatisfiableCondition = true;
+                        }
+                    }
+
+                    if (!unsatisfiableCondition) {
+                        BinaryRelationalOperatorNode newRelop = (BinaryRelationalOperatorNode)
+                                getNodeFactory().getNode(
+                                        opNode.getNodeType(),
+                                        newCRNode,
+                                        rightOp,
+                                        inNode,
+                                        contextManager);
+                        newRelop.bindComparisonOperator();
+                        leftOperand = newRelop;
+                    } else {
+                        BooleanConstantNode falseNode=(BooleanConstantNode)getNodeFactory().
+                                getNode(C_NodeTypes.BOOLEAN_CONSTANT_NODE,
+                                        Boolean.FALSE,
+                                        contextManager);
+                        leftOperand = falseNode;
+                    }
                 }else{
-                    //noinspection ConstantConditions
-                    InListOperatorNode newInNode=(InListOperatorNode)
-                            getNodeFactory().getNode(
-                                    C_NodeTypes.IN_LIST_OPERATOR_NODE,
-                                    newCRNode,
-                                    inNode.getRightOperandList(),
-                                    contextManager);
-                    newInNode.setType(inNode.getTypeServices());
-                    leftOperand=newInNode;
+                    // pushable inlist condition should have been represented as BinaryRelationalOperatorNode
+                    // in the above path
+                    continue;
                 }
 
                 // Convert the predicate into CNF form
@@ -2709,7 +2777,8 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
                 ap.getConglomerateDescriptor(),
                 false,
                 ap.getNonMatchingIndexScan(),
-                ap.getCoveringIndexScan());
+                ap.getCoveringIndexScan(),
+                true);
 
         // count the start/stop positions and qualifiers
         theOtherList.countScanFlags();
@@ -3116,6 +3185,15 @@ public class PredicateList extends QueryTreeNodeVector<Predicate> implements Opt
             int inlistPosition = pred.getIndexPosition();
             assert inlistPosition >= 0: "inlistPosition of " + inlistPosition + " for MultiProbeScan is not expected";
             mb.push(inlistPosition);
+
+            /* genereate an array of type descriptors for the inlist columns */
+            DataTypeDescriptor[] typeArray = new DataTypeDescriptor[ilon.getLeftOperandList().size()];
+            for (int i = 0; i < ilon.getLeftOperandList().size(); i++) {
+                typeArray[i] = ((ColumnReference)(ilon.getLeftOperandList().elementAt(i))).getTypeServices();
+            }
+            FormatableArrayHolder typeArrayHolder = new FormatableArrayHolder(typeArray);
+            int typeArrayItem = acb.addItem(typeArrayHolder);
+            mb.push(typeArrayItem);
 
             return;
         }

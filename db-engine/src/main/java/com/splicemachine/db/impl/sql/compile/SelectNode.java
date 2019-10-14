@@ -320,40 +320,22 @@ public class SelectNode extends ResultSetNode{
     public FromList getFromList(){ return fromList; }
 
     /**
-     * Find colName in the result columns and return underlying columnReference.
-     * Note that this function returns null if there are more than one FromTable
-     * for this SelectNode and the columnReference needs to be directly under
-     * the resultColumn. So having an expression under the resultSet would cause
-     * returning null.
-     *
-     * @param    colName        Name of the column
-     * @return ColumnReference    ColumnReference to the column, if found
+     * Find the corresponding column reference (as used in the select node) for the given column reference.
+     * The select node here corresponds to a branch underneath a UnionNode
+     * @param    cr        ColumnReference to find a match from the SELECT node
+     * @return ColumnReference    ColumnReference pointing to the source of cr, if found
      */
-    public ColumnReference findColumnReferenceInResult(String colName) throws StandardException{
-        if(fromList.size()!=1)
+    public ColumnReference findColumnReferenceInUnionSelect(ColumnReference cr) throws StandardException{
+        ResultColumn rc = cr.getSource();
+        if (rc == null)
             return null;
 
-        // This logic is similar to SubQueryNode.singleFromBaseTable(). Refactor
-        FromTable ft=(FromTable)fromList.elementAt(0);
-        if(!((ft instanceof ProjectRestrictNode)
-                && ((ProjectRestrictNode)ft).getChildResult() instanceof FromBaseTable)
-                && !(ft instanceof FromBaseTable))
+        //get the corresponding result column in the current SelectNode
+        ResultColumn rcInSelect = resultColumns.elementAt(rc.getVirtualColumnId()-1);
+        ValueNode mappedCR = rcInSelect.getExpression();
+        if (!(mappedCR instanceof ColumnReference))
             return null;
-
-        // Loop through the result columns looking for a match
-        int rclSize=resultColumns.size();
-        for(int index=0;index<rclSize;index++){
-            ResultColumn rc=resultColumns.elementAt(index);
-            if(!(rc.getExpression() instanceof ColumnReference))
-                return null;
-
-            ColumnReference crNode=(ColumnReference)rc.getExpression();
-
-            if(crNode.columnName.equals(colName))
-                return (ColumnReference)crNode.getClone();
-        }
-
-        return null;
+         return (ColumnReference)mappedCR.getClone();
     }
 
     /**
@@ -526,6 +508,45 @@ public class SelectNode extends ResultSetNode{
             return;
         }
 
+        // Evaluate expressions with constant operands here to simplify the
+        // query tree and to reduce the runtime cost. Do it before optimize()
+        // since the simpler tree may have more accurate information for
+        // the optimizer. (Example: The selectivity for 1=1 is estimated to
+        // 0.1, whereas the actual selectivity is 1.0. In this step, 1=1 will
+        // be rewritten to TRUE, which is known by the optimizer to have
+        // selectivity 1.0.)
+        // This is also done before predicate simplification to enable
+        // more predicates to be pruned away.
+        Visitor constantExpressionVisitor =
+                new ConstantExpressionVisitor(SelectNode.class);
+        if (whereClause != null)
+            whereClause = (ValueNode)whereClause.accept(constantExpressionVisitor);
+        if (havingClause != null)
+            havingClause = (ValueNode)havingClause.accept(constantExpressionVisitor);
+
+        // Perform predicate simplification.  Currently only
+        // simple rewrites involving boolean TRUE/FALSE are done, such as:
+        // TRUE AND col1 IN (1,2,3)  ==>  col1 IN (1,2,3)
+        // FALSE OR col1 = 1         ==>  col1 = 1
+        //
+        // Predicate simplification is done before binding because
+        // Subqueries and aggregates in the WHERE clause and HAVING
+        // clause get added to the whereSubquerys, whereAggregates,
+        // havingSubquerys and havingAggregates lists during binding.
+        // If the predicates containing those SubqueryNodes and
+        // AggregateNodes are subsequently removed from the WHERE or
+        // HAVING clause, query compilation will fail.
+        // Nested SelectNodes will not be scanned by this Visitor.
+        if (!getCompilerContext().getDisablePredicateSimplification()) {
+            Visitor predSimplVisitor =
+                new PredicateSimplificationVisitor(fromListParam,
+                                                   SelectNode.class);
+            if (whereClause != null)
+                whereClause = (ValueNode)whereClause.accept(predSimplVisitor);
+            if (havingClause != null)
+                havingClause = (ValueNode)havingClause.accept(predSimplVisitor);
+        }
+
         whereAggregates=new LinkedList<>();
         whereSubquerys=(SubqueryList)getNodeFactory().getNode( C_NodeTypes.SUBQUERY_LIST, getContextManager());
 
@@ -578,7 +599,7 @@ public class SelectNode extends ResultSetNode{
 		/* Restore fromList */
         for(int index=0;index<fromListSize;index++){
             fromListParam.removeElementAt(0);
-        }
+        }// those items
 
         if(SanityManager.DEBUG){
             SanityManager.ASSERT(fromListParam.size()==fromListParamSize,
@@ -1553,6 +1574,26 @@ public class SelectNode extends ResultSetNode{
             orderByList.setAlwaysSort();
         }
 
+        /* Currently, SelfReferenceNode cannot be used as the right table of a nested loop join or broadcast join,
+           so let all other tables in the fromList set dependency on this to ensure SelfReferenceNode to be planned first
+         */
+        FromTable selfReferenceNode = null;
+        for (int i=0; i < fromList.size(); i++) {
+            FromTable ft=(FromTable)fromList.elementAt(i);
+            /* we only allow one selfReference in recursive quer for now */
+            if (ft.getContainsSelfReference()) {
+                selfReferenceNode = ft;
+                break;
+            }
+        }
+        if (selfReferenceNode != null) {
+            for (int i=0; i < fromList.size(); i++) {
+                FromTable ft=(FromTable)fromList.elementAt(i);
+                if (ft != selfReferenceNode) {
+                    ft.addToDependencyMap(selfReferenceNode.getReferencedTableMap());
+                }
+            }
+        }
 		/* Get a new optimizer */
         optimizer=getOptimizer(fromList, wherePredicates, dataDictionary, orderByList);
         optimizer.setOuterRows(outerRows);
@@ -2667,5 +2708,13 @@ public class SelectNode extends ResultSetNode{
             return false;
 
         return true;
+    }
+
+    public boolean getOriginalWhereClauseHadSubqueries() {
+        return this.originalWhereClauseHadSubqueries;
+    }
+
+    public boolean hasHavingClause() {
+        return havingClause != null;
     }
 }

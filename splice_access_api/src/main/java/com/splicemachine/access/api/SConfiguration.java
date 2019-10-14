@@ -15,7 +15,9 @@
 package com.splicemachine.access.api;
 
 import com.splicemachine.access.configuration.ConfigurationSource;
+import com.splicemachine.db.iapi.sql.compile.CompilerContext;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -88,6 +90,8 @@ public interface SConfiguration {
 
     long getMaxDdlWait();
 
+    long getMergeRegionTimeout();
+
     // HConfiguration
     int getRegionServerHandlerCount();
 
@@ -108,6 +112,12 @@ public interface SConfiguration {
     boolean getBackupUseDistcp();
 
     int getBackupIOBufferSize();
+
+    int getReplicationSnapshotInterval();
+
+    int getReplicationSinkPort();
+
+    int getReplicationProgressUpdateInterval();
 
     String getCompressionAlgorithm();
 
@@ -313,6 +323,8 @@ public interface SConfiguration {
 
     long getTableSplitSleepInterval();
 
+    int getSplitsPerTableMin();
+
     /**
      * Dump splice configuration, including hadoop config, to the log.
      */
@@ -348,5 +360,22 @@ public interface SConfiguration {
 
     String getOlapLog4jConfig();
 
+    Map<String, String> getOlapServerIsolatedRoles();
+    
+    Map<String, String> getOlapServerYarnQueues();
+
+    boolean getOlapServerIsolatedCompaction();
+
+    String getOlapServerIsolatedCompactionQueueName();
+
     int getMaxCheckTableErrors();
+
+    int getRecursiveQueryIterationLimit();
+
+    void setNativeSparkAggregationMode(CompilerContext.NativeSparkModeType newValue);
+
+    CompilerContext.NativeSparkModeType getNativeSparkAggregationMode();
+
+    String getMetadataRestrictionEnabled();
+
 }

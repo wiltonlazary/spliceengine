@@ -45,6 +45,8 @@ import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 
+import static com.splicemachine.db.iapi.types.NumberDataValue.MAX_DECIMAL_PRECISION_SCALE;
+
 /**
  Aggregator for AVG(). Extends the SumAggregator and
  implements a count. Result is then sum()/count().
@@ -64,6 +66,18 @@ public final class AvgAggregator extends OrderableAggregator
 		private long count;
 		private int scale;
 
+		public Class getAggregatorClass() { return aggregator.getClass();}
+
+		public boolean usesLongBufferedSumAggregator() {
+		    return aggregator != null && aggregator instanceof LongBufferedSumAggregator;
+		}
+		public void upgradeSumAggregator() throws StandardException {
+		    if (usesLongBufferedSumAggregator()) {
+		        LongBufferedSumAggregator lbsa = (LongBufferedSumAggregator) aggregator;
+		        aggregator = lbsa.upgrade();
+            }
+        }
+
 		@Override
 		public ExecAggregator setup(ClassFactory cf, String aggregateName, DataTypeDescriptor returnDataType) {
 				this.aggregator = SumAggregator.getBufferedAggregator(returnDataType);
@@ -81,10 +95,13 @@ public final class AvgAggregator extends OrderableAggregator
 								scale = TypeId.DECIMAL_SCALE;
 								break;
 						default:
-								scale = returnDataType.getScale();
-								if(scale < NumberDataValue.MIN_DECIMAL_DIVIDE_SCALE)
-										scale = NumberDataValue.MIN_DECIMAL_DIVIDE_SCALE;
-
+							// Honor the scale of the return data type picked by the
+							// parser.  In the past, this was overridden, which may
+							// cause overflows.  For averaging DEC(38,0), 38 digits
+							// of precision is enough.  We don't want to tell the user
+							// we can't calculate the average because we require 42
+							// digits of precision in this case.
+							scale = returnDataType.getScale();
 				}
 				return this;
 		}
@@ -113,14 +130,17 @@ public final class AvgAggregator extends OrderableAggregator
 
 				try {
 
+				    	count++;
 						aggregator.accumulate(addend);
-						count++;
 						return;
 
 				} catch (StandardException se) {
 
-						if (!se.getMessageId().equals(SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE))
-								throw se;
+					    // DOUBLE has the largest range, so if it overflows, there is nothing
+					    // with greater range to upgrade to.
+						if (!se.getMessageId().equals(SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE) ||
+                            (!(aggregator instanceof LongBufferedSumAggregator)))
+							throw se;
 				}
 
 
@@ -150,38 +170,12 @@ public final class AvgAggregator extends OrderableAggregator
 				 * have to do anything
 				 */
 				if(aggregator instanceof LongBufferedSumAggregator){
-						aggregator = ((LongBufferedSumAggregator)aggregator).upgrade();
-				}else if(aggregator instanceof FloatBufferedSumAggregator){
-						aggregator = ((FloatBufferedSumAggregator)aggregator).upgrade();
-				}else if(aggregator instanceof DoubleBufferedSumAggregator){
-						aggregator = ((DoubleBufferedSumAggregator)aggregator).upgrade();
-				}else{
-						//fall back to db's original version for safety.
-
-						// this code creates data type objects directly, it is anticipating
-						// the time they move into the defined api of the type system. (djd).
-						String typeName = value.getTypeName();
-
-						DataValueDescriptor newValue;
-
-						if (typeName.equals(TypeId.INTEGER_NAME)) {
-								newValue = new com.splicemachine.db.iapi.types.SQLLongint();
-						} else if (typeName.equals(TypeId.TINYINT_NAME) ||
-										typeName.equals(TypeId.SMALLINT_NAME)) {
-								newValue = new com.splicemachine.db.iapi.types.SQLInteger();
-						} else if (typeName.equals(TypeId.REAL_NAME)) {
-								newValue = new com.splicemachine.db.iapi.types.SQLDouble();
-						} else {
-								TypeId decimalTypeId = TypeId.getBuiltInTypeId(java.sql.Types.DECIMAL);
-								newValue = decimalTypeId.getNull();
-						}
-
-						newValue.setValue(value);
-						value = newValue;
-
-						accumulate(addend);
+					aggregator = ((LongBufferedSumAggregator)aggregator).upgrade();
 				}
+				else
+				    throw StandardException.newException(SQLState.LANG_OUTSIDE_RANGE_FOR_DATATYPE);
 
+				aggregator.accumulate(addend);
 		}
 
 		public void merge(ExecAggregator addend)

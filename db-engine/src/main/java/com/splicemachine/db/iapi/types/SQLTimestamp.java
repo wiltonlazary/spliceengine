@@ -408,8 +408,9 @@ public final class SQLTimestamp extends DataType
 			 */
 			Calendar cal = SQLDate.GREGORIAN_CALENDAR.get();
 			Timestamp otherts = other.getTimestamp(cal);
-			otherEncodedDate = SQLTimestamp.computeEncodedDate(otherts, cal);
-			otherEncodedTime = SQLTimestamp.computeEncodedTime(otherts, cal);
+			int[] otherDateTime = SQLTimestamp.computeEncodedDateTime(otherts,cal);
+			otherEncodedDate = otherDateTime[0];
+			otherEncodedTime = otherDateTime[1];
 			otherNanos = otherts.getNanos();
 		}
 		if (encodedDate < otherEncodedDate)
@@ -608,7 +609,7 @@ public final class SQLTimestamp extends DataType
             timestampFormat.setCalendar( cal);
         java.util.Date date = timestampFormat.parse( str);
             
-        return new int[] { computeEncodedDate( date, cal), computeEncodedTime( date, cal)};
+        return computeEncodedDateTime(date, cal);
     } // end of parseLocalTimestamp
 
     /**
@@ -1020,8 +1021,13 @@ public final class SQLTimestamp extends DataType
 				t = computeGregorianCalendarTimestamp(year);
 			} else {
 				try {
-					DateTime dt = createDateTime();
-					t = new Timestamp(dt.getMillis());
+					t = new Timestamp(SQLDate.getYear(encodedDate) - 1900,
+					                  SQLDate.getMonth(encodedDate) - 1,
+					                  SQLDate.getDay(encodedDate),
+					                  SQLTime.getHour(encodedTime),
+					                  SQLTime.getMinute(encodedTime),
+					                  SQLTime.getSecond(encodedTime),
+					                  nanos);
 				} catch (Exception e) {
 					t = computeGregorianCalendarTimestamp(year);
 				}
@@ -1094,7 +1100,8 @@ public final class SQLTimestamp extends DataType
             if( cal == null) {
                 cal = SQLDate.GREGORIAN_CALENDAR.get();
             }
-			setValue(computeEncodedDate(value, cal), computeEncodedTime(value, cal), value.getNanos());
+            int[] encodedDateTime = computeEncodedDateTime(value, cal);
+			setValue(encodedDateTime[0], encodedDateTime[1], value.getNanos());
 
 		}
 		/* encoded date should already be 0 for null */
@@ -1132,8 +1139,6 @@ public final class SQLTimestamp extends DataType
 		if (value == null)
 			return 0;
 
-       
-
 		currentCal.setTime(value);
 		return SQLDate.computeEncodedDate(currentCal);
 	}
@@ -1165,6 +1170,20 @@ public final class SQLTimestamp extends DataType
 		return SQLTime.computeEncodedTime(value.getHourOfDay(), value.getMinuteOfHour(), value.getSecondOfMinute());
 	}
 
+	/**
+	 computeEncodedDateTime combines the computation of computeEncodedDate and computeEncodedTime
+	 which returns the results of the two function as a 2-element array
+	 @param value	the value to convert
+	 @return 		the int array of encodedDate and encodedTime
+	 */
+	private static int[] computeEncodedDateTime(java.util.Date value, Calendar currentCal) throws StandardException
+	{
+		if (value == null)
+			return new int[]{0,0};
+
+		currentCal.setTime(value);
+		return new int[]{SQLDate.computeEncodedDate(currentCal),SQLTime.computeEncodedTime(currentCal)};
+	}
     
     public void setInto(PreparedStatement ps, int position) throws SQLException, StandardException {
 
@@ -1345,7 +1364,7 @@ public final class SQLTimestamp extends DataType
     public DateTimeDataValue plus(DateTimeDataValue leftOperand, NumberDataValue daysToAdd, DateTimeDataValue resultHolder) throws StandardException {
         if( resultHolder == null)
             resultHolder = new SQLTimestamp();
-        if( isNull() || daysToAdd.isNull())
+        if( leftOperand.isNull() || daysToAdd.isNull())
         {
             resultHolder.restoreToNull();
             return resultHolder;
@@ -1359,7 +1378,7 @@ public final class SQLTimestamp extends DataType
     public DateTimeDataValue minus(DateTimeDataValue leftOperand, NumberDataValue daysToSubtract, DateTimeDataValue resultHolder) throws StandardException {
         if( resultHolder == null)
             resultHolder = new SQLTimestamp();
-        if(leftOperand.isNull() || isNull() || daysToSubtract.isNull()) {
+        if(leftOperand.isNull() || daysToSubtract.isNull()) {
             resultHolder.restoreToNull();
             return resultHolder;
         }
@@ -1372,7 +1391,7 @@ public final class SQLTimestamp extends DataType
     public NumberDataValue minus(DateTimeDataValue leftOperand, DateTimeDataValue rightOperand, NumberDataValue resultHolder) throws StandardException {
         if( resultHolder == null)
             resultHolder = new SQLInteger();
-        if(leftOperand.isNull() || isNull() || rightOperand.isNull()) {
+        if(leftOperand.isNull() || rightOperand.isNull()) {
             resultHolder.restoreToNull();
             return resultHolder;
         }
@@ -1709,4 +1728,6 @@ public final class SQLTimestamp extends DataType
 	}
 
 	public int getNanos() { return nanos; }
+	public int getEncodedDate() { return encodedDate; }
+	public int getEncodedTime() { return encodedTime; }
 }

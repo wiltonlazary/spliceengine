@@ -27,6 +27,7 @@ import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.DMLWriteOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.MultiProbeTableScanOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.export.ExportOperation;
+import com.splicemachine.derby.impl.sql.execute.operations.framework.SpliceGenericAggregator;
 import com.splicemachine.derby.impl.sql.execute.operations.window.WindowContext;
 import com.splicemachine.derby.stream.control.output.ControlExportDataSetWriter;
 import com.splicemachine.derby.stream.control.output.ParquetWriterService;
@@ -114,7 +115,22 @@ public class ControlDataSet<V> implements DataSet<V> {
     @Override
     public Pair<DataSet, Integer> materialize() {
         List<ExecRow> rows = ((ControlDataSet<ExecRow>)this).map(new CloneFunction<>(null)).collect();
-        return Pair.newPair(new ControlDataSet(rows.iterator()), rows.size());
+        return Pair.newPair(new MaterializedControlDataSet(rows), rows.size());
+    }
+
+    @Override
+    public Pair<DataSet, Integer> persistIt() {
+        return materialize();
+    }
+
+    @Override
+    public void unpersistIt() {
+        return;
+    }
+
+    @Override
+    public DataSet getClone() {
+        throw new UnsupportedOperationException("Not Implemented for ControlDataSet");
     }
 
     @Override
@@ -481,6 +497,12 @@ public class ControlDataSet<V> implements DataSet<V> {
         throw new UnsupportedOperationException("Not Implemented in Control Side");
     }
 
+    @Override
+    public DataSet<V> crossJoin(OperationContext operationContext, DataSet<V> rightDataSet) {
+        throw new UnsupportedOperationException("Not Implemented in Control Side");
+    }
+
+
     /**
      * Window Function. Take a WindowContext that define the partition, the order, and the frame boundary.
      * Currently only run on top of Spark.
@@ -745,5 +767,11 @@ public class ControlDataSet<V> implements DataSet<V> {
         };
     }
 
+    @Override
+    public DataSet upgradeToSparkNativeDataSet(OperationContext operationContext) {
+         return this;
+    }
 
+    @Override
+    public DataSet applyNativeSparkAggregation(int[] groupByColumns, SpliceGenericAggregator[] aggregates, boolean isRollup, OperationContext operationContext) { return null; }
 }

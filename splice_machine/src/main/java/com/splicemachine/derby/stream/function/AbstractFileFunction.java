@@ -31,7 +31,7 @@ import com.splicemachine.derby.impl.sql.execute.operations.VTIOperation;
 import com.splicemachine.derby.stream.iapi.OperationContext;
 import com.splicemachine.derby.stream.output.WriteReadUtils;
 import com.splicemachine.derby.stream.utils.BooleanList;
-import com.splicemachine.derby.utils.SpliceDateFormatter;
+import com.splicemachine.derby.utils.SpliceDateTimeFormatter;
 import com.splicemachine.derby.utils.SpliceDateFunctions;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.supercsv.prefs.CsvPreference;
@@ -45,6 +45,7 @@ import java.util.GregorianCalendar;
 import java.util.List;
 
 import static com.splicemachine.derby.utils.SpliceDateFunctions.TO_DATE;
+import static com.splicemachine.derby.utils.SpliceDateTimeFormatter.*;
 
 /**
  *
@@ -59,32 +60,54 @@ public abstract class AbstractFileFunction<I> extends SpliceFlatMapFunction<Spli
     private String columnDelimiter;
     protected ExecRow execRow;
     private String timeFormat;
-    private String dateTimeFormat;
-    private SpliceDateFormatter formatter;
+    private String dateFormat;
+    private SpliceDateTimeFormatter dateFormatter;
+    private SpliceDateTimeFormatter timestampFormatter;
+    private SpliceDateTimeFormatter timeFormatter;
     private String timestampFormat;
     private int[] columnIndex;
 
-    private transient Calendar calendar;
+    private transient Calendar calendar = new GregorianCalendar();
 
     @SuppressWarnings("WeakerAccess") //weaker access isn't allowed because we have to be serializable
     public AbstractFileFunction() { }
 
+    private void setupFormatters() {
+        // Create a date formatter, time formatter and timestamp formatter
+        // that can be reused, to save memory, instead of
+        // constructing a new one every to TO_DATE , TO_TIME or TO_TIMESTAMP is called.
+
+        this.dateFormatter      = (dateFormat == null ||
+                                   dateFormat.equals(defaultDateFormatString)) ?
+        DEFAULT_DATE_FORMATTER :
+                                  new SpliceDateTimeFormatter(dateFormat,
+                                       SpliceDateTimeFormatter.FormatterType.DATE);
+        this.timestampFormatter = (timestampFormat == null ||
+                                   timestampFormat.equals(defaultTimestampFormatString)) ?
+        DEFAULT_TIMESTAMP_FORMATTER :
+                                  new SpliceDateTimeFormatter(timestampFormat,
+                                       SpliceDateTimeFormatter.FormatterType.TIMESTAMP);
+        this.timeFormatter      = (timeFormat == null ||
+                                   timeFormat.equals(defaultTimeFormatString)) ?
+        DEFAULT_TIME_FORMATTER :
+                                  new SpliceDateTimeFormatter(timeFormat,
+                                       SpliceDateTimeFormatter.FormatterType.TIME);
+    }
+
     @SuppressWarnings("unchecked")
     @SuppressFBWarnings(value = "EI_EXPOSE_REP2",justification = "Intentional")
-    AbstractFileFunction(String characterDelimiter,String columnDelimiter,ExecRow execRow,int[] columnIndex,String timeFormat,
-                         String dateTimeFormat,String timestampFormat,OperationContext operationContext) {
+    AbstractFileFunction(String characterDelimiter, String columnDelimiter, ExecRow execRow, int[] columnIndex, String timeFormat,
+                         String dateFormat, String timestampFormat, OperationContext operationContext) {
         super(operationContext);
         this.characterDelimiter = characterDelimiter;
         this.columnDelimiter = columnDelimiter;
         this.execRow = execRow;
         this.timeFormat = timeFormat;
-        this.dateTimeFormat = dateTimeFormat;
+        this.dateFormat = dateFormat;
         this.timestampFormat = timestampFormat;
         this.columnIndex = columnIndex;
 
-        // Create a date formatter that can be reused, to save memory, instead of
-        // constructing a new one every to TO_DATE is called.
-        this.formatter = new SpliceDateFormatter(dateTimeFormat);
+        setupFormatters();
     }
 
     @Override
@@ -97,7 +120,7 @@ public abstract class AbstractFileFunction<I> extends SpliceFlatMapFunction<Spli
         if (columnDelimiter!=null)
             out.writeUTF(columnDelimiter);
         writeNullableUTF(out, timeFormat);
-        writeNullableUTF(out, dateTimeFormat);
+        writeNullableUTF(out, dateFormat);
         writeNullableUTF(out,timestampFormat);
         try {
             ArrayUtil.writeIntArray(out, WriteReadUtils.getExecRowTypeFormatIds(execRow));
@@ -119,9 +142,10 @@ public abstract class AbstractFileFunction<I> extends SpliceFlatMapFunction<Spli
         if (in.readBoolean())
             timeFormat = in.readUTF();
         if (in.readBoolean())
-            dateTimeFormat = in.readUTF();
+            dateFormat = in.readUTF();
         if (in.readBoolean())
             timestampFormat = in.readUTF();
+        setupFormatters();
         execRow =WriteReadUtils.getExecRowFromTypeFormatIds(ArrayUtil.readIntArray(in));
         if (in.readBoolean())
             columnIndex = ArrayUtil.readIntArray(in);
@@ -136,7 +160,7 @@ public abstract class AbstractFileFunction<I> extends SpliceFlatMapFunction<Spli
     @SuppressFBWarnings(value = "REC_CATCH_EXCEPTION",justification = "Intentional")
     public ExecRow call(List<String> values,BooleanList quotedColumns) throws Exception {
         return getRow(values, quotedColumns, operationContext, execRow, calendar, timeFormat,
-                dateTimeFormat, timestampFormat, this.formatter);
+        dateFormat, timestampFormat, this.dateFormatter, this.timestampFormatter, this.timeFormatter);
     }
 
 
@@ -144,7 +168,9 @@ public abstract class AbstractFileFunction<I> extends SpliceFlatMapFunction<Spli
                                  OperationContext operationContext, ExecRow execRow,
                                  Calendar calendar, String timeFormat,
                                  String dateTimeFormat, String timestampFormat,
-                                 SpliceDateFormatter dateFormatter)  throws Exception {
+                                 SpliceDateTimeFormatter dateFormatter,
+                                 SpliceDateTimeFormatter timestampFormatter,
+                                 SpliceDateTimeFormatter timeFormatter)  throws Exception {
         int columnID = 0;
         String columnValue = null;
         int numofColumnsinTable = 0;
@@ -195,28 +221,22 @@ public abstract class AbstractFileFunction<I> extends SpliceFlatMapFunction<Spli
                 columnValue = value;
                 switch(type){
                     case StoredFormatIds.SQL_TIME_ID:
-                        if(calendar==null)
-                            calendar = new GregorianCalendar();
                         if (timeFormat == null || value==null){
                             ((DateTimeDataValue)dvd).setValue(value,calendar);
                         }else
-                            dvd.setValue(SpliceDateFunctions.TO_TIME(value, timeFormat),calendar);
+                            dvd.setValue(SpliceDateFunctions.TO_TIME(value, timeFormat, timeFormatter), calendar);
                         break;
                     case StoredFormatIds.SQL_DATE_ID:
-                        if(calendar==null)
-                            calendar = new GregorianCalendar();
                         if (dateTimeFormat == null || value == null)
                             ((DateTimeDataValue)dvd).setValue(value,calendar);
                         else
                             dvd.setValue(TO_DATE(value, dateTimeFormat, dateFormatter),calendar);
                         break;
                     case StoredFormatIds.SQL_TIMESTAMP_ID:
-                        if(calendar==null)
-                            calendar = new GregorianCalendar();
                         if (timestampFormat == null || value==null)
                             ((DateTimeDataValue)dvd).setValue(value,calendar);
                         else {
-                            Timestamp ts = SpliceDateFunctions.TO_TIMESTAMP(value, timestampFormat);
+                            Timestamp ts = SpliceDateFunctions.TO_TIMESTAMP(value, timestampFormat, timestampFormatter);
                             if (convertTimestamps)
                                 ts = SQLTimestamp.convertTimeStamp(ts);
                             dvd.setValue(ts, calendar);
