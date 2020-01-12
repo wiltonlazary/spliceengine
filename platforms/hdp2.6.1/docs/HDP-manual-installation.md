@@ -425,7 +425,7 @@ To edit the HBase configuration, click `HBase` in the Ambari *Services* sidebar.
    hbase.balancer.period=60000
    hbase.client.ipc.pool.size=10
    hbase.client.max.perregion.tasks=100
-   hbase.coprocessor.regionserver.classes=com.splicemachine.hbase.RegionServerLifecycleObserver
+   hbase.coprocessor.regionserver.classes=com.splicemachine.hbase.RegionServerLifecycleObserver,com.splicemachine.si.data.hbase.coprocessor.SpliceRSRpcServices
    hbase.hstore.compaction.min.size=136314880
    hbase.hstore.compaction.min=3
    hbase.hstore.defaultengine.compactionpolicy.class=com.splicemachine.compactions.SpliceDefaultCompactionPolicy
@@ -468,7 +468,7 @@ To edit the HBase configuration, click `HBase` in the Ambari *Services* sidebar.
    splice.txn.concurrencyLevel=4096
    hbase.master.hfilecleaner.plugins=com.splicemachine.hbase.SpliceHFileCleaner,org.apache.hadoop.hbase.master.cleaner.TimeToLiveHFileCleaner   
    ````
-   
+
 5. Save Changes
 
    Click the `Save` button to save your changes. You'll be prompted to optionally add a note such as `Updated HDFS configuration for Splice Machine`. Click `Save` again.   

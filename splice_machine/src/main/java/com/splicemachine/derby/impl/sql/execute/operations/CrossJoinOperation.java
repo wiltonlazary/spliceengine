@@ -14,32 +14,24 @@
 
 package com.splicemachine.derby.impl.sql.execute.operations;
 
-import com.splicemachine.EngineDriver;
-import com.splicemachine.access.api.SConfiguration;
-import com.splicemachine.client.SpliceClient;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.loader.GeneratedMethod;
 import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
-import com.splicemachine.db.impl.sql.compile.FromBaseTable;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperationContext;
 import com.splicemachine.derby.stream.function.*;
 import com.splicemachine.derby.stream.function.broadcast.BroadcastJoinFlatMapFunction;
-import com.splicemachine.derby.stream.function.broadcast.CogroupBroadcastJoinFunction;
-import com.splicemachine.derby.stream.function.broadcast.SubtractByKeyBroadcastJoinFunction;
 import com.splicemachine.derby.stream.iapi.DataSet;
 import com.splicemachine.derby.stream.iapi.DataSetProcessor;
 import com.splicemachine.derby.stream.iapi.OperationContext;
 import com.splicemachine.primitives.Bytes;
-import com.splicemachine.utils.SpliceLogUtils;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
-import java.util.List;
 
 
 public class CrossJoinOperation extends JoinOperation{
@@ -75,11 +67,13 @@ public class CrossJoinOperation extends JoinOperation{
                               boolean rightFromSSQ,
                               double optimizerEstimatedRowCount,
                               double optimizerEstimatedCost,
-                              String userSuppliedOptimizerOverrides) throws
+                              String userSuppliedOptimizerOverrides,
+                              String sparkExpressionTreeAsString) throws
             StandardException{
         super(leftResultSet,leftNumCols,rightResultSet,rightNumCols,
                 activation,restriction,resultSetNumber,oneRowRightSide,notExistsRightSide, rightFromSSQ,
-                optimizerEstimatedRowCount,optimizerEstimatedCost,userSuppliedOptimizerOverrides);
+                optimizerEstimatedRowCount,optimizerEstimatedCost,userSuppliedOptimizerOverrides,
+                sparkExpressionTreeAsString);
         this.leftHashKeyItem=leftHashKeyItem;
         this.rightHashKeyItem=rightHashKeyItem;
         this.sequenceId = Bytes.toLong(operationInformation.getUUIDGenerator().nextBytes());
@@ -95,7 +89,7 @@ public class CrossJoinOperation extends JoinOperation{
         rightHashKeyItem=in.readInt();
     }
 
-    public long getSequenceId() {
+    public long getRightSequenceId() {
         return sequenceId;
     }
 
@@ -133,14 +127,15 @@ public class CrossJoinOperation extends JoinOperation{
 
         DataSet<ExecRow> result;
 
-        if (dsp.getType().equals(DataSetProcessor.Type.SPARK)) {
+        if (dsp.getType().equals(DataSetProcessor.Type.SPARK) &&
+                (this.leftHashKeys.length == 0 || !containsUnsafeSQLRealComparison())) {
             result = leftDataSet.crossJoin(operationContext, rightDataSet);
             if (restriction != null) {
                 result = result.filter(new JoinRestrictionPredicateFunction(operationContext));
             }
         } else {
             LOG.warn("Cross join supposed to be run with Spark only, using BroadcastJoin now");
-            if (isOuterJoin || this.notExistsRightSide || isOneRowRightSide()) {
+            if (isOuterJoin() || this.notExistsRightSide || isOneRowRightSide()) {
                 throw new UnsupportedOperationException("Cross join shouldn't be run on outer join or anti join");
             }
             if (this.leftHashKeys.length != 0)

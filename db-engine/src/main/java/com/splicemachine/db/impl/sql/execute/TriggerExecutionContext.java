@@ -511,7 +511,7 @@ public class TriggerExecutionContext implements ExecutionStmtValidator, External
         int targetIndex = 1;
         for (; sourceIndex<=stopIndex; sourceIndex++) {
             try {
-                result.setColumn(targetIndex++, resultSet.getColumn(sourceIndex).cloneValue(false));
+                result.setColumn(targetIndex++, resultSet.getColumn(sourceIndex));
             } catch (StandardException e) {
                 throw Util.generateCsSQLException(e);
             }
@@ -553,7 +553,7 @@ public class TriggerExecutionContext implements ExecutionStmtValidator, External
                 int index = 0;
                 for (int j = heapList.anySetBit(); j >= 0; j = heapList.anySetBit(j)) {
                     if (j == i) {
-                        result.setColumn(pos++, resultSet.getColumn(sourceIndex + index).cloneValue(false));
+                        result.setColumn(pos++, resultSet.getColumn(sourceIndex + index));
                     }
                     index++;
                 }

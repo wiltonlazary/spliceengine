@@ -68,11 +68,13 @@ public class HalfMergeSortJoinOperation extends MergeJoinOperation {
                                       boolean rightFromSSQ,
                                       double optimizerEstimatedRowCount,
                                       double optimizerEstimatedCost,
-                                      String userSuppliedOptimizerOverrides)
+                                      String userSuppliedOptimizerOverrides,
+                                      String sparkExpressionTreeAsString)
             throws StandardException {
         super(leftResultSet, leftNumCols, rightResultSet, rightNumCols, leftHashKeyItem, rightHashKeyItem,
                 -1, -1, activation, restriction,
-                resultSetNumber, oneRowRightSide, notExistsRightSide, rightFromSSQ, optimizerEstimatedRowCount, optimizerEstimatedCost, userSuppliedOptimizerOverrides);
+                resultSetNumber, oneRowRightSide, notExistsRightSide, rightFromSSQ, optimizerEstimatedRowCount,
+                optimizerEstimatedCost, userSuppliedOptimizerOverrides, sparkExpressionTreeAsString);
     }
 
     @Override
@@ -89,7 +91,7 @@ public class HalfMergeSortJoinOperation extends MergeJoinOperation {
                     .keyBy(new KeyerFunction<ExecRow, JoinOperation>(operationContext, leftHashKeys));
 
             DataSet<ExecRow> sorted = leftDataSet.partitionBy(getPartitioner(dsp), new RowComparator(getRightOrder()), operationContext).values(operationContext);
-            if (isOuterJoin)
+            if (isOuterJoin())
                 return sorted.mapPartitions(new MergeOuterJoinFlatMapFunction(operationContext));
             else {
                 if (notExistsRightSide)

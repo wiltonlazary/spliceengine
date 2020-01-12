@@ -17,7 +17,6 @@ package com.splicemachine.access.configuration;
 import com.splicemachine.access.api.SConfiguration;
 import com.splicemachine.db.iapi.sql.compile.CompilerContext;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -79,6 +78,7 @@ public class ConfigurationBuilder {
     public String rangerServiceName;
     public int sentryPollingInterval;
     public String metadataRestrictionEnabled;
+    public String rangerUserSyncCaseConversion;
 
     // StatsConfiguration
     public double fallbackNullFraction;
@@ -93,6 +93,7 @@ public class ConfigurationBuilder {
     public long fallbackRegionRowCount;
     public long fallbackRemoteLatencyRatio;
     public long partitionCacheExpiration;
+    public int collectSchemaStatisticsMaximumConcurrent;
 
     // StorageConfiguration
     public int splitBlockSize;
@@ -103,6 +104,7 @@ public class ConfigurationBuilder {
     public int regionServerHandlerCount;
     public int timestampBlockSize;
     public long regionLoadUpdateInterval;
+    public long transactionsWatcherUpdateInterval;
     public String backupPath;
     public String compressionAlgorithm;
     public String namespace;

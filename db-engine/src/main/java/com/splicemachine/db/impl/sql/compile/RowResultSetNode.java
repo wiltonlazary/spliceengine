@@ -45,6 +45,7 @@ import com.splicemachine.db.iapi.store.access.Qualifier;
 import com.splicemachine.db.iapi.types.DataTypeDescriptor;
 import com.splicemachine.db.iapi.types.TypeId;
 import com.splicemachine.db.iapi.util.JBitSet;
+import com.splicemachine.db.impl.ast.RSUtils;
 
 import java.util.Collection;
 import java.util.LinkedList;
@@ -236,7 +237,12 @@ public class RowResultSetNode extends FromTable {
 	 */
 	@Override
 	public void bindExpressionsWithTables(FromList fromListParam) throws StandardException {
-		/* We don't have any tables, so just return */
+		// it is possible that RowResultSet contains expression subqueries,
+		// so we need to go through the bindExpression process to resolve all the subexpressions
+		// in it
+		List<SelectNode> selectNodeList = RSUtils.collectNodes(this, SelectNode.class);
+		if (!selectNodeList.isEmpty())
+			bindExpressions(fromListParam);
 	}
 
 	/**
@@ -369,13 +375,19 @@ public class RowResultSetNode extends FromTable {
 
 	public ResultSetNode preprocess(int numTables, GroupByList gbl, FromList fromList) throws StandardException {
 
+		SubqueryList subqueryList =
+		  (SubqueryList) getNodeFactory().getNode( C_NodeTypes.SUBQUERY_LIST, getContextManager());
+		PredicateList predicateList = (PredicateList) getNodeFactory().getNode( C_NodeTypes.PREDICATE_LIST, getContextManager());
+                FromList localFromList = fromList == null ?
+		    (FromList) getNodeFactory().getNode( C_NodeTypes.FROM_LIST,
+							 getNodeFactory().doJoinOrderOptimization(),
+							 getContextManager()) : fromList;
+
+                assignResultSetNumber();
+		resultColumns.preprocess(numTables, localFromList, subqueryList, predicateList);
+
 		if (!subquerys.isEmpty()) {
-			subquerys.preprocess(numTables,
-					(FromList) getNodeFactory().getNode( C_NodeTypes.FROM_LIST,
-							getNodeFactory().doJoinOrderOptimization(),
-							getContextManager()),
-					(SubqueryList) getNodeFactory().getNode( C_NodeTypes.SUBQUERY_LIST, getContextManager()),
-					(PredicateList) getNodeFactory().getNode( C_NodeTypes.PREDICATE_LIST, getContextManager()));
+			subquerys.preprocess(numTables, localFromList, subqueryList, predicateList);
 		}
 
 		/* Allocate a dummy referenced table map */ 
@@ -871,7 +883,17 @@ public class RowResultSetNode extends FromTable {
 	}
 
 
+    @Override
+    public void assignResultSetNumber() throws StandardException{
+        super.assignResultSetNumber();
 
+	/* Set the point of attachment in all subqueries attached
+	 * to this node.
+	 */
+        if(subquerys!=null && !subquerys.isEmpty()){
+            subquerys.setPointOfAttachment(resultSetNumber);
+        }
+    }
 
     @Override
     public String printExplainInformation(String attrDelim, int order) throws StandardException {

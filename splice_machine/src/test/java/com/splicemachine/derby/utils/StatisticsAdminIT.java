@@ -21,6 +21,7 @@ import com.splicemachine.derby.test.framework.SpliceWatcher;
 import com.splicemachine.derby.test.framework.TestConnection;
 import com.splicemachine.homeless.TestUtils;
 import com.splicemachine.pipeline.ErrorState;
+import com.splicemachine.test.HBaseTest;
 import com.splicemachine.test.SerialTest;
 import com.splicemachine.test_tools.TableCreator;
 import org.junit.*;
@@ -30,7 +31,6 @@ import org.junit.rules.TestRule;
 
 import java.sql.*;
 
-import static com.splicemachine.derby.test.framework.SpliceUnitTest.format;
 import static com.splicemachine.test_tools.Rows.row;
 import static com.splicemachine.test_tools.Rows.rows;
 import static org.junit.Assert.assertEquals;
@@ -40,7 +40,7 @@ import static org.junit.Assert.assertEquals;
  *         Date: 3/2/15
  */
 @Category(SerialTest.class)
-public class StatisticsAdminIT{
+public class StatisticsAdminIT extends SpliceUnitTest {
     private static final String SCHEMA=StatisticsAdminIT.class.getSimpleName().toUpperCase();
     private static final String SCHEMA2=SCHEMA+"2";
     private static final String SCHEMA3=SCHEMA+"3";
@@ -197,6 +197,22 @@ public class StatisticsAdminIT{
                         row(1,1,1,1,1.0,1.0,10.01,"2018-12-12","2013-03-23 09:45:00", "15:09:02", "AAAA")))
                 .create();
 
+
+        new TableCreator(conn4)
+                .withCreate("create table t6 (a6 int, b6 int, c6 int, primary key (a6))")
+                .withInsert("insert into t6 values (?,?,?)")
+                .withRows(rows(
+                        row(1,1,1),
+                        row(2,2,2),
+                        row(3,3,3),
+                        row(4,4,4),
+                        row(5,5,5),
+                        row(6,6,6),
+                        row(7,7,7),
+                        row(8,8,8),
+                        row(9,9,9),
+                        row(10,10,10)))
+                .create();
     }
 
     private static void doCreateSharedTables(Connection conn) throws Exception{
@@ -1119,6 +1135,85 @@ public class StatisticsAdminIT{
         resultString = TestUtils.FormattedResult.ResultFactory.toString(rs);
         assertEquals("UseExtrapolation properties of columns do not match expected result.", expected1, resultString);
         rs.close();
+    }
+
+    @Category(HBaseTest.class)
+    @Test
+    public void testCollectStatsWithNoStaleRegionInfo() throws Exception {
+        /* step 1 create and populate the table */
+        methodWatcher4.execute("create table TAB_TO_SPLIT(a1 int, b1 int, c1 int, primary key (a1))");
+        methodWatcher4.execute("insert into TAB_TO_SPLIT values (1,1,1), (2,2,2), (3,3,3), (4,4,4), (5,5,5), (6,6,6), (7,7,7), (8,8,8), (9,9,9), (10,10,10)");
+        /* step 2: run a query against the table TAB_TO_SPLIT to populate the region info cache with the initial info.
+           At this point, we should have only one region.
+         */
+        methodWatcher4.executeQuery("select * from TAB_TO_SPLIT --splice-properties useSpark=true");
+
+        /* step 3: run analyze, the result should indicate only one partition */
+        ResultSet rs = methodWatcher4.executeQuery("analyze table TAB_TO_SPLIT");
+        if (rs.next()) {
+            // get the number of regions/partitions
+            long numOfRegions = rs.getLong(6);
+            assertEquals("Region number does not match, expected: 1, actual: "+numOfRegions, 1, numOfRegions);
+        } else {
+            Assert.fail("Expected to have one row returned!");
+        }
+        rs.close();
+
+        /* step 4: split the region into 2, making the info in the region info cache stale */
+        String dir = SpliceUnitTest.getResourceDirectory();
+        methodWatcher4.execute(format("call syscs_util.syscs_split_table_or_index_at_points('%s','TAB_TO_SPLIT',null,'\\x85')", SCHEMA4));
+
+        /* wait for a second */
+        Thread.sleep(1000);
+
+        /* step 5: do analyze again, we should see get 2 regions returend from stats collection */
+        rs = methodWatcher4.executeQuery("analyze table TAB_TO_SPLIT");
+        if (rs.next()) {
+            // get the number of regions/partitions
+            long numOfRegions = rs.getLong(6);
+            assertEquals("Region number does not match, expected: 2, actual: "+numOfRegions, 2, numOfRegions);
+        } else {
+            Assert.fail("Expected to have one row returned!");
+        }
+        rs.close();
+
+        /* step 6: clean up */
+        methodWatcher4.execute("drop table TAB_TO_SPLIT");
+    }
+
+    @Test
+    public void testQueryUsingFakeStats() throws Exception {
+        methodWatcher4.execute(format("call syscs_util.fake_table_statistics('%s', 'T6', 10000, 100, 4)", SCHEMA4));
+        methodWatcher4.execute(format("call syscs_util.fake_column_statistics('%s', 'T6', '%s', 0, 1000)", SCHEMA4, "B6"));
+        methodWatcher4.execute(format("call syscs_util.fake_column_statistics('%s', 'T6', '%s', 0, 10000)", SCHEMA4, "A6"));
+
+        // check the result of sys stats views
+        ResultSet rs = methodWatcher4.executeQuery(format("select schemaname, tablename, total_row_count, avg_row_count, total_size, num_partitions, stats_type from sysvw.systablestatistics where schemaname='%s' and tablename='%s'", SCHEMA4, "T6"));
+        String expected = "SCHEMANAME     | TABLENAME | TOTAL_ROW_COUNT | AVG_ROW_COUNT |TOTAL_SIZE |NUM_PARTITIONS |STATS_TYPE |\n" +
+                "----------------------------------------------------------------------------------------------------------\n" +
+                "STATISTICSADMINIT4 |    T6     |      10000      |   2500.0000   |  1000000  |       4       |     4     |";
+        String resultString = TestUtils.FormattedResult.ResultFactory.toString(rs);
+        assertEquals("Fake table stats does not match expected result.", expected, resultString);
+        rs.close();
+
+        rs = methodWatcher4.executeQuery(format("select schemaname, tablename, columnname, cardinality, null_count, null_fraction, min_value, max_value from sysvw.syscolumnstatistics where schemaname='%s' and tablename='%s' and columnname='%s'", SCHEMA4, "T6", "B6"));
+        expected = "SCHEMANAME     | TABLENAME |COLUMNNAME | CARDINALITY |NULL_COUNT | NULL_FRACTION | MIN_VALUE | MAX_VALUE |\n" +
+                "--------------------------------------------------------------------------------------------------------------\n" +
+                "STATISTICSADMINIT4 |    T6     |    B6     |     10      |     0     |      0.0      |   NULL    |   NULL    |";
+        resultString = TestUtils.FormattedResult.ResultFactory.toString(rs);
+        assertEquals("Fake column stats does not match expected result.", expected, resultString);
+        rs.close();
+
+        // check the estimations in explain for table stats
+        rowContainsQuery(new int[]{3}, format("explain select * from %s.t6", SCHEMA4), methodWatcher,
+                new String[]{"scannedRows=10000,outputRows=10000", "partitions=4"});
+
+        // check the estimations in explain for point range selectivity
+        rowContainsQuery(new int[]{3}, format("explain select * from %s.t6 where b6=5", SCHEMA4), methodWatcher,
+                new String[]{"scannedRows=10000,outputRows=1000", "partitions=4,preds=[(B6[0:2] = 5)]"});
+
+        rowContainsQuery(new int[]{3}, format("explain select * from %s.t6 where a6=5", SCHEMA4), methodWatcher,
+                new String[]{"scannedRows=1,outputRows=1", "partitions=4,preds=[(A6[0:1] = 6)]"});
     }
 
     /* ****************************************************************************************************************/

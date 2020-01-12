@@ -25,8 +25,7 @@ import com.splicemachine.compactions.SpliceDefaultCompactor;
 import com.splicemachine.derby.hbase.SpliceIndexEndpoint;
 import com.splicemachine.derby.hbase.SpliceIndexObserver;
 import com.splicemachine.hbase.*;
-import com.splicemachine.si.data.hbase.coprocessor.SIObserver;
-import com.splicemachine.si.data.hbase.coprocessor.TxnLifecycleEndpoint;
+import com.splicemachine.si.data.hbase.coprocessor.*;
 import com.splicemachine.utils.BlockingProbeEndpoint;
 import org.apache.commons.collections.ListUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -35,6 +34,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.master.cleaner.TimeToLiveHFileCleaner;
 import org.apache.hadoop.hbase.regionserver.DefaultStoreEngine;
+import org.apache.hadoop.hbase.regionserver.RpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionPolicy;
 import org.apache.hadoop.hbase.regionserver.compactions.Compactor;
 import org.apache.hadoop.hbase.security.access.AccessController;
@@ -66,7 +66,8 @@ class SpliceTestPlatformConfig {
     private static final List<Class<?>> REGION_SERVER_COPROCESSORS = ImmutableList.<Class<?>>of(
             RegionServerLifecycleObserver.class,
             BlockingProbeEndpoint.class,
-            SpliceReplicationService.class
+            SpliceReplicationService.class,
+            SpliceRSRpcServices.class
     );
 
     private static final List<Class<?>> REGION_COPROCESSORS = ImmutableList.<Class<?>>of(
@@ -214,6 +215,7 @@ class SpliceTestPlatformConfig {
         //
         // Threads, timeouts
         //
+        config.setClass("hbase.region.server.rpc.scheduler.factory.class", SpliceRpcSchedulerFactory.class, RpcSchedulerFactory.class);
         config.setLong("hbase.rpc.timeout", MINUTES.toMillis(5));
         config.setInt("hbase.client.max.perserver.tasks",50);
         config.setInt("hbase.client.ipc.pool.size",10);
@@ -298,6 +300,7 @@ class SpliceTestPlatformConfig {
         // below two parameters are needed to test ranger authorization on standalone system
         // config.set("splice.authorization.scheme", "RANGER");
         // config.set("splice.metadataRestrictionEnabled", "RANGER");
+        // config.set("splice.ranger.usersync.username.caseconversion", "LOWER");
 
         // Get more test coverage of the broadcast join Dataset path, as this is the
         // future of splice OLAP query execution.

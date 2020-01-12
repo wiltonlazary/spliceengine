@@ -2768,6 +2768,19 @@ Guide.
             </msg>
 
             <msg>
+                <name>42Y88</name>
+                <text>The hint doNotFlatten should be a boolean, and does not support '{0}'.</text>
+                <arg>value</arg>
+            </msg>
+
+            <msg>
+                <name>42Y89</name>
+                <text>Invalid key '{0}' specified in the Properties list of a subquery. The case-sensitive key that is currently supported is just '{1}'. </text>
+                <arg>key</arg>
+                <arg>list</arg>
+            </msg>
+
+            <msg>
                 <name>42Y90</name>
                 <text>FOR UPDATE is not permitted in this type of statement.  </text>
             </msg>
@@ -8899,6 +8912,20 @@ Shutting down instance {0} on database directory {1} with class loader {2} </tex
                <text>Cannot enable statistics extrapolation for column {0}: Column type {1} does not support extrapolation.</text>
                <arg>column</arg>
                <arg>columnType</arg>
+           </msg>
+
+           <msg>
+               <name>SE027</name>
+               <text>Cannot inject fake {0} statistics: {1} </text>
+               <arg>type</arg>
+               <arg>reason</arg>
+           </msg>
+
+           <msg>
+               <name>SE030</name>
+               <text>Coprocessor service {0} is missing. Make sure that it is properly configured in {1}</text>
+               <arg>coprocessorService</arg>
+               <arg>configurationField</arg>
            </msg>
 
            <msg>

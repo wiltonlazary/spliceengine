@@ -19,7 +19,7 @@
     <parent>
         <artifactId>spliceengine-parent</artifactId>
         <groupId>com.splicemachine</groupId>
-        <version>3.1.0.1932-SNAPSHOT</version>
+        <version>3.1.0.1943-SNAPSHOT</version>
     </parent>
     <dependencies>
         <dependency>
@@ -147,6 +147,18 @@
             <groupId>org.apache.derby</groupId>
             <artifactId>derbyclient</artifactId>
             <version>10.9.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.splicemachine</groupId>
+            <artifactId>db-tools-testing</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.splicemachine</groupId>
+            <artifactId>db-testing</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
     <build>

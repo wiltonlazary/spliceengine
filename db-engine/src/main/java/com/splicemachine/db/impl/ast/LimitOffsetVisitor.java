@@ -66,7 +66,7 @@ public class LimitOffsetVisitor extends AbstractSpliceVisitor {
         return super.visit(node);
     }
 
-    private long fetchNumericValue(ValueNode valueNode) throws StandardException {
+    public static long fetchNumericValue(ValueNode valueNode) throws StandardException {
         if (valueNode != null && valueNode instanceof NumericConstantNode)
             return ((NumericConstantNode)valueNode).getValue().getLong();
         return -1L;
@@ -161,6 +161,20 @@ public class LimitOffsetVisitor extends AbstractSpliceVisitor {
 
     @Override
     public Visitable visit(HalfOuterJoinNode node) throws StandardException {
+        adjustCost(node);
+        nullify();
+        return super.visit(node);
+    }
+
+    /**
+     * Adjusts the remote rows and cost based on the limit, removes limit elements
+     *
+     * @param node
+     * @return
+     * @throws StandardException
+     */
+    @Override
+    public Visitable visit(FullOuterJoinNode node) throws StandardException {
         adjustCost(node);
         nullify();
         return super.visit(node);

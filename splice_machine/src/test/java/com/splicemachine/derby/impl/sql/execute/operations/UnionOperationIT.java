@@ -15,8 +15,10 @@
 package com.splicemachine.derby.impl.sql.execute.operations;
 
 import com.splicemachine.derby.test.framework.TestConnection;
+import com.splicemachine.test.HBaseTest;
 import com.splicemachine.util.StatementUtils;
 import org.junit.*;
+import org.junit.experimental.categories.Category;
 import org.spark_project.guava.collect.Lists;
 import org.spark_project.guava.collect.Ordering;
 import org.spark_project.guava.collect.Sets;
@@ -377,6 +379,21 @@ public class UnionOperationIT {
         }
     }
 
+
+    @Category(HBaseTest.class)
+    @Test
+    public void testUnionAllReturnFirstAvailableBranchFirst() throws Exception {
+        String sqlText = "select * from (select A.name from ST_EARTH as A, ST_EARTH as B, ST_MARS as C " +
+                "where A.name=B.name and B.name=C.name and C.name in (select D.name from ST_MARS as D, ST_MARS as E where D.name=E.name and D.name=C.name) " +
+                "union all values ('from_values')) dt {limit 1}";
+        ResultSet rs = methodWatcher.executeQuery(sqlText);
+        String expected =
+                "1      |\n" +
+                        "-------------\n" +
+                        "from_values |";
+        assertEquals("\n"+sqlText+"\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+    }
     /* ****************************************************************************************************************/
     /*private helper methods*/
     private void insert(Statement s, long times, String sql) throws Exception {

@@ -32,6 +32,7 @@ import com.splicemachine.db.iapi.sql.dictionary.IndexRowGenerator;
 import com.splicemachine.db.iapi.sql.dictionary.SchemaDescriptor;
 import com.splicemachine.db.iapi.stats.ColumnStatisticsImpl;
 import com.splicemachine.db.iapi.stats.ColumnStatisticsMerge;
+import com.splicemachine.db.iapi.stats.FakeColumnStatisticsImpl;
 import com.splicemachine.db.iapi.types.*;
 import com.splicemachine.db.impl.services.uuid.BasicUUID;
 import com.splicemachine.db.impl.sql.*;
@@ -39,6 +40,7 @@ import com.splicemachine.db.impl.sql.catalog.DDColumnDependableFinder;
 import com.splicemachine.db.impl.sql.catalog.DD_Version;
 import com.splicemachine.db.impl.sql.catalog.DDdependableFinder;
 import com.splicemachine.db.impl.sql.catalog.ManagedCache;
+import com.splicemachine.db.impl.sql.compile.*;
 import com.splicemachine.db.impl.sql.execute.*;
 import com.splicemachine.db.impl.store.access.PC_XenaVersion;
 import com.splicemachine.derby.ddl.*;
@@ -57,6 +59,7 @@ import com.splicemachine.derby.serialization.SpliceObserverInstructions;
 import com.splicemachine.derby.stream.ActivationHolder;
 import com.splicemachine.derby.stream.control.BadRecordsRecorder;
 import com.splicemachine.derby.stream.function.*;
+import com.splicemachine.derby.stream.function.broadcast.AbstractBroadcastJoinFlatMapFunction;
 import com.splicemachine.derby.stream.spark.*;
 import com.splicemachine.derby.utils.kryo.DataValueDescriptorSerializer;
 import com.splicemachine.derby.utils.kryo.ListDataTypeSerializer;
@@ -608,7 +611,7 @@ public class SpliceSparkKryoRegistrator implements KryoRegistrator, KryoPool.Kry
 
 
         instance.register(CogroupInnerJoinRestrictionFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER);
-        instance.register(CogroupOuterJoinRestrictionFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(CogroupLeftOuterJoinRestrictionFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER);
         instance.register(ColumnComparator.class,EXTERNALIZABLE_SERIALIZER);
         instance.register(GroupedAggregateRollupFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER);
 
@@ -635,7 +638,7 @@ public class SpliceSparkKryoRegistrator implements KryoRegistrator, KryoPool.Kry
         instance.register(OuterJoinFunction.class,EXTERNALIZABLE_SERIALIZER);
 
         instance.register(OuterJoinPairFunction.class,EXTERNALIZABLE_SERIALIZER);
-        instance.register(OuterJoinRestrictionFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(LeftOuterJoinRestrictionFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER);
         instance.register(ProjectRestrictMapFunction.class,EXTERNALIZABLE_SERIALIZER);
         instance.register(ProjectRestrictPredicateFunction.class,EXTERNALIZABLE_SERIALIZER);
         instance.register(RowComparator.class,EXTERNALIZABLE_SERIALIZER);
@@ -907,5 +910,20 @@ public class SpliceSparkKryoRegistrator implements KryoRegistrator, KryoPool.Kry
 
         instance.register(getClassFromString("java.util.Arrays$ArrayList"),
                           new ArraysAsListSerializer());
+
+        instance.register(SparkColumnReference.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(SparkConstantExpression.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(SparkLogicalOperator.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(SparkRelationalOperator.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(SparkArithmeticOperator.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(SparkCastNode.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(SignalOperation.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(SetOperation.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(CogroupFullOuterJoinRestrictionFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(AbstractBroadcastJoinFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(LeftAntiJoinRestrictionFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(BroadcastFullOuterJoinOperation.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(MergeSortFullOuterJoinOperation.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(FakeColumnStatisticsImpl.class,EXTERNALIZABLE_SERIALIZER);
     }
 }

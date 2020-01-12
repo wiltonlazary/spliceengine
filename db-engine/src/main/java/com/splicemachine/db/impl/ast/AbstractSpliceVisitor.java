@@ -900,4 +900,19 @@ public abstract class AbstractSpliceVisitor implements ISpliceVisitor {
     public Visitable visit(SelfReferenceNode node) throws StandardException {
         return defaultVisit(node);
     }
+
+    @Override
+    public Visitable visit(SignalNode node) throws StandardException {
+        return defaultVisit(node);
+    }
+
+    @Override
+    public Visitable visit(SetNode node) throws StandardException {
+        return defaultVisit(node);
+    }
+
+    @Override
+    public Visitable visit(FullOuterJoinNode node) throws StandardException {
+        return defaultVisit(node);
+    }
 }

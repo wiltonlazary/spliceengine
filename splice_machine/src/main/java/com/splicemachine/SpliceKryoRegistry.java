@@ -29,6 +29,7 @@ import com.splicemachine.db.iapi.sql.dictionary.TriggerDescriptor;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.stats.ColumnStatisticsImpl;
 import com.splicemachine.db.iapi.stats.ColumnStatisticsMerge;
+import com.splicemachine.db.iapi.stats.FakeColumnStatisticsImpl;
 import com.splicemachine.db.iapi.types.*;
 import com.splicemachine.db.impl.services.uuid.BasicUUID;
 import com.splicemachine.db.impl.sql.*;
@@ -36,6 +37,7 @@ import com.splicemachine.db.impl.sql.catalog.DDColumnDependableFinder;
 import com.splicemachine.db.impl.sql.catalog.DD_Version;
 import com.splicemachine.db.impl.sql.catalog.DDdependableFinder;
 import com.splicemachine.db.impl.sql.catalog.ManagedCache;
+import com.splicemachine.db.impl.sql.compile.*;
 import com.splicemachine.db.impl.sql.execute.*;
 import com.splicemachine.db.impl.store.access.PC_XenaVersion;
 import com.splicemachine.db.shared.common.udt.UDTBase;
@@ -63,6 +65,7 @@ import com.splicemachine.derby.stream.ActivationHolder;
 import com.splicemachine.derby.stream.control.BadRecordsRecorder;
 import com.splicemachine.derby.stream.control.ControlOperationContext;
 import com.splicemachine.derby.stream.function.*;
+import com.splicemachine.derby.stream.function.broadcast.AbstractBroadcastJoinFlatMapFunction;
 import com.splicemachine.derby.utils.kryo.DataValueDescriptorSerializer;
 import com.splicemachine.derby.utils.kryo.ListDataTypeSerializer;
 import com.splicemachine.derby.utils.kryo.SimpleObjectSerializer;
@@ -89,14 +92,7 @@ import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.Time;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.Properties;
-import java.util.TreeMap;
+import java.util.*;
 
 
 /**
@@ -948,5 +944,21 @@ public class SpliceKryoRegistry implements KryoPool.KryoRegistry{
         instance.register(DataValueDescriptor.class, 311);
         instance.register(getClassFromString("java.util.Arrays$ArrayList"),
                           new ArraysAsListSerializer(), 312);
+        instance.register(SparkColumnReference.class,EXTERNALIZABLE_SERIALIZER,313);
+        instance.register(SparkConstantExpression.class,EXTERNALIZABLE_SERIALIZER,314);
+        instance.register(SparkLogicalOperator.class,EXTERNALIZABLE_SERIALIZER,315);
+        instance.register(SparkRelationalOperator.class,EXTERNALIZABLE_SERIALIZER,316);
+        instance.register(SparkArithmeticOperator.class,EXTERNALIZABLE_SERIALIZER,317);
+        instance.register(SparkCastNode.class,EXTERNALIZABLE_SERIALIZER,318);
+        instance.register(SignalOperation.class,EXTERNALIZABLE_SERIALIZER,319);
+        instance.register(SetOperation.class,EXTERNALIZABLE_SERIALIZER,320);
+        instance.register(LeftOuterJoinRestrictionFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER,321);
+        instance.register(CogroupLeftOuterJoinRestrictionFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER, 322);
+        instance.register(CogroupFullOuterJoinRestrictionFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER, 323);
+        instance.register(AbstractBroadcastJoinFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER, 324);
+        instance.register(LeftAntiJoinRestrictionFlatMapFunction.class,EXTERNALIZABLE_SERIALIZER, 325);
+        instance.register(BroadcastFullOuterJoinOperation.class,EXTERNALIZABLE_SERIALIZER,326);
+        instance.register(MergeSortFullOuterJoinOperation.class,EXTERNALIZABLE_SERIALIZER,327);
+        instance.register(FakeColumnStatisticsImpl.class,EXTERNALIZABLE_SERIALIZER,328);
     }
 }

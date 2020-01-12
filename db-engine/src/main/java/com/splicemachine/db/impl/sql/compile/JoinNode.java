@@ -49,11 +49,15 @@ import com.splicemachine.db.iapi.util.PropertyUtil;
 import com.splicemachine.db.impl.ast.CollectingVisitor;
 import com.splicemachine.db.impl.ast.PredicateUtils;
 import com.splicemachine.db.impl.ast.RSUtils;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.SerializationUtils;
 import org.spark_project.guava.base.Joiner;
 import org.spark_project.guava.base.Predicates;
 import org.spark_project.guava.collect.Lists;
 
 import java.util.*;
+
+import static com.splicemachine.db.impl.sql.compile.BinaryOperatorNode.AND;
 
 /**
  * A JoinNode represents a join result set for either of the basic DML
@@ -73,6 +77,7 @@ public class JoinNode extends TableOperatorNode{
     public static final int FULLOUTERJOIN=5;
     public static final int UNIONJOIN=6;
     public PredicateList joinPredicates;
+    public SparkExpressionNode sparkExpressionTree = null;
     // Splice Additions
     public int[] leftHashKeys;
     public int[] rightHashKeys;
@@ -241,11 +246,16 @@ public class JoinNode extends TableOperatorNode{
         }
 
         CostEstimate lrsCE = leftResultSet.getCostEstimate();
-        lrsCE.setOuterJoin(true);
+        if (this instanceof FullOuterJoinNode)
+            lrsCE.setJoinType(FULLOUTERJOIN);
+        else if (this instanceof HalfOuterJoinNode)
+            lrsCE.setJoinType(LEFTOUTERJOIN);
+        else
+            lrsCE.setJoinType(INNERJOIN);
         double savedAccumulatedMemory = lrsCE.getAccumulatedMemory();
         lrsCE.setAccumulatedMemory(leftOptimizer.getAccumulatedMemory());
         rightResultSet=optimizeSource(optimizer,rightResultSet,getRightPredicateList(),lrsCE);
-        lrsCE.setOuterJoin(false);
+        lrsCE.setJoinType(INNERJOIN);
         lrsCE.setAccumulatedMemory(savedAccumulatedMemory);
         costEstimate=getCostEstimate(optimizer);
 
@@ -271,8 +281,10 @@ public class JoinNode extends TableOperatorNode{
 		/*
 		** Get the cost of this result set in the context of the whole plan.
 		*/
-
-        costEstimate.setOuterJoin(true);
+        // when we get here, we are costing the whole JoinNode as the right of another
+        // join, and whether the join is outer or inner has been carried in the
+        // outerCost's joinType, we shouldn't change either the joinType for the
+        // outerCost nor current costEstimate(JoinNode's cost) here.
         getCurrentAccessPath().getJoinStrategy().estimateCost(this,
                 predList,
                 null,
@@ -280,13 +292,15 @@ public class JoinNode extends TableOperatorNode{
                 optimizer,
                 costEstimate
         );
-        costEstimate.setOuterJoin(false);
 
         // propagate the sortorder from the outer table if any
         // only do this if the current node is the first resultset in the join sequence as
         // we don't want to propagate sort order from right table of a join.
         RowOrdering joinResultRowOrdering = costEstimate.getRowOrdering();
-        if ((outerCost.isUninitialized() || (outerCost.localCost()==0d && outerCost.getEstimatedRowCount()==1.0)) &&
+        // for full outer join,we cannot preserve the row ordering due to the non-matching rows
+        // from right, so add both left and right table to the unordered list
+        if (!(this instanceof FullOuterJoinNode) &&
+                (outerCost.isUninitialized() || (outerCost.localCost()==0d && outerCost.getEstimatedRowCount()==1.0)) &&
                 joinResultRowOrdering != null) {
             joinResultRowOrdering.mergeTo(optimizer.getCurrentRowOrdering());
         } else {
@@ -481,6 +495,9 @@ public class JoinNode extends TableOperatorNode{
         if(leftRC!=null){
             resultColumn=leftRC;
 
+            if(this instanceof FullOuterJoinNode)
+                leftRC.setNullability(true);
+
 			/* Find out if the column is in the using clause */
             if(usingClause!=null){
                 usingRC=usingClause.getResultColumn(leftRC.getName());
@@ -522,7 +539,7 @@ public class JoinNode extends TableOperatorNode{
             // has not been called yet, the caller of this method will see
             // the wrong nullability. This problem is logged as DERBY-2916.
             // Until that's fixed, set the nullability here too.
-            if(this instanceof HalfOuterJoinNode){
+            if(this instanceof HalfOuterJoinNode || this instanceof FullOuterJoinNode){
                 rightRC.setNullability(true);
             }
 
@@ -711,6 +728,16 @@ public class JoinNode extends TableOperatorNode{
             joinPredicates.categorize();
             optimizeTrace(OptimizerFlag.JOIN_NODE_PREDICATE_MANIPULATION, 0, 0, 0.0,
                           "JoinNode pulled join expressions.", joinPredicates);
+
+            if (this instanceof FullOuterJoinNode) {
+                // mark join condition as forFullJoin
+                for(int index=joinPredicates.size()-1;index>=0;index--){
+                    Predicate predicate;
+
+                    predicate=joinPredicates.elementAt(index);
+                    predicate.markFullJoinPredicate(true);
+                }
+            }
             joinClause=null;
         }
 
@@ -785,7 +812,7 @@ public class JoinNode extends TableOperatorNode{
 		 * can be applied.
 		 */
         if(SanityManager.DEBUG){
-            if(this instanceof HalfOuterJoinNode){
+            if(this instanceof HalfOuterJoinNode || this instanceof FullOuterJoinNode){
                 SanityManager.THROWASSERT(
                         "JN.pushExpressions() not expected to be called for "+
                                 getClass().getName());
@@ -858,7 +885,7 @@ public class JoinNode extends TableOperatorNode{
 		 * flattened directly.)
 		 */
         if(SanityManager.DEBUG){
-            if(this instanceof HalfOuterJoinNode){
+            if(this instanceof HalfOuterJoinNode || this instanceof FullOuterJoinNode){
                 SanityManager.THROWASSERT(
                         "JN.flatten() not expected to be called for "+
                                 getClass().getName());
@@ -934,8 +961,8 @@ public class JoinNode extends TableOperatorNode{
             // which, is they are inner joins, a priori think they are
             // flattenable. If left/right result sets are not outer joins,
             // these next two calls are no-ops.
-            ((FromTable)leftResultSet).transformOuterJoins(null,numTables);
-            ((FromTable)rightResultSet).transformOuterJoins(null,numTables);
+            leftResultSet = ((FromTable)leftResultSet).transformOuterJoins(null,numTables);
+            rightResultSet = ((FromTable)rightResultSet).transformOuterJoins(null,numTables);
             return this;
         }
 
@@ -1200,10 +1227,41 @@ public class JoinNode extends TableOperatorNode{
                                 MethodBuilder mb,
                                 int joinType,
                                 ValueNode joinClause) throws StandardException{
-		
-		
-		/* Put the predicates back into the tree */
 
+        sparkExpressionTree = null;
+        SparkExpressionNode tmpTree = null;
+        JoinStrategy joinStrategy =
+         ((Optimizable)rightResultSet).getTrulyTheBestAccessPath().
+                                                 getJoinStrategy();
+        JoinStrategy.JoinStrategyType joinStrategyType =
+                                      joinStrategy.getJoinStrategyType();
+        boolean eligibleForNativeSpark =
+         (joinStrategyType == JoinStrategy.JoinStrategyType.MERGE_SORT ||
+          joinStrategyType == JoinStrategy.JoinStrategyType.BROADCAST);
+
+        if (joinPredicates != null && eligibleForNativeSpark) {
+            for (int i = 0; i < joinPredicates.size(); i++) {
+                tmpTree =
+                  OperatorToString.
+                    opToSparkExpressionTree(joinPredicates.elementAt(i).getAndNode(),
+                                            leftResultSet.getResultSetNumber(),
+                                            rightResultSet.getResultSetNumber());
+                if (tmpTree == null) {
+                    sparkExpressionTree = null;
+                    break;
+                }
+                if (i == 0)
+                    sparkExpressionTree = tmpTree;
+                else
+                    sparkExpressionTree =
+                       SparkLogicalOperator.
+                         getNewSparkLogicalOperator(AND, sparkExpressionTree, tmpTree);
+            }
+        }
+        else
+            sparkExpressionTree = null;
+
+        /* Put the predicates back into the tree */
         if(joinPredicates!=null){
             // Pulling the equality predicate normal case from the restriction generation.
             if (rightHashKeys ==null || rightHashKeys.length != joinPredicates.size())
@@ -1224,7 +1282,10 @@ public class JoinNode extends TableOperatorNode{
 		 */
         String joinResultSetString;
 
-        if(joinType==LEFTOUTERJOIN){
+        if (joinType==FULLOUTERJOIN) {
+            joinResultSetString=((Optimizable)rightResultSet).getTrulyTheBestAccessPath().
+                    getJoinStrategy().fullOuterJoinResultSetMethodName();
+        } else if(joinType==LEFTOUTERJOIN){
             joinResultSetString=((Optimizable)rightResultSet).getTrulyTheBestAccessPath().
                     getJoinStrategy().halfOuterJoinResultSetMethodName();
         }else{
@@ -1234,6 +1295,7 @@ public class JoinNode extends TableOperatorNode{
 
         acb.pushGetResultSetFactoryExpression(mb);
         int nargs=getJoinArguments(acb,mb,joinClause);
+
         mb.callMethod(VMOpcode.INVOKEINTERFACE,null,joinResultSetString,ClassName.NoPutResultSet,nargs);
     }
 
@@ -1247,7 +1309,7 @@ public class JoinNode extends TableOperatorNode{
      * be overridden for other types of joins (for example, outer joins).
      */
     protected int getNumJoinArguments(){
-        return 13;
+        return 14;
     }
 
     /**
@@ -1437,9 +1499,10 @@ public class JoinNode extends TableOperatorNode{
 		   (VirtualColumnNodes include pointers to source ResultSetNode, this, and source ResultColumn.) */
         resultColumns.genVirtualColumnNodes(leftResultSet,leftRCL,false);
 
-		/* If this is a right outer join, we can get nulls on the left side, so change the types of the left result set
+		/* If this is a right outer join or full join, we can get nulls on the left side, so change the types of the left result set
 		   to be nullable. */
-        if(this instanceof HalfOuterJoinNode && ((HalfOuterJoinNode)this).isRightOuterJoin()){
+        if(this instanceof HalfOuterJoinNode && ((HalfOuterJoinNode)this).isRightOuterJoin() ||
+           this instanceof FullOuterJoinNode){
             resultColumns.setNullability(true);
         }
 
@@ -1459,9 +1522,10 @@ public class JoinNode extends TableOperatorNode{
         tmpRCL.genVirtualColumnNodes(rightResultSet,rightRCL,false);
         tmpRCL.adjustVirtualColumnIds(resultColumns.size());
 
-	   /* If this is a left outer join, we can get nulls on the right side, so change the types of the right result set
+	   /* If this is a left outer join or full join, we can get nulls on the right side, so change the types of the right result set
 		* to be nullable. */
-        if(this instanceof HalfOuterJoinNode && !((HalfOuterJoinNode)this).isRightOuterJoin()){
+        if(this instanceof HalfOuterJoinNode && !((HalfOuterJoinNode)this).isRightOuterJoin() ||
+           this instanceof FullOuterJoinNode){
             tmpRCL.setNullability(true);
         }
 
@@ -1479,6 +1543,24 @@ public class JoinNode extends TableOperatorNode{
 
 		/* ON clause */
         if(joinClause!=null){
+            /* JoinNode.deferredBindExpressions() may be called again after the outer join rewrite
+               optimization, at this stage, we don't want to simplify the ON clause predicate again, especially
+               the top AND node with a boolean true.
+             */
+            if (!joinClauseNormalized) {
+                Visitor constantExpressionVisitor =
+                        new ConstantExpressionVisitor(SelectNode.class);
+                joinClause = (ValueNode) joinClause.accept(constantExpressionVisitor);
+
+                if (!getCompilerContext().getDisablePredicateSimplification()) {
+                    Visitor predSimplVisitor =
+                            new PredicateSimplificationVisitor(fromListParam,
+                                    SelectNode.class);
+
+                    joinClause = (ValueNode) joinClause.accept(predSimplVisitor);
+                }
+            }
+
 			/* Create a new fromList with only left and right children before
 			 * binding the join clause. Valid column references in the join clause
 			 * are limited to columns from the 2 tables being joined. This
@@ -1796,7 +1878,7 @@ public class JoinNode extends TableOperatorNode{
             if(table!=null){
                 for(int i=table.nonStoreRestrictionList.size()-1;i>=0;i--){
                     Predicate op=(Predicate)table.nonStoreRestrictionList.getOptPredicate(i);
-                    if(op.isJoinPredicate() || op.getPulled()){
+                    if(op.isJoinPredicate() || op.getPulled() || op.isFullJoinPredicate()){
                         table.nonStoreRestrictionList.removeOptPredicate(i);
                     }
                 }
@@ -1924,6 +2006,14 @@ public class JoinNode extends TableOperatorNode{
             mb.pushNull("java.lang.String");
 
         mb.push(printExplainInformationForActivation());
+
+        if (sparkExpressionTree != null) {
+            String sparkExpressionTreeAsString =
+                    Base64.encodeBase64String(SerializationUtils.serialize(sparkExpressionTree));
+            mb.push(sparkExpressionTreeAsString);
+        }
+        else
+            mb.pushNull("java.lang.String");
 
         return numArgs;
     }

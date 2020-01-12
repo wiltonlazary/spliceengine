@@ -21,11 +21,15 @@ import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.iapi.types.SQLReal;
+import com.splicemachine.db.impl.sql.compile.JoinNode;
+import com.splicemachine.db.impl.sql.compile.SparkExpressionNode;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperationContext;
 import com.splicemachine.derby.impl.SpliceMethod;
 import com.splicemachine.derby.impl.sql.execute.operations.iapi.Restriction;
 import com.splicemachine.utils.SpliceLogUtils;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.SerializationUtils;
 import org.apache.log4j.Logger;
 import org.spark_project.guava.base.Strings;
 
@@ -40,7 +44,7 @@ import java.util.List;
  * There are 6 different relational processing paths for joins determined by the different valid combinations of these boolean
  * fields.
  *
- *  1.  isOuterJoin: True for outer join and false for inner join
+ *  1.  getJoinType: True for outer join and false for inner join
  *      - True (outer): select * from foo left outer join foo2 on foo.col1 = foo2.col1;
  *      - False (inner): select * from foo inner join foo2 on foo.col1 = foo2.col1;
  *
@@ -101,11 +105,14 @@ public abstract class JoinOperation extends SpliceBaseOperation {
 		protected boolean serializeLeftResultSet = true;
 		protected boolean serializeRightResultSet = true;
         protected ExecRow rightTemplate;
+        protected ExecRow leftTemplate;
         protected ExecRow mergedRowTemplate;
-        protected String emptyRowFunMethodName;
+        protected String rightEmptyRowFunMethodName;
         public boolean wasRightOuterJoin = false;
-        public boolean isOuterJoin = false;
+        public int joinType = JoinNode.INNERJOIN;
 		private Restriction mergeRestriction;
+		protected SparkExpressionNode sparkJoinPredicate = null;
+		protected String sparkExpressionTreeAsString = null;
 
     public JoinOperation() {
 				super();
@@ -123,7 +130,8 @@ public abstract class JoinOperation extends SpliceBaseOperation {
 							                     boolean rightFromSSQ,
 												 double optimizerEstimatedRowCount,
 												 double optimizerEstimatedCost,
-												 String userSuppliedOptimizerOverrides) throws StandardException {
+												 String userSuppliedOptimizerOverrides,
+				                                                                 String sparkExpressionTreeAsString) throws StandardException {
 				super(activation,resultSetNumber,optimizerEstimatedRowCount,optimizerEstimatedCost);
 				this.leftNumCols = leftNumCols;
 				this.rightNumCols = rightNumCols;
@@ -135,6 +143,7 @@ public abstract class JoinOperation extends SpliceBaseOperation {
 				this.leftResultSet = leftResultSet;
 				this.leftResultSetNumber = leftResultSet.resultSetNumber();
 				this.rightResultSet = rightResultSet;
+				this.sparkExpressionTreeAsString = sparkExpressionTreeAsString;
 		}
 
 		@Override
@@ -149,8 +158,8 @@ public abstract class JoinOperation extends SpliceBaseOperation {
 				notExistsRightSide = in.readBoolean();
 				rightFromSSQ = in.readBoolean();
                 wasRightOuterJoin = in.readBoolean();
-                isOuterJoin = in.readBoolean();
-                emptyRowFunMethodName = readNullableString(in);
+                joinType = in.readInt();
+                rightEmptyRowFunMethodName = readNullableString(in);
 				boolean readMerged=false;
 				if(in.readBoolean()){
 						leftResultSet = (SpliceOperation) in.readObject();
@@ -166,6 +175,11 @@ public abstract class JoinOperation extends SpliceBaseOperation {
 						rightRow = (ExecRow)in.readObject();
                         mergedRowTemplate = (ExecRow)in.readObject();
 				}
+				if (in.readBoolean()) {
+					sparkExpressionTreeAsString = in.readUTF();
+				}
+				else
+					sparkExpressionTreeAsString = null;
 		}
 
 		@Override
@@ -180,8 +194,8 @@ public abstract class JoinOperation extends SpliceBaseOperation {
 				out.writeBoolean(notExistsRightSide);
 				out.writeBoolean(rightFromSSQ);
                 out.writeBoolean(wasRightOuterJoin);
-                out.writeBoolean(isOuterJoin);
-                writeNullableString(emptyRowFunMethodName, out);
+                out.writeInt(joinType);
+                writeNullableString(rightEmptyRowFunMethodName, out);
 				out.writeBoolean(serializeLeftResultSet);
 				if(serializeLeftResultSet)
 						out.writeObject(leftResultSet);
@@ -194,6 +208,12 @@ public abstract class JoinOperation extends SpliceBaseOperation {
 						out.writeObject(rightRow);
                         out.writeObject(mergedRowTemplate);
 				}
+				boolean sparkExpressionPresent = (sparkExpressionTreeAsString != null &&
+				                                  sparkExpressionTreeAsString.length() != 0);
+
+				out.writeBoolean(sparkExpressionPresent);
+				if (sparkExpressionPresent)
+				    out.writeUTF(sparkExpressionTreeAsString);
 		}
 		@Override
 		public List<SpliceOperation> getSubOperations() {
@@ -222,6 +242,8 @@ public abstract class JoinOperation extends SpliceBaseOperation {
 						mergedRow = activation.getExecutionFactory().getValueRow(leftNumCols + rightNumCols);
                 if (rightTemplate == null)
                     rightTemplate = rightRow.getClone();
+                if (leftTemplate == null)
+                	leftTemplate = leftRow.getClone();
 		}
 
 		protected int[] generateHashKeys(int hashKeyItem) {
@@ -341,9 +363,13 @@ public abstract class JoinOperation extends SpliceBaseOperation {
         return mergeRestriction;
     }
 
-    public ExecRow getEmptyRow() throws StandardException {
+    public ExecRow getRightEmptyRow() throws StandardException {
         return rightTemplate;
     }
+
+	public ExecRow getLeftEmptyRow() throws StandardException {
+		return leftTemplate;
+	}
 
 	public ExecRow getKeyRow(ExecRow row) throws StandardException {
 		ExecRow keyRow = activation.getExecutionFactory().getValueRow(getLeftHashKeys().length);
@@ -361,9 +387,13 @@ public abstract class JoinOperation extends SpliceBaseOperation {
 		throw new UnsupportedOperationException();
 	}
 
-	public long getSequenceId() {
+	public long getRightSequenceId() {
 		throw new UnsupportedOperationException("Not supported");
 	}
+
+    public long getLeftSequenceId() {
+        throw new UnsupportedOperationException("Not supported");
+    }
 
 	@Override
 	public String getVTIFileName() {
@@ -392,4 +422,41 @@ public abstract class JoinOperation extends SpliceBaseOperation {
 	public ExecRow getLeftRow() { return leftRow; }
 	public ExecRow getRightRow() { return rightRow; }
 
+	public boolean hasSparkJoinPredicate() {
+    	    return (sparkJoinPredicate != null ||
+	            (sparkExpressionTreeAsString != null &&
+	             sparkExpressionTreeAsString.length() > 0));
+	}
+	public SparkExpressionNode getSparkJoinPredicate() {
+    	    if (sparkJoinPredicate != null)
+    	        return sparkJoinPredicate;
+    	    else {
+    	    	if (hasSparkJoinPredicate())
+		    sparkJoinPredicate =
+		       (SparkExpressionNode) SerializationUtils.
+		                          deserialize(Base64.decodeBase64(sparkExpressionTreeAsString));
+		return sparkJoinPredicate;
+	    }
+	}
+
+	protected String getJoinTypeString() {
+		String joinTypeString = "";
+		switch (joinType) {
+			case JoinNode.INNERJOIN:
+				joinTypeString = "inner";
+				break;
+			case JoinNode.LEFTOUTERJOIN:
+				joinTypeString = "left";
+				break;
+			case JoinNode.FULLOUTERJOIN:
+				joinTypeString = "full";
+				break;
+			default:
+		}
+		return joinTypeString;
+	}
+
+	protected boolean isOuterJoin() {
+		return joinType == JoinNode.LEFTOUTERJOIN || joinType == JoinNode.FULLOUTERJOIN;
+	}
 }

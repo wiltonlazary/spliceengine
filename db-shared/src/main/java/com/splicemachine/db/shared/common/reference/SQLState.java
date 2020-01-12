@@ -1044,6 +1044,8 @@ public interface SQLState {
 	String LANG_INVALID_USE_OF_DEFAULT                                 = "42Y85";
 	String LANG_INVALID_SESSION_PROPERTY                               = "42Y86";
 	String LANG_INVALID_SESSION_PROPERTY_VALUE                         = "42Y87";
+	String LANG_INVALID_FORCED_NO_SUBQUERY_FLATTEN_VALUE               = "42Y88";
+	String LANG_INVALID_SUBQUERY_PROPERTY                              = "42Y89";
 	String LANG_STMT_NOT_UPDATABLE                                     = "42Y90";
 	String LANG_NO_SPS_USING_IN_TRIGGER                                = "42Y91";
 	String LANG_TRIGGER_BAD_REF_MISMATCH                               = "42Y92";
@@ -1948,12 +1950,14 @@ public interface SQLState {
     String REPLICATION_SLAVE_SHUTDOWN_OK                           = "XRE42.C";
     String REPLICATION_STOPSLAVE_NOT_INITIATED                     = "XRE43";
 
-	//general SPlice errors
-	String LANG_CANCELLATION_EXCEPTION							   = "SE008";
-	String LANG_INVALID_DAY										   = "SE022";
-	String ERROR_PARSING_EXCEPTION								   = "SE023";
-	String PARAMETER_CANNOT_BE_NULL								   = "SE024";
-	String PARAMETER_IS_NOT_HEXADECIMAL							   = "SE025";
+    //general SPlice errors
+    String LANG_CANCELLATION_EXCEPTION                             = "SE008";
+    String LANG_INVALID_DAY                                        = "SE022";
+    String ERROR_PARSING_EXCEPTION                                 = "SE023";
+    String PARAMETER_CANNOT_BE_NULL                                = "SE024";
+    String PARAMETER_IS_NOT_HEXADECIMAL                            = "SE025";
+    String MISSING_COPROCESSOR_SERVICE                             = "SE030";
+
 	/*
      * Backup and restore
      */

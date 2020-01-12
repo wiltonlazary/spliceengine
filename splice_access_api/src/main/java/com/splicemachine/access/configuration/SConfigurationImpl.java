@@ -19,7 +19,6 @@ import com.splicemachine.db.iapi.sql.compile.CompilerContext;
 import org.apache.log4j.Logger;
 
 import java.lang.reflect.Field;
-import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -72,6 +71,7 @@ public final class SConfigurationImpl implements SConfiguration {
     private final String authorizationScheme;
     private final String rangerServiceName;
     private final int sentryPollingInterval;
+    private String rangerUserSyncCaseConversion;
 
 
     // DDLConfiguration
@@ -85,6 +85,7 @@ public final class SConfigurationImpl implements SConfiguration {
     private final  int regionServerHandlerCount;
     private final  int timestampBlockSize;
     private final  long regionLoadUpdateInterval;
+    private final  long transactionsWatcherUpdateInterval;
     private final  String backupPath;
     private final  String compressionAlgorithm;
     private final  String namespace;
@@ -221,6 +222,7 @@ public final class SConfigurationImpl implements SConfiguration {
     private final  long fallbackRegionRowCount;
     private final  long fallbackRemoteLatencyRatio;
     private final  long partitionCacheExpiration;
+    private final  int collectSchemaStatisticsMaximumConcurrent;
 
     // StorageConfiguration
     private final  int splitBlockSize;
@@ -359,6 +361,10 @@ public final class SConfigurationImpl implements SConfiguration {
         return regionLoadUpdateInterval;
     }
     @Override
+    public long getTransactionsWatcherUpdateInterval() {
+        return transactionsWatcherUpdateInterval;
+    }
+    @Override
     public String getBackupPath() {
         return backupPath;
     }
@@ -431,6 +437,10 @@ public final class SConfigurationImpl implements SConfiguration {
     }
 
     // PipelineConfiguration
+    @Override
+    public int getCollectSchemaStatisticsMaximumConcurrent() {
+        return collectSchemaStatisticsMaximumConcurrent;
+    }
     @Override
     public int getCoreWriterThreads() {
         return coreWriterThreads;
@@ -600,6 +610,10 @@ public final class SConfigurationImpl implements SConfiguration {
     @Override
     public int getSentryPollingInterval() {
         return sentryPollingInterval;
+    }
+    @Override
+    public String getRangerUserSyncCaseConversion() {
+        return rangerUserSyncCaseConversion;
     }
 
 
@@ -889,6 +903,7 @@ public final class SConfigurationImpl implements SConfiguration {
         authorizationScheme = builder.authorizationScheme;
         rangerServiceName = builder.rangerServiceName;
         sentryPollingInterval = builder.sentryPollingInterval;
+        rangerUserSyncCaseConversion = builder.rangerUserSyncCaseConversion;
         fallbackNullFraction = builder.fallbackNullFraction;
         optimizerExtraQualifierMultiplier = builder.optimizerExtraQualifierMultiplier;
         cardinalityPrecision = builder.cardinalityPrecision;
@@ -907,6 +922,7 @@ public final class SConfigurationImpl implements SConfiguration {
         regionServerHandlerCount = builder.regionServerHandlerCount;
         timestampBlockSize = builder.timestampBlockSize;
         regionLoadUpdateInterval = builder.regionLoadUpdateInterval;
+        transactionsWatcherUpdateInterval = builder.transactionsWatcherUpdateInterval;
         backupPath = builder.backupPath;
         backupParallelism = builder.backupParallelism;
         backupKeepAliveInterval = builder.backupKeepAliveInterval;
@@ -946,6 +962,7 @@ public final class SConfigurationImpl implements SConfiguration {
         determineSparkRowThreshold = builder.determineSparkRowThreshold;
         networkBindAddress = builder.networkBindAddress;
         upgradeForcedFrom = builder.upgradeForcedFrom;
+        collectSchemaStatisticsMaximumConcurrent = builder.collectSchemaStatisticsMaximumConcurrent;
         coreWriterThreads = builder.coreWriterThreads;
         maxDependentWriteThreads = builder.maxDependentWriteThreads;
         maxIndependentWriteThreads = builder.maxIndependentWriteThreads;

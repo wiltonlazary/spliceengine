@@ -79,12 +79,13 @@ public class MergeJoinOperation extends JoinOperation {
                               boolean rightFromSSQ,
                               double optimizerEstimatedRowCount,
                               double optimizerEstimatedCost,
-                              String userSuppliedOptimizerOverrides)
+                              String userSuppliedOptimizerOverrides,
+                              String sparkExpressionTreeAsString)
             throws StandardException {
         super(leftResultSet, leftNumCols, rightResultSet, rightNumCols,
                  activation, restriction, resultSetNumber, oneRowRightSide,
                  notExistsRightSide, rightFromSSQ, optimizerEstimatedRowCount,
-                 optimizerEstimatedCost, userSuppliedOptimizerOverrides);
+                 optimizerEstimatedCost, userSuppliedOptimizerOverrides, sparkExpressionTreeAsString);
         this.leftHashKeyItem = leftHashKeyItem;
         this.rightHashKeyItem = rightHashKeyItem;
         this.rightHashKeyToBaseTableMapItem = rightHashKeyToBaseTableMapItem;
@@ -152,7 +153,7 @@ public class MergeJoinOperation extends JoinOperation {
         operationContext.pushScope();
         try {
             left = left.map(new CountJoinedLeftFunction(operationContext));
-            if (isOuterJoin)
+            if (isOuterJoin())
                 return left.mapPartitions(new MergeOuterJoinFlatMapFunction(operationContext), true);
             else {
                 if (notExistsRightSide)

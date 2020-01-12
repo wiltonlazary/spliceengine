@@ -28,6 +28,7 @@ import com.splicemachine.db.iapi.sql.conn.LanguageConnectionContext;
 import com.splicemachine.db.iapi.sql.dictionary.*;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.stats.ColumnStatisticsImpl;
+import com.splicemachine.db.iapi.stats.FakeColumnStatisticsImpl;
 import com.splicemachine.db.iapi.stats.ItemStatistics;
 import com.splicemachine.db.iapi.store.access.TransactionController;
 import com.splicemachine.db.iapi.types.*;
@@ -43,7 +44,10 @@ import com.splicemachine.ddl.DDLMessage.DDLChange;
 import com.splicemachine.derby.ddl.DDLUtils;
 import com.splicemachine.derby.impl.store.access.SpliceTransactionManager;
 import com.splicemachine.derby.impl.store.access.base.SpliceConglomerate;
-import com.splicemachine.derby.stream.iapi.*;
+import com.splicemachine.derby.stream.iapi.DataSetProcessor;
+import com.splicemachine.derby.stream.iapi.DistributedDataSetProcessor;
+import com.splicemachine.derby.stream.iapi.OperationContext;
+import com.splicemachine.derby.stream.iapi.ScanSetBuilder;
 import com.splicemachine.metrics.Metrics;
 import com.splicemachine.pipeline.ErrorState;
 import com.splicemachine.pipeline.Exceptions;
@@ -257,6 +261,16 @@ public class StatisticsAdmin extends BaseAdminProcedures {
         new GenericColumnDescriptor("sampleFraction", DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.DOUBLE))
     };
 
+    private static final ResultColumnDescriptor[] COLUMN_STATS_OUTPUT_COLUMNS = new GenericColumnDescriptor[]{
+        new GenericColumnDescriptor("schemaName", DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.VARCHAR)),
+        new GenericColumnDescriptor("tableName", DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.VARCHAR)),
+        new GenericColumnDescriptor("columnName", DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.VARCHAR)),
+        new GenericColumnDescriptor("partition", DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.VARCHAR)),
+        new GenericColumnDescriptor("nullCount", DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.BIGINT)),
+        new GenericColumnDescriptor("totalCount", DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.BIGINT)),
+        new GenericColumnDescriptor("cardinality", DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.BIGINT))
+    };
+
     @SuppressWarnings("unused")
     public static void COLLECT_SCHEMA_STATISTICS(String schema, boolean staleOnly, ResultSet[] outputResults) throws
         SQLException {
@@ -285,21 +299,19 @@ public class StatisticsAdmin extends BaseAdminProcedures {
             authorize(tds);
             TransactionController transactionExecute = lcc.getTransactionExecute();
             transactionExecute.elevate("statistics");
-            dropTableStatistics(tds,dd,tc);
-            ddlNotification(tc,tds);
+            dropTableStatistics(tds, dd, tc);
+            ddlNotification(tc, tds);
             TxnView txn = ((SpliceTransactionManager) transactionExecute).getRawTransaction().getActiveStateTxn();
 
-            // Create the Dataset.  This needs to stay in a dataset for parallel execution (very important).
-            DataSet<ExecRow> dataSet = null;
-
-            HashMap<Long,Pair<String,String>> display = new HashMap<>();
-            List<StatisticsOperation> futures = new ArrayList(tds.size());
+            HashMap<Long, Pair<String, String>> display = new HashMap<>();
+            ArrayList<StatisticsOperation> statisticsOperations = new ArrayList<>(tds.size());
             for (TableDescriptor td : tds) {
-                display.put(td.getHeapConglomerateId(),Pair.newPair(schema,td.getName()));
-                futures.add(collectTableStatistics(td, false, 0, true, txn, conn));
+                display.put(td.getHeapConglomerateId(), Pair.newPair(schema, td.getName()));
+                statisticsOperations.add(createCollectTableStatisticsOperation(td, false, 0, true, txn, conn));
             }
+
             IteratorNoPutResultSet resultsToWrap = wrapResults(conn,
-            displayTableStatistics(futures,true,dd,transactionExecute,display));
+                    displayTableStatistics(statisticsOperations,true, dd, transactionExecute, display), COLLECTED_STATS_OUTPUT_COLUMNS);
             outputResults[0] = new EmbedResultSet40(conn, resultsToWrap, false, null, true);
         } catch (StandardException se) {
             throw PublicAPI.wrapStandardException(se);
@@ -424,6 +436,124 @@ public class StatisticsAdmin extends BaseAdminProcedures {
         }
     }
 
+    public static void FAKE_TABLE_STATISTICS(String schema,
+                                             String table,
+                                             long rowCount,
+                                             int meanRowWidth,
+                                             long numPartitions,
+                                             ResultSet[] outputResults) throws SQLException {
+
+        EmbedConnection conn = (EmbedConnection) SpliceAdmin.getDefaultConn();
+        try {
+            schema = EngineUtils.validateSchema(schema);
+            table = EngineUtils.validateTable(table);
+            TableDescriptor tableDesc = verifyTableExists(conn, schema, table);
+
+            if (rowCount < 0)
+                throw ErrorState.LANG_INVALID_FAKE_STATS.newException("table", "row count cannot be a negative value");
+
+            if (meanRowWidth <= 0)
+                throw ErrorState.LANG_INVALID_FAKE_STATS.newException("table", "meanRowWidth has to be greater than 0");
+            if (numPartitions <= 0)
+                throw ErrorState.LANG_INVALID_FAKE_STATS.newException("table", "number of partitions has to be greater than 0");
+
+            List<TableDescriptor> tds = Collections.singletonList(tableDesc);
+            authorize(tds);
+            DataDictionary dd = conn.getLanguageConnection().getDataDictionary();
+            dd.startWriting(conn.getLanguageConnection());
+            TransactionController tc = conn.getLanguageConnection().getTransactionExecute();
+            tc.elevate("statistics");
+            dropTableStatistics(tds,dd,tc);
+            ddlNotification(tc, tds);
+
+            // compose the fake table stats row
+            ExecRow statsRow;
+            int statsType = SYSTABLESTATISTICSRowFactory.FAKE_MERGED_STATS;
+            long conglomerateId = tableDesc.getHeapConglomerateId();
+
+            statsRow = StatisticsAdmin.generateRowFromStats(conglomerateId, "-All-", rowCount, rowCount*meanRowWidth, meanRowWidth, numPartitions, statsType, 0.0d);
+            dd.addTableStatistics(statsRow, tc);
+            ExecRow resultRow = generateOutputRow(schema, table, statsRow);
+
+            IteratorNoPutResultSet resultsToWrap = wrapResults(
+                    conn,
+                    Lists.newArrayList(resultRow), COLLECTED_STATS_OUTPUT_COLUMNS);
+            outputResults[0] = new EmbedResultSet40(conn, resultsToWrap, false, null, true);
+        } catch (StandardException se) {
+            throw PublicAPI.wrapStandardException(se);
+        }
+    }
+
+    public static void FAKE_COLUMN_STATISTICS(String schema,
+                                              String table,
+                                              String column,
+                                              double nullCountRatio,
+                                              long rpv,
+                                              ResultSet[] outputResults) throws SQLException {
+        EmbedConnection conn = (EmbedConnection) SpliceAdmin.getDefaultConn();
+        try {
+            schema = EngineUtils.validateSchema(schema);
+            table = EngineUtils.validateTable(table);
+            column = EngineUtils.validateColumnName(column);
+            TableDescriptor td = verifyTableExists(conn, schema, table);
+            //verify that that column exists
+            int columnId = -1;
+            ColumnDescriptor columnDescriptor = null;
+            ColumnDescriptorList columnDescriptorList = td.getColumnDescriptorList();
+            for (ColumnDescriptor descriptor : columnDescriptorList) {
+                if (descriptor.getColumnName().equalsIgnoreCase(column)) {
+                    columnId = descriptor.getPosition();
+                    columnDescriptor = descriptor;
+                    break;
+                }
+            }
+            if (columnId == -1)
+                throw ErrorState.LANG_COLUMN_NOT_FOUND_IN_TABLE.newException(column, schema + "." + table);
+            List<TableDescriptor> tds = Collections.singletonList(td);
+            authorize(tds);
+            DataDictionary dd = conn.getLanguageConnection().getDataDictionary();
+            dd.startWriting(conn.getLanguageConnection());
+            TransactionController tc = conn.getLanguageConnection().getTransactionExecute();
+            tc.elevate("statistics");
+            // get the row count from table stats
+            long totalCount = getRowCountFromTableStats(td.getHeapConglomerateId(), dd, tc);
+
+            if (totalCount < 0)
+                throw ErrorState.LANG_INVALID_FAKE_STATS.newException("column", "table stats do not exist, please add table stats first");
+
+            if (nullCountRatio < 0 || nullCountRatio > 1)
+                throw ErrorState.LANG_INVALID_FAKE_STATS.newException("column", "null count ratio should be in the range of [0,1]");
+
+            long nullCount = (long)(nullCountRatio * totalCount);
+
+            if (rpv > totalCount - nullCount || rpv < 1)
+                throw ErrorState.LANG_INVALID_FAKE_STATS.newException("column", "rows per value shouldn't be less than 1 or larger than the total number of not-null count : " + (totalCount - nullCount));
+
+            long cardinality = (long)(((double)(totalCount- nullCount))/rpv);
+
+            dropColumnStatistics(td.getHeapConglomerateId(), columnId, dd,tc);
+
+            ddlNotification(tc, tds);
+            // compose the fake column stats row
+            long conglomerateId = td.getHeapConglomerateId();
+
+            FakeColumnStatisticsImpl columnStatistics = new FakeColumnStatisticsImpl(columnDescriptor.getType().getNull(), nullCount, totalCount, cardinality);
+            // compose the entry for a given column
+            ExecRow statsRow = StatisticsAdmin.generateRowFromStats(conglomerateId, "-All-", columnId, columnStatistics);
+            dd.addColumnStatistics(statsRow, tc);
+
+            ExecRow resultRow = generateOutputRowForColumnStats(schema, table, column, "-All-", nullCount, totalCount, cardinality);
+
+            IteratorNoPutResultSet resultsToWrap = wrapResults(
+                    conn,
+                    Lists.newArrayList(resultRow), COLUMN_STATS_OUTPUT_COLUMNS);
+            outputResults[0] = new EmbedResultSet40(conn, resultsToWrap, false, null, true);
+        } catch (StandardException se) {
+            throw PublicAPI.wrapStandardException(se);
+        }
+
+    }
+
     private static void ddlNotification(TransactionController tc,  List<TableDescriptor> tds) throws StandardException {
         DDLChange ddlChange = ProtoUtil.alterStats(((SpliceTransactionManager) tc).getActiveStateTxn().getTxnId(),tds);
         tc.prepareDataDictionaryChange(DDLUtils.notifyMetadataChange(ddlChange));
@@ -461,10 +591,10 @@ public class StatisticsAdmin extends BaseAdminProcedures {
             IteratorNoPutResultSet resultsToWrap = wrapResults(
                     conn,
                     displayTableStatistics(Lists.newArrayList(
-                            collectTableStatistics(tableDesc, useSample, samplePercent/100, mergeStats, txn, conn)
+                            createCollectTableStatisticsOperation(tableDesc, useSample, samplePercent/100, mergeStats, txn, conn)
                             ),
                             mergeStats,
-                            dd, tc, display));
+                            dd, tc, display), COLLECTED_STATS_OUTPUT_COLUMNS);
             outputResults[0] = new EmbedResultSet40(conn, resultsToWrap, false, null, true);
         } catch (StandardException se) {
             throw PublicAPI.wrapStandardException(se);
@@ -473,22 +603,12 @@ public class StatisticsAdmin extends BaseAdminProcedures {
         }
     }
 
-    private static StatisticsOperation collectTableStatistics(TableDescriptor table,
-                                                             boolean useSample,
-                                                             double sampleFraction,
-                                                              boolean mergeStats,
-                                                             TxnView txn,
-                                                             EmbedConnection conn) throws StandardException, ExecutionException {
-
-       return collectBaseTableStatistics(table, useSample, sampleFraction, mergeStats, txn, conn);
-    }
-
-    private static StatisticsOperation collectBaseTableStatistics(TableDescriptor table,
-                                                                 boolean useSample,
-                                                                 double sampleFraction,
-                                                                  boolean mergeStats,
-                                                                 TxnView txn,
-                                                                 EmbedConnection conn) throws StandardException, ExecutionException {
+    private static StatisticsOperation createCollectTableStatisticsOperation(TableDescriptor table,
+                                                                             boolean useSample,
+                                                                             double sampleFraction,
+                                                                             boolean mergeStats,
+                                                                             TxnView txn,
+                                                                             EmbedConnection conn) throws StandardException, ExecutionException {
         long heapConglomerateId = table.getHeapConglomerateId();
         Activation activation = conn.getLanguageConnection().getLastActivation();
         DistributedDataSetProcessor dsp = EngineDriver.driver().processorFactory().distributedProcessor();
@@ -509,7 +629,6 @@ public class StatisticsAdmin extends BaseAdminProcedures {
             dtds[index++] = descriptor.getType();
         }
         StatisticsOperation op = new StatisticsOperation(scanSetBuilder,useSample,sampleFraction,mergeStats,scope,activation,dtds);
-        op.openCore();
         return op;
     }
 
@@ -609,10 +728,10 @@ public class StatisticsAdmin extends BaseAdminProcedures {
                 ;
     }
 
-    private static IteratorNoPutResultSet wrapResults(EmbedConnection conn, Iterable<ExecRow> rows) throws
+    private static IteratorNoPutResultSet wrapResults(EmbedConnection conn, Iterable<ExecRow> rows, ResultColumnDescriptor[] columnDescriptors) throws
         StandardException {
         Activation lastActivation = conn.getLanguageConnection().getLastActivation();
-        IteratorNoPutResultSet resultsToWrap = new IteratorNoPutResultSet(rows, COLLECTED_STATS_OUTPUT_COLUMNS,
+        IteratorNoPutResultSet resultsToWrap = new IteratorNoPutResultSet(rows, columnDescriptors,
                                                                           lastActivation);
         resultsToWrap.openCore();
         return resultsToWrap;
@@ -823,6 +942,24 @@ public class StatisticsAdmin extends BaseAdminProcedures {
         return row;
     }
 
+    public static ExecRow generateOutputRowForColumnStats(String schemaName,
+                                                          String tableName,
+                                                          String columnName,
+                                                          String partitionName,
+                                                          long nullCount,
+                                                          long totalCount,
+                                                          long cardinality) throws StandardException {
+        ExecRow row = new ValueRow(7);
+        row.setColumn(1,new SQLVarchar(schemaName));
+        row.setColumn(2,new SQLVarchar(tableName));
+        row.setColumn(3,new SQLVarchar(columnName));
+        row.setColumn(4,new SQLVarchar(partitionName));
+        row.setColumn(5,new SQLLongint(nullCount));
+        row.setColumn(6,new SQLLongint(totalCount));
+        row.setColumn(7,new SQLLongint(cardinality));
+        return row;
+    }
+
     public static ExecRow generateOutputRow(String schemaName, String tableName, ExecRow partitionRow) throws StandardException {
         ExecRow row = new ValueRow(8);
         row.setColumn(1,new SQLVarchar(schemaName));
@@ -837,13 +974,41 @@ public class StatisticsAdmin extends BaseAdminProcedures {
     }
 
 
-    public static Iterable displayTableStatistics(List<StatisticsOperation> futures, boolean mergeStats, final DataDictionary dataDictionary, final TransactionController tc, final HashMap<Long,Pair<String,String>> displayPair) {
+    public static Iterable displayTableStatistics(ArrayList<StatisticsOperation> collectOps,
+                                                  boolean mergeStats,
+                                                  final DataDictionary dataDictionary,
+                                                  final TransactionController tc,
+                                                  final HashMap<Long, Pair<String, String>> displayPair) throws StandardException {
+        // Schedule the first <maximumConcurrent> jobs
+        int maximumConcurrent = EngineDriver.driver().getConfiguration().getCollectSchemaStatisticsMaximumConcurrent();
+        for (int i = 0; i < maximumConcurrent && i < collectOps.size(); ++i) {
+            collectOps.get(i).openCore();
+        }
+        // Handle the next jobs as we go: (One job returns -> one job can start), ensuring <maximumConcurrent> jobs at all time
+        Iterable<StatisticsOperation> movingExecutionWindow = () -> new Iterator<StatisticsOperation>() {
+            int i = 0;
+            @Override
+            public boolean hasNext() {
+                return i < collectOps.size();
+            }
+
+            @Override
+            public StatisticsOperation next() {
+                if ((long)i + (long)maximumConcurrent < (long)collectOps.size()) {
+                    try {
+                        collectOps.get(i + maximumConcurrent).openCore();
+                    } catch (StandardException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                return collectOps.get(i++);
+            }
+        };
         if (mergeStats) {
-            return FluentIterable.from(futures).transformAndConcat(new Function<StatisticsOperation, Iterable<ExecRow>>() {
+            return FluentIterable.from(movingExecutionWindow).transformAndConcat(new Function<StatisticsOperation, Iterable<ExecRow>>() {
                 @Nullable
                 @Override
                 public Iterable<ExecRow> apply(@Nullable StatisticsOperation input) {
-
                     try {
                         // We have to create a new savepoint because we already returned from the opening of the result set
                         // and derby released the prior savepoint for us. If we don't create one we'd end up inserting the
@@ -920,19 +1085,14 @@ public class StatisticsAdmin extends BaseAdminProcedures {
                                 }
                             }
                         };
-                        return new Iterable<ExecRow>() {
-                            @Override
-                            public Iterator<ExecRow> iterator() {
-                                return iterator;
-                            }
-                        };
+                        return () -> iterator;
                     } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
                 }
             });
         } else {
-            return FluentIterable.from(futures).transformAndConcat(new Function<StatisticsOperation, Iterable<ExecRow>>() {
+            return FluentIterable.from(movingExecutionWindow).transformAndConcat(new Function<StatisticsOperation, Iterable<ExecRow>>() {
                 @Nullable
                 @Override
                 public Iterable<ExecRow> apply(@Nullable StatisticsOperation input) {
@@ -969,12 +1129,7 @@ public class StatisticsAdmin extends BaseAdminProcedures {
                                 }
                             }
                         };
-                        return new Iterable<ExecRow>() {
-                            @Override
-                            public Iterator<ExecRow> iterator() {
-                                return iterator;
-                            }
-                        };
+                        return () -> iterator;
                     } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
@@ -1000,5 +1155,36 @@ public class StatisticsAdmin extends BaseAdminProcedures {
         }
     }
 
+    private static long getRowCountFromTableStats(long conglomerateId,
+                                                  DataDictionary dd,
+                                                  TransactionController tc) throws StandardException {
+        long totalCount = 0;
+        List<PartitionStatisticsDescriptor> partitionStatsDescriptors = dd.getPartitionStatistics(conglomerateId, tc);
 
+        if (partitionStatsDescriptors.isEmpty())
+           return -1;
+
+        double sampleFraction = 0.0d;
+        int statsType = partitionStatsDescriptors.get(0).getStatsType();
+        boolean isSampleStats = statsType == SYSTABLESTATISTICSRowFactory.SAMPLE_NONMERGED_STATS || statsType == SYSTABLESTATISTICSRowFactory.SAMPLE_MERGED_STATS;
+        if (isSampleStats)
+            sampleFraction = partitionStatsDescriptors.get(0).getSampleFraction();
+
+        for (PartitionStatisticsDescriptor item: partitionStatsDescriptors) {
+            totalCount += item.getRowCount();
+        }
+
+        if (isSampleStats)
+            totalCount = (long)((double)totalCount/sampleFraction);
+
+        return totalCount;
+    }
+
+    private static void dropColumnStatistics(long conglomerateId,
+                                             int columnId,
+                                             DataDictionary dd,
+                                             TransactionController tc) throws StandardException {
+        dd.deleteColumnStatisticsByColumnId(conglomerateId, columnId, tc);
+
+    }
 }

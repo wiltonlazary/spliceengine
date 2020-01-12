@@ -48,6 +48,7 @@ PARSER_BEGIN(SQLParser)
 
 package com.splicemachine.db.impl.sql.compile;
 
+import org.apache.commons.lang3.mutable.MutableInt;
 import com.splicemachine.db.iapi.sql.Statement;
 import com.splicemachine.db.iapi.sql.StatementType;
 
@@ -174,6 +175,7 @@ import com.splicemachine.utils.ModifiableBoolean;
 import java.sql.Types;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Properties;
 import java.util.StringTokenizer;
@@ -1077,6 +1079,7 @@ public class SQLParser
 		  case EQUALS_OPERATOR:
 		  case NOT_EQUALS_OPERATOR:
 		  case NOT_EQUALS_OPERATOR2: // !=
+		  case NOT_EQUALS_OPERATOR3: // ^=
 		  case LESS_THAN_OPERATOR:
 		  case GREATER_THAN_OPERATOR:
 		  case LESS_THAN_OR_EQUALS_OPERATOR:
@@ -1658,13 +1661,13 @@ public class SQLParser
 	 *
 	 * @return	TRUE iff the next set of tokens is the java class name
 	 */
-	boolean javaClassFollows()
+	boolean javaClassFollows(int startingToken)
 	{
 		boolean retval = false;
 
 		// Look at every other token. Ignore the identifiers, because
 		// they are hard to test for.
-		for (int i = 2; true; i += 2)
+		for (int i = 2+startingToken; true; i += 2)
 		{
 			int tokKind = getToken(i).kind;
 
@@ -1712,7 +1715,8 @@ public class SQLParser
 	 *	CROSS JOIN
 	 *	LEFT OUTER JOIN
 	 *	RIGHT OUTER JOIN
-	 *	NATURAL [ { RIGHT | LEFT } [ OUTER ] | INNER ] JOIN
+	 *  FULL OUTER JOIN
+	 *	NATURAL [ { RIGHT | LEFT | FULL } [ OUTER ] | INNER ] JOIN
 	 *
 	 * @return	TRUE iff the next set of tokens is the beginning of a
 	 *			joinedTableExpression().
@@ -1740,14 +1744,14 @@ public class SQLParser
 		{
 			retval = true;
 		}
-		else if ((tokKind1 == LEFT || tokKind1 == RIGHT) && tokKind2 == OUTER)
+		else if ((tokKind1 == LEFT || tokKind1 == RIGHT || tokKind1 == FULL) && tokKind2 == OUTER)
 		{
 			if (getToken(3).kind == JOIN)
 			{
 				retval = true;
 			}
 		}
-		else if ((tokKind1 == LEFT || tokKind1 == RIGHT) && tokKind2 == JOIN)
+		else if ((tokKind1 == LEFT || tokKind1 == RIGHT || tokKind1 == FULL) && tokKind2 == JOIN)
 		{
 			retval = true;
 		}
@@ -2194,7 +2198,7 @@ public class SQLParser
      * @param onClause the ON clause, or null if there is no ON clause
      * @param usingClause the USING clause, or null if there is no USING clause
      * @param joinType the type of the join (one of the constants INNERJOIN,
-     *                 LEFTOUTERJOIN or RIGHTOUTERJOIN in JoinNode)
+     *                 LEFTOUTERJOIN or RIGHTOUTERJOIN or FULLOUTERJOIN in JoinNode)
      * @return a new join node
      */
     private JoinNode newJoinNode(ResultSetNode leftRSN, ResultSetNode rightRSN,
@@ -2235,6 +2239,16 @@ public class SQLParser
                         onClause,
                         usingClause,
                         Boolean.TRUE,
+                        null,
+                        getContextManager());
+
+            case JoinNode.FULLOUTERJOIN:
+                return (JoinNode) nodeFactory.getNode(
+                        C_NodeTypes.FULL_OUTER_JOIN_NODE,
+                        leftRSN,
+                        rightRSN,
+                        onClause,
+                        usingClause,
                         null,
                         getContextManager());
 
@@ -2388,6 +2402,31 @@ public class SQLParser
            return buf.toString();
    }
 
+    /**
+     * Determine if we are seeing an Optimize For Rows clause or the identifier OPTIMIZE
+     *
+     * @return true if it is an Optimize For Rows clause.
+     */
+    private boolean seeingOptimizeForRowsClause()
+    {
+        int nesting = 0;
+
+        // Token number, i == 1: OPTIMIZE
+        int i = 2;
+
+        int tokKind = getToken(i).kind;
+
+        if (tokKind == FOR) {
+            tokKind = getToken(++i).kind;
+            if (tokKind == EXACT_NUMERIC) {
+                tokKind = getToken(++i).kind;
+
+                return (tokKind == ROW ||
+                        tokKind == ROWS);
+            }
+        }
+        return false;
+    }
 }
 
 PARSER_END(SQLParser)
@@ -2901,6 +2940,7 @@ TOKEN [IGNORE_CASE] :
 |   <ACCESS: "access">
 |	<ACTION: "action">
 |	<ALWAYS: "always">
+|   <ATOMIC: "atomic">
 |   <AUTO: "auto">
 |	<B: "b">
 |	<BLOB: "blob">
@@ -2949,6 +2989,7 @@ TOKEN [IGNORE_CASE] :
 |	<LOGGED: "logged">
 |   <LOGICAL: "logical">
 |	<MAXVALUE: "maxvalue">
+|   <MESSAGE_TEXT: "message_text">
 |	<MINVALUE: "minvalue">
 |   <MOD: "mod">
 |	<MODIFIES: "modifies">
@@ -2978,6 +3019,7 @@ TOKEN [IGNORE_CASE] :
 |	<RETURNS: "returns">
 |	<ROLLUP: "rollup">
 |	<ROW: "row">
+|   <SIGNAL: "signal">
 |	<FORMAT: "format">
 |	<DELIMITED: "delimited">
 |	<FIELDS: "fields">
@@ -2998,6 +3040,7 @@ TOKEN [IGNORE_CASE] :
 |	<PARQUET: "parquet">
 |   <AVRO: "avro">
 |	<ORC: "orc">
+|   <OPTIMIZE: "optimize">
 |	<SAVEPOINT: "savepoint">
 |	<SCALE: "scale">
 |	<SECURITY: "security">
@@ -3014,7 +3057,7 @@ TOKEN [IGNORE_CASE] :
 |	<SQL_TSI_YEAR: "sql_tsi_year">
 |	<START: "start">
 |	<STATEMENT: "statement">
-|	<SYNONYM: "synonym">
+|	<SYNONYM: "synonym" | "alias">
 |	<T: "t">
 |	<THEN: "then">
 |	<TIME: "time">
@@ -3188,6 +3231,7 @@ TOKEN :
 |	<EQUALS_OPERATOR: "=">
 |	<NOT_EQUALS_OPERATOR: "<>">
 |	<NOT_EQUALS_OPERATOR2: "!=">
+|   <NOT_EQUALS_OPERATOR3: "^=">
 |	<GREATER_THAN_OPERATOR: ">">
 |	<GREATER_THAN_OR_EQUALS_OPERATOR: ">=">
 |	<QUESTION_MARK: "?">
@@ -3201,7 +3245,7 @@ TOKEN :
 
 TOKEN :
 {	/* Identifiers */
-	<IDENTIFIER: ( <LETTER> ) (<LETTER> | "_" | <DIGIT>)* >
+	<IDENTIFIER: ( <LETTER> ) (<LETTER> | "_" | <DIGIT> | "@" | "$" | "#")* >
 }
 
 TOKEN: {	<K: "K" >	 }
@@ -3513,8 +3557,32 @@ Statement( String statementSQLText, Object[] paramDefaults) throws StandardExcep
 {
 	statementNode = StatementPart(null) <EOF>
 	{
+        statementNode.setBeginOffset(0);
+        statementNode.setEndOffset(statementSQLText.length() - 1);
 		return statementNode;
 	}
+}
+
+/**
+ * Parse a search condition.
+ *
+ * @param sqlFragment a fragment of an SQL statement, representing a
+ *                    search condition
+ * @return a {@code ValueNode} representing the search condition
+ */
+ValueNode
+SearchCondition(String sqlFragment) throws StandardException :
+{
+    ValueNode valueNode;
+    initStatement(sqlFragment, null);
+}
+{
+    valueNode = valueExpression() <EOF>
+    {
+        valueNode.setBeginOffset(0);
+        valueNode.setEndOffset(sqlFragment.length() - 1);
+        return valueNode;
+    }
 }
 
 StatementNode
@@ -3525,6 +3593,8 @@ proceduralStatement(Token[] tokenHolder) throws StandardException :
 }
 {
 (
+	statementNode = signalStatement()
+|
 	statementNode = insertStatement()
 |
 	statementNode = preparableUpdateStatement()
@@ -3594,6 +3664,8 @@ StatementPart(Token[] tokenHolder) throws StandardException :
         statementNode = spsAlterStatement() |
         statementNode = declareTemporaryTableDeclaration() |
         statementNode = preparableSQLDataStatement() |
+        statementNode = setStatement(new Token[1]) |
+        statementNode = setStatementInCreateTrigger(new Token[1], null) |
         statementNode = spsSetStatement() |
 		statementNode = truncateTableStatement() |
 		statementNode = grantStatement() |
@@ -3603,7 +3675,8 @@ StatementPart(Token[] tokenHolder) throws StandardException :
 		statementNode = exportStatement() |
 		statementNode = binaryExportStatement() |
 		statementNode = pinStatement() |
-		statementNode = dropPinStatement()
+		statementNode = dropPinStatement() |
+		statementNode = signalStatement()
     )
     {
         return statementNode;
@@ -4163,6 +4236,7 @@ preparableSelectStatement(boolean checkParams) throws StandardException :
     ValueNode[] offsetClauses = new ValueNode[ OFFSET_CLAUSE_COUNT ];
     ValueNode[] topNOut = new ValueNode[ 1 ];
     boolean     hasJDBClimitClause = false;
+    int optimizeForRows = 1;
 }
 {
     [ <WITH> withClauseList(parameterList) ]
@@ -4170,6 +4244,7 @@ preparableSelectStatement(boolean checkParams) throws StandardException :
 		[ orderCols = orderByClause(queryExpression) ]
         hasJDBClimitClause = offsetFetchFirstClause( offsetClauses )
 		[ <FOR> forUpdateState = forUpdateClause(updateColumns) ]
+		[ optimizeForRows = optimizeForRowsClause() ]
 		[ isolationLevel = atIsolationLevel() ]
 	{
 	    if (topNOut[0] != null) {
@@ -6009,6 +6084,7 @@ simpleTable(ValueNode[] topNOut) throws StandardException :
 }
 {
 	resultSetNode = querySpecification(topNOut)
+
 	{
 		return resultSetNode;
 	}
@@ -6433,6 +6509,7 @@ remainingNonNegatablePredicate(ValueNode leftOperand) throws StandardException :
 	ValueNode	likePattern;
 	ValueNode	betweenLeft;
 	ValueNode	betweenRight;
+	Properties  properties = null;
 }
 {
 	operator = compOp()
@@ -6445,7 +6522,11 @@ remainingNonNegatablePredicate(ValueNode leftOperand) throws StandardException :
 			operator = quantifier(operator)
 			<LEFT_PAREN>
 			leftOperand = tableSubquery(operator, leftOperand)
-			<RIGHT_PAREN>
+			<RIGHT_PAREN> [ properties = propertyList(true)<CHECK_PROPERTIES>]
+			{
+	            if (leftOperand instanceof SubqueryNode)
+	                ((SubqueryNode)leftOperand).setProperties(properties);
+			}
 		)
 		|
 		(
@@ -6531,6 +6612,11 @@ compOp() throws StandardException :
 	{
 		return BinaryOperatorNode.NE;
 	}
+|
+    <NOT_EQUALS_OPERATOR3>
+    {
+        return BinaryOperatorNode.NE;
+    }
 |
 	<LESS_THAN_OPERATOR>
 	{
@@ -6966,7 +7052,7 @@ primary() throws StandardException :
 {
 
 	//Look ahead required here to tell a java class from a identifier
-	LOOKAHEAD( { javaClassFollows() } )
+	LOOKAHEAD( { javaClassFollows(0) } )
 	value = staticClassReference()
 	{
 		return value;
@@ -7767,6 +7853,7 @@ valueExpressionPrimary() throws StandardException :
 {
 	ValueNode	value;
 	int			tokKind;
+	Properties  properties = null;
 }
 {
 	/* This LOOKAHEAD is required to distinguish
@@ -7867,8 +7954,11 @@ valueExpressionPrimary() throws StandardException :
 
 		value = valueExpression()
 	)
-	<RIGHT_PAREN>
+	<RIGHT_PAREN> [ properties = propertyList(true)<CHECK_PROPERTIES>]
 	{
+        if (value instanceof SubqueryNode)
+            ((SubqueryNode)value).setProperties(properties);
+
 		return value;
 	}
 |
@@ -10186,6 +10276,7 @@ inPredicateValue(ValueNode leftOperand) throws StandardException :
 {
 	ValueNode		retval;
 	int				tokKind;
+	Properties      properties = null;
 }
 {
 	<LEFT_PAREN>
@@ -10200,8 +10291,10 @@ inPredicateValue(ValueNode leftOperand) throws StandardException :
 	|
 		retval = inValueList(leftOperand)
 	)
-	<RIGHT_PAREN>
+	<RIGHT_PAREN> [ properties = propertyList(true)<CHECK_PROPERTIES>]
 	{
+	    if (retval instanceof SubqueryNode)
+	        ((SubqueryNode)retval).setProperties(properties);
 		return retval;
 	}
 }
@@ -10345,12 +10438,16 @@ SubqueryNode
 existsExpression() throws StandardException :
 {
 	SubqueryNode	subqueryNode;
+	Properties  properties=null;
 }
 {
 	<EXISTS> <LEFT_PAREN>
 	subqueryNode = tableSubquery(SubqueryNode.EXISTS_SUBQUERY, null)
-	<RIGHT_PAREN>
+	<RIGHT_PAREN> [ properties = propertyList(true)<CHECK_PROPERTIES>]
 	{
+        if (subqueryNode instanceof SubqueryNode)
+        	((SubqueryNode)subqueryNode).setProperties(properties);
+
 		return subqueryNode;
 	}
 }
@@ -10930,11 +11027,15 @@ outerJoinType() throws StandardException :
 	{
 		return JoinNode.LEFTOUTERJOIN;
 	}
-|
-	<RIGHT>
+|   <RIGHT>
 	{
 		return JoinNode.RIGHTOUTERJOIN;
 	}
+|
+    <FULL>
+    {
+        return JoinNode.FULLOUTERJOIN;
+    }
 }
 
 Object[]
@@ -13205,6 +13306,44 @@ viewColumnList() throws StandardException :
 	}
 }
 
+
+StatementNode
+actionStatement(Token[] tokenHolder, HashSet<String> hs) throws StandardException :
+{
+	StatementNode statementNode;
+}
+{
+(
+    statementNode =  setStatementInCreateTrigger(tokenHolder, hs)
+|
+	statementNode =  proceduralStatement(tokenHolder)
+)
+	{
+		return statementNode;
+	}
+}
+
+QueryTreeNode
+triggerActions(Token[] tokenHolder, MutableInt endOffset, HashSet<String> hs) throws StandardException :
+{
+    QueryTreeNode actionNode = null;
+    Token endPosition;
+}
+{
+	<BEGIN> <ATOMIC> actionNode = actionStatement(tokenHolder, hs)
+	endPosition = <SEMICOLON>
+	<END>
+	{
+	    endOffset.setValue(endPosition.beginOffset - 1);
+		return actionNode;
+	}
+|
+	actionNode = actionStatement(tokenHolder, hs)
+	{
+		return actionNode;
+	}
+}
+
 StatementNode
 triggerDefinition() throws StandardException :
 {
@@ -13220,25 +13359,35 @@ triggerDefinition() throws StandardException :
 	int					actionEnd;
 	TriggerEventDML		triggerEvent;
 	QueryTreeNode		actionNode;
+	ValueNode           whenClause = null;
+    Token               whenOpen = null;
+    Token               whenClose = null;
+    int                 whenOffset = 0;
+    int                 whenEnd = 0;
 	ResultColumnList	triggerColumns = (ResultColumnList) nodeFactory.getNode(
 											C_NodeTypes.RESULT_COLUMN_LIST,
 											getContextManager());
 	Vector				refClause = null;
+	MutableInt	        endOffset = new MutableInt(-1);
+	HashSet<String>     hs = new HashSet<String>();
 }
 {
 	<TRIGGER> triggerName = qualifiedName(Limits.MAX_IDENTIFIER_LENGTH)
 	    isBefore = beforeOrAfter()
 		triggerEvent = triggerEvent(triggerColumns)		// { INSERT | DELETE | UPDATE [ colList	] }
 		<ON> tableName = qualifiedName(Limits.MAX_IDENTIFIER_LENGTH)
-		[ refClause = triggerReferencingClause() ]		// REFERENCING OLD/NEW AS
+		[ refClause = triggerReferencingClause(hs, triggerEvent) ]		// REFERENCING OLD/NEW AS
 		[ <FOR> <EACH> isRow = rowOrStatement() ]
 		[ <MODE> <DB2SQL> ]
+        [ <WHEN> whenOpen = <LEFT_PAREN> whenClause = valueExpression() whenClose = <RIGHT_PAREN> ]
 		//we are not top level statement
-		actionNode = proceduralStatement(tokenHolder)
+		actionNode = triggerActions(tokenHolder, endOffset, hs)
 		// the trigger body
 	{
-		actionEnd = getToken(0).endOffset;
+		actionEnd = endOffset.intValue() != -1 ? endOffset.intValue() : getToken(0).endOffset;
 		actionBegin = tokenHolder[0].beginOffset;
+        actionNode.setBeginOffset(actionBegin);
+        actionNode.setEndOffset(actionEnd);
 
 		// No DML in action node for BEFORE triggers.
 		if (isBefore.booleanValue() && (actionNode instanceof DMLModStatementNode)) {
@@ -13251,10 +13400,28 @@ triggerDefinition() throws StandardException :
 		// no params in trigger action
  		HasNodeVisitor visitor = new HasNodeVisitor(ParameterNode.class);
 		actionNode.accept(visitor);
+        if (whenClause != null) {
+            whenClause.accept(visitor);
+        }
 		if (visitor.hasNode())
 		{
 			throw StandardException.newException(SQLState.LANG_NO_PARAMS_IN_TRIGGER_ACTION);
 		}
+		if (actionNode instanceof SetNode && !isBefore)
+		    throw StandardException.newException(SQLState.LANG_UNSUPPORTED_TRIGGER_STMT, "SET", "AFTER");
+
+        String actionText = StringUtil.slice(
+                statementSQLText, actionBegin, actionEnd, false);
+
+        String whenText = null;
+        if (whenClause != null) {
+            whenOffset = whenOpen.endOffset + 1;
+            whenEnd = whenClose.beginOffset - 1;
+            whenClause.setBeginOffset(whenOffset);
+            whenClause.setEndOffset(whenEnd);
+            whenText = StringUtil.slice(statementSQLText,
+                                        whenOffset, whenEnd, false);
+        }
 
 		return (StatementNode) nodeFactory.getNode(
 								C_NodeTypes.CREATE_TRIGGER_NODE,
@@ -13266,14 +13433,11 @@ triggerDefinition() throws StandardException :
 								isRow,
 								Boolean.TRUE, 				// enabled
 								refClause,			// referencing clause
-								null,// when clause node
-								null, 		// when clause text
-								ReuseFactory.getInteger(0),
-											// when clause begin offset
+                                whenClause,  // when clause node
+                                whenText,    // when clause text
+								ReuseFactory.getInteger(whenOffset),  // when clause begin offset
 								actionNode,
-								StringUtil.slice(statementSQLText,
-									actionBegin,
-									actionEnd,false),
+								actionText,
 								ReuseFactory.getInteger(actionBegin),
 								getContextManager());
 	}
@@ -13309,6 +13473,11 @@ beforeOrAfter() :
 {}
 {
 	<BEFORE>
+	{
+		return Boolean.TRUE;
+	}
+|
+	<NO> <CASCADE> <BEFORE>
 	{
 		return Boolean.TRUE;
 	}
@@ -13352,19 +13521,19 @@ rowOrStatement() :
 }
 
 Vector
-triggerReferencingClause() throws StandardException :
+triggerReferencingClause(HashSet<String> hs, TriggerEventDML triggerEvent) throws StandardException :
 {
 	Vector vector = new Vector();
 }
 {
-	<REFERENCING> triggerReferencingExpression(vector) ( triggerReferencingExpression(vector) )*
+	<REFERENCING> triggerReferencingExpression(vector, hs, triggerEvent) ( triggerReferencingExpression(vector, hs, triggerEvent) )*
 	{
 		return vector;
 	}
 }
 
 void
-triggerReferencingExpression(Vector vector) throws StandardException :
+triggerReferencingExpression(Vector vector, HashSet<String> hs, TriggerEventDML triggerEvent) throws StandardException :
 {
 	String	identifier;
 	boolean isNew = true;
@@ -13384,6 +13553,15 @@ triggerReferencingExpression(Vector vector) throws StandardException :
 	<AS> identifier = identifier(Limits.MAX_IDENTIFIER_LENGTH, true)
 	{
 		vector.addElement(new TriggerReferencingStruct(isRow, isNew, identifier));
+		if (!isNew)
+		    hs.add(identifier);
+		else {
+		    if (triggerEvent.getId() == TriggerEventDML.DELETE.getId()) {
+                throw StandardException.newException(
+                                        SQLState.LANG_TRIGGER_BAD_REF_MISMATCH,
+                                        "DELETE", "OLD");
+            }
+		}
 	}
 }
 
@@ -14591,6 +14769,177 @@ setSessionPropertyStatement() throws StandardException :
                                         getContextManager());
     }
 }
+
+ValueNode
+optionalErrorText() throws StandardException :
+{
+    ValueNode errorText = null;
+}
+{
+	<LEFT_PAREN> errorText = valueExpression() <RIGHT_PAREN>
+	{
+		return errorText;
+	}
+|
+	<SET> <MESSAGE_TEXT> <EQUALS_OPERATOR> errorText = valueExpression()
+	{
+		return errorText;
+	}
+|
+	{
+		return errorText;
+	}
+}
+
+/*
+ * <A NAME="signalStatement">signalStatement</A>
+ */
+StatementNode
+signalStatement() throws StandardException :
+{
+        CharConstantNode errorCode;
+        ValueNode errorText = null;
+}
+{
+	<SIGNAL> <SQLSTATE> errorCode = stringLiteral()
+	errorText = optionalErrorText()
+	{
+        return (StatementNode) nodeFactory.getNode(
+                                        C_NodeTypes.SIGNAL_NODE,
+                                        errorCode.getString(),
+                                        errorText,
+                                        getContextManager());
+	}
+}
+
+/*
+ * <A NAME="setClauseValueList">setClauseValueList</A>
+ */
+void
+setClauseValueList(ValueNodeList assignedColumnsList, ValueNodeList newValuesList, HashSet<String> hs) throws StandardException :
+{
+
+}
+{
+	setClauseItem(assignedColumnsList, newValuesList, hs) ( <COMMA> setClauseItem(assignedColumnsList, newValuesList, hs) ) *
+	{
+
+	}
+}
+
+/*
+ * <A NAME="columnRefOrUDF">columnRefOrUDF</A>
+ */
+ValueNode
+columnRefOrUDF() throws StandardException :
+{
+	ValueNode	 valueNode;
+}
+{
+	//Look ahead required here to tell a java class from a identifier
+	LOOKAHEAD( { javaClassFollows(0) } )
+	valueNode = primaryExpressionXX()
+	{
+	    return valueNode;
+	}
+|
+	valueNode = columnReference()
+	{
+	    return valueNode;
+	}
+}
+
+/*
+ * <A NAME="setClauseItem">setClauseItem</A>
+ */
+void
+setClauseItem(ValueNodeList	assignedColumnsList, ValueNodeList newValuesList, HashSet<String> hs) throws StandardException :
+{
+	ValueNode	 columnAccessRoutine;
+	ValueNode	 valueNode;
+}
+{
+	columnAccessRoutine = columnRefOrUDF() <EQUALS_OPERATOR> valueNode = valueExpression()
+	{
+        if (hs != null &&
+            columnAccessRoutine instanceof ColumnReference) {
+            ColumnReference cr = (ColumnReference) columnAccessRoutine;
+            String tableName = cr.getTableName();
+            if (tableName != null && hs.contains(tableName)) {
+                throw StandardException.newException(
+                                        SQLState.LANG_TRIGGER_BAD_REF_MISMATCH,
+                                        "SET", "NEW");
+            }
+        }
+	    assignedColumnsList.addValueNode(columnAccessRoutine);
+	    newValuesList.addValueNode(valueNode);
+	}
+}
+
+
+/*
+ * <A NAME="setStatement">setStatement</A>
+ */
+StatementNode
+setStatement(Token[] tokenHolder) throws StandardException :
+{
+        ResultColumnList columnList = null;
+        tokenHolder[0] = getToken(1);
+        ValueNodeList	assignedColumnsList = (ValueNodeList) nodeFactory.getNode(
+                                                    C_NodeTypes.VALUE_NODE_LIST,
+                                                    getContextManager());
+        ValueNodeList	newValuesList = (ValueNodeList) nodeFactory.getNode(
+                                                    C_NodeTypes.VALUE_NODE_LIST,
+                                                    getContextManager());
+}
+{
+  LOOKAHEAD( { javaClassFollows(1) } )
+  <SET> setClauseValueList(assignedColumnsList, newValuesList, null)
+  {
+        return (StatementNode) nodeFactory.getNode(
+                                        C_NodeTypes.SET_NODE,
+                                        assignedColumnsList,
+                                        newValuesList,
+                                        getContextManager());
+  }
+}
+
+/*
+ * <A NAME="setStatementInCreateTrigger">setStatementInCreateTrigger</A>
+ */
+StatementNode
+setStatementInCreateTrigger(Token[] tokenHolder, HashSet<String> hs) throws StandardException :
+{
+        ResultColumnList columnList = null;
+        tokenHolder[0] = getToken(1);
+        ValueNodeList	assignedColumnsList = (ValueNodeList) nodeFactory.getNode(
+                                                    C_NodeTypes.VALUE_NODE_LIST,
+                                                    getContextManager());
+        ValueNodeList	newValuesList = (ValueNodeList) nodeFactory.getNode(
+                                                    C_NodeTypes.VALUE_NODE_LIST,
+                                                    getContextManager());
+        if (hs == null)
+            hs = new HashSet<String>();
+}
+{
+  LOOKAHEAD ( { getToken(1).kind == SET &&
+                getToken(2).kind != CURRENT &&
+                getToken(2).kind != ISOLATION &&
+                getToken(2).kind != SCHEMA &&
+                getToken(2).kind != MESSAGE_LOCALE &&
+                getToken(2).kind != ROLE &&
+                getToken(2).kind != SESSION_PROPERTY
+              } )
+  <SET> setClauseValueList(assignedColumnsList, newValuesList, hs)
+  {
+        return (StatementNode) nodeFactory.getNode(
+                                        C_NodeTypes.SET_NODE,
+                                        assignedColumnsList,
+                                        newValuesList,
+                                        getContextManager());
+  }
+}
+
 
 List sessionPropertyList() throws StandardException :
 {
@@ -17027,6 +17376,7 @@ nonReservedKeyword()  :
 	|	tok = <AFTER>
 	|	tok = <AGGREGATE>
 	|	tok = <ALWAYS>
+    |	tok = <ATOMIC>
 	|   tok = <AUTO>
 	|   tok = <B>
 	|	tok = <BEFORE>
@@ -17121,6 +17471,7 @@ nonReservedKeyword()  :
 	|	tok = <LOGGED>
 	|	tok = <LONG>
 	|	tok = <MAXVALUE>
+	|	tok = <MESSAGE_TEXT>
 	|	tok = <MINVALUE>
 	|	tok = <MESSAGE_LOCALE>
 	|	tok = <METHOD>
@@ -17151,6 +17502,11 @@ nonReservedKeyword()  :
 	|	tok = <OLD>
 	|	tok = <OLD_TABLE>
 	|	tok = <OJ>
+    |	LOOKAHEAD({
+            getToken(1).kind == OPTIMIZE &&
+            !seeingOptimizeForRowsClause()
+        })
+	    tok = <OPTIMIZE>
 	|	tok = <OVER>
 	|	tok = <PASCAL>
 	|	tok = <PASSING>
@@ -17194,6 +17550,7 @@ nonReservedKeyword()  :
 	|	tok = <SERIALIZABLE>
 	|	tok = <SETS>
 	|	tok = <SHARE>
+    |	tok = <SIGNAL>
 	|   tok = <SPECIFIC>
 	|   tok = <SPLITKEYS>
 	|	tok = <SQLID>
@@ -17214,6 +17571,7 @@ nonReservedKeyword()  :
 	|	tok = <SYNONYM>
 	|	tok = <STYLE>
 	|	tok = <T>
+	|	tok = <TEXT>
 	|	tok = <THEN>
 	|	tok = <TIME>
 	|   tok = <TIMEFORMAT>
@@ -17316,5 +17674,25 @@ caseSensitiveIdentifier() :
 	str = nonReservedKeyword()
 	{
 		return str;
+	}
+}
+
+/*
+ * <A NAME="optimizeForRowsClause">optimizeForRowsClause</A>
+ */
+int
+optimizeForRowsClause() throws StandardException :
+{
+	int optimizeForRows = 1;
+}
+{
+	<OPTIMIZE> <FOR>
+     optimizeForRows = uint_value()
+	( <ROW> | <ROWS> )
+	{
+        if ( optimizeForRows <= 0 )
+            throw StandardException.newException(SQLState.LANG_INVALID_INTEGER_LITERAL, optimizeForRows);
+        else
+            return optimizeForRows;
 	}
 }

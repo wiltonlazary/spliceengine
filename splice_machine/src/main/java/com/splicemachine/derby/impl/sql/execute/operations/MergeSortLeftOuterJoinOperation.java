@@ -18,6 +18,7 @@ import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.loader.GeneratedMethod;
 import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
+import com.splicemachine.db.impl.sql.compile.JoinNode;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperationContext;
 import com.splicemachine.derby.impl.SpliceMethod;
@@ -51,14 +52,16 @@ public class MergeSortLeftOuterJoinOperation extends MergeSortJoinOperation {
 						boolean rightFromSSQ,
 						double optimizerEstimatedRowCount,
 						double optimizerEstimatedCost,
-						String userSuppliedOptimizerOverrides) throws StandardException {
+						String userSuppliedOptimizerOverrides,
+						String sparkExpressionTreeAsString) throws StandardException {
 				super(leftResultSet, leftNumCols, rightResultSet, rightNumCols, leftHashKeyItem, rightHashKeyItem,
 								activation, restriction, resultSetNumber, oneRowRightSide, notExistsRightSide, rightFromSSQ,
-								optimizerEstimatedRowCount, optimizerEstimatedCost,userSuppliedOptimizerOverrides);
+								optimizerEstimatedRowCount, optimizerEstimatedCost,userSuppliedOptimizerOverrides,
+								sparkExpressionTreeAsString);
 				SpliceLogUtils.trace(LOG, "instantiate");
-				this.emptyRowFunMethodName = (emptyRowFun == null) ? null : emptyRowFun.getMethodName();
+				this.rightEmptyRowFunMethodName = (emptyRowFun == null) ? null : emptyRowFun.getMethodName();
 				this.wasRightOuterJoin = wasRightOuterJoin;
-                this.isOuterJoin = true;
+                this.joinType = JoinNode.LEFTOUTERJOIN;
 				init();
 		}
 
@@ -66,7 +69,7 @@ public class MergeSortLeftOuterJoinOperation extends MergeSortJoinOperation {
 		public void init(SpliceOperationContext context) throws StandardException, IOException {
 				SpliceLogUtils.trace(LOG, "init");
 				super.init(context);
-				emptyRowFun = (emptyRowFunMethodName == null) ? null : new SpliceMethod<ExecRow>(emptyRowFunMethodName,context.getActivation());
+				rightEmptyRowFun = (rightEmptyRowFunMethodName == null) ? null : new SpliceMethod<ExecRow>(rightEmptyRowFunMethodName,context.getActivation());
 		}
 
 		@Override
@@ -75,10 +78,10 @@ public class MergeSortLeftOuterJoinOperation extends MergeSortJoinOperation {
 		}
 
     @Override
-    public ExecRow getEmptyRow() throws StandardException {
-        if (emptyRow == null)
-            emptyRow = emptyRowFun.invoke();
-        return emptyRow;
+    public ExecRow getRightEmptyRow() throws StandardException {
+        if (rightEmptyRow == null)
+            rightEmptyRow = rightEmptyRowFun.invoke();
+        return rightEmptyRow;
     }
 
 }

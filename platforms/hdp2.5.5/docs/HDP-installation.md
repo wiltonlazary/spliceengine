@@ -36,33 +36,8 @@ Perform the following steps **on each node** in your cluster:
 
 1. Download the installer for your version.
 
-    Which Splice Machine installer (gzip) package you need depends upon which Splice Machine version you're installing and which version of HDP you are using. Here are the URLs for Splice Machine Release 2.7 and 2.5:
-
-   <table>
-        <col />
-        <col />
-        <col />
-        <thead>
-            <tr>
-                <th>Splice Machine Release</th>
-                <th>HDP Version</th>
-                <th>Installer Package Link</th>
-            </tr>
-        </thead>
-        <tbody>
-               <tr>
-                   <td><strong>2.7</strong></td>
-                   <td><strong>2.5.5</strong></td>
-                   <td><a href="https://s3.console.aws.amazon.com/s3/object/splice-releases/2.6.1.1745/cluster/installer/hdp2.5.5/SPLICEMACHINE-2.6.1.1745.hdp2.5.5.p0.121.tar.gz">https://s3.console.aws.amazon.com/s3/object/splice-releases/2.6.1.1745/cluster/installer/hdp2.5.5/SPLICEMACHINE-2.6.1.1745.hdp2.5.5.p0.121.tar.gz</a></td>
-                </tr>
-               <tr>
-                   <td><strong>2.5</strong></td>
-                   <td><strong>2.5.5</strong></td>
-                   <td><a href="https://s3.amazonaws.com/splice-releases/2.5.0.1802/cluster/installer/hdp2.5.5/SPLICEMACHINE-2.5.0.1802.hdp2.5.5.p0.540.tar.gz">https://s3.amazonaws.com/splice-releases/2.5.0.1802/cluster/installer/hdp2.5.5/SPLICEMACHINE-2.5.0.1802.hdp2.5.5.p0.540.tar.gz</a></td>
-                </tr>
-        </tbody>
-   </table>
-
+    Which Splice Machine installer (gzip) package you need depends upon which Splice Machine version you're installing and which version of HDP you are using. 
+    
    **NOTE:** To be sure that you have the latest URL, please check [the Splice
    Machine Community site](https://community.splicemachine.com/) or contact your Splice
    Machine representative.
@@ -470,7 +445,7 @@ To edit the HBase configuration, click `HBase` in the Ambari *Services* sidebar.
    hbase.balancer.period=60000
    hbase.client.ipc.pool.size=10
    hbase.client.max.perregion.tasks=100
-   hbase.coprocessor.regionserver.classes=com.splicemachine.hbase.RegionServerLifecycleObserver
+   hbase.coprocessor.regionserver.classes=com.splicemachine.hbase.RegionServerLifecycleObserver,com.splicemachine.si.data.hbase.coprocessor.SpliceRSRpcServices
    hbase.hstore.compaction.min.size=136314880
    hbase.hstore.compaction.min=3
    hbase.hstore.defaultengine.compactionpolicy.class=com.splicemachine.compactions.SpliceDefaultCompactionPolicy
@@ -535,12 +510,18 @@ need to restart each of those services.
 
 There are a few configuration modifications you might want to make:
 
+* [Enable automatically restart for HBase service](#enable-automatically-restart) if you want HBase recover automatically after some failures.
 * [Modify the Authentication Mechanism](#modify-the-authentication-mechanism) if you want to
   authenticate users with something other than the default *native
   authentication* mechanism.
 * [Modify the Log Location](#modify-the-log-location) if you want your Splice Machine
   log entries stored somewhere other than in the logs for your region
   servers.
+  
+### Enable Automatically Restart
+
+After network partition, HBase master or region server may exit. So you may want to enable auto restart for Hbase in
+Ambari -> Admin -> Service Auto Start.
 
 ### Modify the Authentication Mechanism
 
@@ -595,6 +576,23 @@ Configuration:
 Splice Machine uses log4j to config OLAP server's log.  If you want to change the default log behavior of OLAP server,
 config `splice.olap.log4j.configuration` in `hbase-site.xml`. It specifies the log4j.properties file you want to use.
 This file needs to be available on HBase master server.
+
+#### Security Audit log
+
+Splice Machine records security related actions (e.g. CREATE / DROP USER, MODIFY PASSWORD, LOGIN) in audit log. You can modify where Splice
+Machine stores audit log by adding the following snippet to your *RegionServer Logging
+Advanced Configuration Snippet (Safety Valve)* section of your HBase
+Configuration:
+
+   ```
+    log4j.appender.spliceAudit=org.apache.log4j.FileAppender
+    log4j.appender.spliceAudit.File=${hbase.log.dir}/splice-audit.log
+    log4j.appender.spliceAudit.layout=org.apache.log4j.PatternLayout
+    log4j.appender.spliceAudit.layout.ConversionPattern=%d{ISO8601} %m%n
+    
+    log4j.logger.splice-audit=INFO, spliceAudit
+    log4j.additivity.splice-audit=false
+   ```
 
 ## Verify your Splice Machine Installation
 
