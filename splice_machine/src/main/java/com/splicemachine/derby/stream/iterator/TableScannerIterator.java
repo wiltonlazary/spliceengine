@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -51,12 +51,12 @@ public class TableScannerIterator implements Iterable<ExecRow>, Iterator<ExecRow
 
     public TableScannerIterator(TableScannerBuilder siTableBuilder, SpliceOperation operation) throws StandardException {
         this.siTableBuilder = siTableBuilder;
-        this.operation = (ScanOperation) operation;
+        this.operation = (operation instanceof ScanOperation) ? (ScanOperation) operation : null;
         this.hBaseRowLocation = new HBaseRowLocation();
-        if (operation != null) {
-            this.qualifiers = ((ScanOperation) operation).getScanInformation().getScanQualifiers();
-            this.baseColumnMap = ((ScanOperation) operation).getOperationInformation().getBaseColumnMap();
-            this.rowIdKey = ((ScanOperation) operation).getRowIdKey();
+        if (this.operation != null) {
+            this.qualifiers = this.operation.getScanInformation().getScanQualifiers();
+            this.baseColumnMap = this.operation.getOperationInformation().getBaseColumnMap();
+            this.rowIdKey = this.operation.getRowIdKey();
         }
     }
 

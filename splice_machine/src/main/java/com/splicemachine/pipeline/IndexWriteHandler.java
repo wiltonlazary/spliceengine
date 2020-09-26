@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -121,6 +121,8 @@ public class IndexWriteHandler extends RoutingWriteHandler{
             if (newIndex == null)
                 return true;
             newIndex.setType(KVPair.Type.INSERT);
+            if (LOG.isDebugEnabled())
+                SpliceLogUtils.debug(LOG, "performing index insert on row %s", Bytes.toHex(newIndex.getRowKey()));
             if(deleteMutation!=null && newIndex.rowKeySlice().equals(deleteMutation.rowKeySlice())){
                 /*
                  * DB-4165: When we do an update to the base table, that translates to a delete

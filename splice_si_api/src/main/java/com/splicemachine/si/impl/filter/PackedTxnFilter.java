@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -50,10 +50,12 @@ public class PackedTxnFilter implements TxnFilter, SIFilter{
             case COMMIT_TIMESTAMP:
                 return returnCode; // These are always skip...
             case USER_DATA:
-            return processUserData(keyValue,returnCode);
+                return processUserData(keyValue,returnCode);
             case TOMBSTONE:
             case ANTI_TOMBSTONE:
             case FOREIGN_KEY_COUNTER:
+            case FIRST_WRITE_TOKEN:
+            case DELETE_RIGHT_AFTER_FIRST_WRITE_TOKEN:
             case OTHER:
                 return returnCode; // These are always skip...
 

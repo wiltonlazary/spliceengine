@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -60,8 +60,8 @@ public class ClientXAConnection extends ClientPooledConnection implements XAConn
         // Note: conApp will be set after this call
         logicalCon_ = super.getConnection();
 
-        netXares_ = new com.splicemachine.db.client.net.NetXAResource(this,
-                rmId_, userId, password, netXAPhysicalConnection_);
+        netXares_ = new com.splicemachine.db.client.net.NetXAResource(
+                netXAPhysicalConnection_);
         xares_ = netXares_;
     }
 

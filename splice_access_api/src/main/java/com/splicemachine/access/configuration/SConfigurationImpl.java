@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -87,6 +87,7 @@ public final class SConfigurationImpl implements SConfiguration {
     private final  long regionLoadUpdateInterval;
     private final  long transactionsWatcherUpdateInterval;
     private final  String backupPath;
+    private final  String replicationPath;
     private final  String compressionAlgorithm;
     private final  String namespace;
     private final  String spliceRootPath;
@@ -98,9 +99,14 @@ public final class SConfigurationImpl implements SConfiguration {
     private final  long backupMaxBandwidthMB;
     private final  boolean backupUseDistcp;
     private final  int backupIOBufferSize;
+    private final  boolean replicationEnabled;
     private final  int replicationSnapshotInterval;
-    private final  int replicationSinkPort;
-    private final int replicationProgressUpdateInterval;
+    private final  int replicationProgressUpdateInterval;
+    private final  String replicationMonitorQuorum;
+    private final  String replicationMonitorPath;
+    private final  int replicationMonitorInterval;
+    private final  String replicationHealthcheckScript;
+    private final String kafkaBootstrapServers;
 
     // OperationConfiguration
     private final  int sequenceBlockSize;
@@ -124,15 +130,16 @@ public final class SConfigurationImpl implements SConfiguration {
     private final  String sparkIoCompressionCodec;
     private final int sparkResultStreamingBatches;
     private final int sparkResultStreamingBatchSize;
-    private final int compactionReservedSlots;
+    private final int sparkSlowResultStreamingBatches;
+    private final int sparkSlowResultStreamingBatchSize;
     private final int olapCompactionMaximumWait;
     private final int olapCompactionMaximumConcurrent;
     private final double olapCompactionResolutionShare;
     private final double flushResolutionShare;
     private final int olapCompactionResolutionBufferSize;
+    private final int localCompactionResolutionBufferSize;
     private final boolean olapCompactionBlocking;
     private final boolean resolutionOnFlushes;
-    private final int reservedSlotsTimeout;
     private final double bulkImportSampleFraction;
     private final int bulkImportTasksPerRegion;
     private final int regionToLoadPerTask;
@@ -148,6 +155,7 @@ public final class SConfigurationImpl implements SConfiguration {
     private final int olapServerBindPort;
     private final String olapServerStagingDir;
     private final boolean olapServerExternal;
+    private final int olapServerMaxRetries;
     private final int olapServerThreads;
     private final int olapServerTickLimit;
     private final int olapClientRetries;
@@ -156,14 +164,20 @@ public final class SConfigurationImpl implements SConfiguration {
     private final int olapServerMemory;
     private final int olapServerMemoryOverhead;
     private final int olapServerVirtualCores;
+    private final long olapServerKeepAliveTimeout;
+    private final String olapServerMode;
+    private final boolean sparkAccumulatorsEnabled;
     private final String olapLog4jConfig;
     private final Map<String, String> olapServerIsolatedRoles;
     private final Map<String, String> olapServerYarnQueues;
     private final boolean olapServerIsolatedCompaction;
     private final String olapServerIsolatedCompactionQueueName;
+    private final boolean olapCompactionAutomaticallyPurgeDeletedRows;
+    private final boolean olapCompactionAutomaticallyPurgeOldUpdates;
 
     // SIConfigurations
-    private final  int activeTransactionCacheSize;
+    private final  int activeTransactionMaxCacheSize;
+    private final  int activeTransactionInitialCacheSize;
     private final  int completedTxnCacheSize;
     private final  int completedTxnConcurrency;
     private final  int readResolverQueueSize;
@@ -183,8 +197,8 @@ public final class SConfigurationImpl implements SConfiguration {
     private final  boolean debugLogStatementContext;
     private final  boolean ignoreSavePoints;
     private final  boolean upgradeForced;
-    private final  int batchOnceBatchSize;
     private final  int importMaxQuotedColumnLines;
+    private final  long importCsvScanLimit;
     private final  int indexBatchSize;
     private final  int indexLookupBlocks;
     private final  int kryoPoolSize;
@@ -228,7 +242,7 @@ public final class SConfigurationImpl implements SConfiguration {
     private final  int splitBlockSize;
     private final  long regionMaxFileSize;
     private final  long tableSplitSleepInterval;
-    private final  int splitsPerTableMin;
+    private final  int splitsPerRegionMin;
 
     // Gateway to hadoop config
     private final ConfigurationSource configSource;
@@ -392,17 +406,39 @@ public final class SConfigurationImpl implements SConfiguration {
     public int getBackupIOBufferSize() {
         return backupIOBufferSize;
     }
+
+    @Override
+    public String getReplicationPath() {
+        return replicationPath;
+    }
+    @Override
+    public boolean replicationEnabled() {
+        return replicationEnabled;
+    }
     @Override
     public int getReplicationSnapshotInterval() {
         return replicationSnapshotInterval;
     }
     @Override
-    public int getReplicationSinkPort() {
-        return replicationSinkPort;
-    }
-    @Override
     public int getReplicationProgressUpdateInterval() {
         return replicationProgressUpdateInterval;
+    }
+    @Override
+    public String getReplicationMonitorQuorum() {
+        return replicationMonitorQuorum;
+    }
+
+    @Override
+    public String getReplicationMonitorPath() {
+        return replicationMonitorPath;
+    }
+    @Override
+    public int getReplicationMonitorInterval() {
+        return replicationMonitorInterval;
+    }
+    @Override
+    public String getReplicationHealthcheckScript() {
+        return replicationHealthcheckScript;
     }
     @Override
     public String getCompressionAlgorithm() {
@@ -423,6 +459,10 @@ public final class SConfigurationImpl implements SConfiguration {
     @Override
     public boolean getHbaseSecurityAuthentication() {
         return hbaseSecurityAuthentication;
+    }
+    @Override
+    public String getKafkaBootstrapServers() {
+        return kafkaBootstrapServers;
     }
 
     // OperationConfiguration
@@ -527,11 +567,25 @@ public final class SConfigurationImpl implements SConfiguration {
     public int getSparkResultStreamingBatchSize() {
         return sparkResultStreamingBatchSize;
     }
+    
+    @Override
+    public int getSparkSlowResultStreamingBatches() {
+        return sparkSlowResultStreamingBatches;
+    }
+
+    @Override
+    public int getSparkSlowResultStreamingBatchSize() {
+        return sparkSlowResultStreamingBatchSize;
+    }
 
     // SIConfigurations
     @Override
-    public int getActiveTransactionCacheSize() {
-        return activeTransactionCacheSize;
+    public int getActiveTransactionMaxCacheSize() {
+        return activeTransactionMaxCacheSize;
+    }
+    @Override
+    public int getActiveTransactionInitialCacheSize() {
+        return activeTransactionInitialCacheSize;
     }
     @Override
     public int getCompletedTxnCacheSize() {
@@ -595,6 +649,12 @@ public final class SConfigurationImpl implements SConfiguration {
     public boolean getOlapServerExternal() {
         return olapServerExternal;
     }
+
+    @Override
+    public int getOlapServerMaxRetries() {
+        return olapServerMaxRetries;
+    }
+
     @Override
     public int getOlapServerSubmitAttempts() {
         return olapServerSubmitAttempts;
@@ -630,6 +690,10 @@ public final class SConfigurationImpl implements SConfiguration {
         return olapServerVirtualCores;
     }
     @Override
+    public long getOlapServerKeepAliveTimeout() {
+        return olapServerKeepAliveTimeout;
+    }
+    @Override
     public int getOlapServerThreads() {
         return olapServerThreads;
     }
@@ -641,6 +705,25 @@ public final class SConfigurationImpl implements SConfiguration {
     public int getOlapShufflePartitions() {
         return olapShufflePartitions;
     }
+    @Override
+    public String getOlapServerMode() {
+        return olapServerMode;
+    }
+    @Override
+    public boolean getSparkAccumulatorsEnabled() {
+        return sparkAccumulatorsEnabled;
+    }
+
+    @Override
+    public boolean getOlapCompactionAutomaticallyPurgeDeletedRows() {
+         return olapCompactionAutomaticallyPurgeDeletedRows;
+    }
+
+    @Override
+    public boolean getOlapCompactionAutomaticallyPurgeOldUpdates() {
+        return olapCompactionAutomaticallyPurgeOldUpdates;
+    }
+
     @Override
     public int getTimestampClientWaitTime() {
         return timestampClientWaitTime;
@@ -696,12 +779,12 @@ public final class SConfigurationImpl implements SConfiguration {
         return upgradeForced;
     }
     @Override
-    public int getBatchOnceBatchSize() {
-        return batchOnceBatchSize;
-    }
-    @Override
     public int getImportMaxQuotedColumnLines() {
         return importMaxQuotedColumnLines;
+    }
+    @Override
+    public long getImportCsvScanThreshold() {
+        return importCsvScanLimit;
     }
     @Override
     public int getIndexBatchSize() {
@@ -843,8 +926,8 @@ public final class SConfigurationImpl implements SConfiguration {
         return tableSplitSleepInterval;
     }
     @Override
-    public int getSplitsPerTableMin() {
-        return splitsPerTableMin;
+    public int getSplitsPerRegionMin() {
+        return splitsPerRegionMin;
     }
 
     // ===========
@@ -863,7 +946,8 @@ public final class SConfigurationImpl implements SConfiguration {
      */
     SConfigurationImpl(ConfigurationBuilder builder, ConfigurationSource configurationSource) {
         configSource = configurationSource;
-        activeTransactionCacheSize = builder.activeTransactionCacheSize;
+        activeTransactionMaxCacheSize = builder.activeTransactionMaxCacheSize;
+        activeTransactionInitialCacheSize = builder.activeTransactionInitialCacheSize;
         completedTxnCacheSize = builder.completedTxnCacheSize;
         completedTxnConcurrency = builder.completedTxnConcurrency;
         readResolverQueueSize = builder.readResolverQueueSize;
@@ -918,26 +1002,32 @@ public final class SConfigurationImpl implements SConfiguration {
         splitBlockSize = builder.splitBlockSize;
         regionMaxFileSize = builder.regionMaxFileSize;
         tableSplitSleepInterval = builder.tableSplitSleepInterval;
-        splitsPerTableMin = builder.splitsPerTableMin;
+        splitsPerRegionMin = builder.splitsPerRegionMin;
         regionServerHandlerCount = builder.regionServerHandlerCount;
         timestampBlockSize = builder.timestampBlockSize;
         regionLoadUpdateInterval = builder.regionLoadUpdateInterval;
         transactionsWatcherUpdateInterval = builder.transactionsWatcherUpdateInterval;
         backupPath = builder.backupPath;
+        replicationPath = builder.replicationPath;
         backupParallelism = builder.backupParallelism;
         backupKeepAliveInterval = builder.backupKeepAliveInterval;
         backupTimeout = builder.backupTimeout;
         backupMaxBandwidthMB = builder.backupMaxBandwidthMB;
         backupUseDistcp = builder.backupUseDistcp;
         backupIOBufferSize = builder.backupIOBufferSize;
+        replicationEnabled = builder.replicationEnabled;
         replicationSnapshotInterval = builder.replicationSnapshotInterval;
-        replicationSinkPort = builder.replicationSinkPort;
         replicationProgressUpdateInterval = builder.replicationProgressUpdateInterval;
+        replicationMonitorPath = builder.replicationMonitorPath;
+        replicationMonitorQuorum = builder.replicationMonitorQuorum;
+        replicationMonitorInterval = builder.replicationMonitorInterval;
+        replicationHealthcheckScript = builder.replicationHealthcheckScript;
         compressionAlgorithm = builder.compressionAlgorithm;
         namespace = builder.namespace;
         spliceRootPath = builder.spliceRootPath;
         hbaseSecurityAuthorization = builder.hbaseSecurityAuthorization;
         hbaseSecurityAuthentication = builder.hbaseSecurityAuthentication;
+        kafkaBootstrapServers = builder.kafkaBootstrapServers;
         debugDumpBindTree = builder.debugDumpBindTree;
         debugDumpClassFile = builder.debugDumpClassFile;
         debugDumpOptimizedTree = builder.debugDumpOptimizedTree;
@@ -945,6 +1035,7 @@ public final class SConfigurationImpl implements SConfiguration {
         ignoreSavePoints = builder.ignoreSavePoints;
         upgradeForced = builder.upgradeForced;
         importMaxQuotedColumnLines = builder.importMaxQuotedColumnLines;
+        importCsvScanLimit = builder.importCsvScanLimit;
         indexBatchSize = builder.indexBatchSize;
         indexLookupBlocks = builder.indexLookupBlocks;
         kryoPoolSize = builder.kryoPoolSize;
@@ -978,37 +1069,43 @@ public final class SConfigurationImpl implements SConfiguration {
         startupLockWaitPeriod = builder.startupLockWaitPeriod;
         threadKeepaliveTime = builder.threadKeepaliveTime;
         indexFetchSampleSize = builder.indexFetchSampleSize;
-        batchOnceBatchSize = builder.batchOnceBatchSize;
         sparkIoCompressionCodec = builder.sparkIoCompressionCodec;
         olapClientWaitTime = builder.olapClientWaitTime;
         olapClientTickTime = builder.olapClientTickTime;
         olapServerBindPort = builder.olapServerBindPort;
         olapServerStagingDir = builder.olapServerStagingDir;
         olapServerExternal = builder.olapServerExternal;
+        olapServerMaxRetries = builder.olapServerMaxRetries;
         olapServerThreads = builder.olapServerThreads;
         olapServerTickLimit = builder.olapServerTickLimit;
         olapServerSubmitAttempts = builder.olapServerSubmitAttempts;
         olapServerMemory = builder.olapServerMemory;
         olapServerMemoryOverhead = builder.olapServerMemoryOverhead;
         olapServerVirtualCores = builder.olapServerVirtualCores;
+        olapServerKeepAliveTimeout = builder.olapServerKeepAliveTimeout;
+        olapServerMode = builder.olapServerMode;
         olapClientRetries = builder.olapClientRetries;
         olapShufflePartitions = builder.olapShufflePartitions;
+        sparkAccumulatorsEnabled = builder.sparkAccumulatorsEnabled;
         sparkResultStreamingBatches = builder.sparkResultStreamingBatches;
         sparkResultStreamingBatchSize = builder.sparkResultStreamingBatchSize;
-        compactionReservedSlots = builder.compactionReservedSlots;
+        sparkSlowResultStreamingBatches = builder.sparkSlowResultStreamingBatches;
+        sparkSlowResultStreamingBatchSize = builder.sparkSlowResultStreamingBatchSize;
         olapCompactionMaximumWait = builder.olapCompactionMaximumWait;
         olapCompactionMaximumConcurrent = builder.olapCompactionMaximumConcurrent;
         olapCompactionResolutionShare = builder.olapCompactionResolutionShare;
         flushResolutionShare = builder.flushResolutionShare;
         olapCompactionResolutionBufferSize = builder.olapCompactionResolutionBufferSize;
+        localCompactionResolutionBufferSize = builder.localCompactionResolutionBufferSize;
         olapCompactionBlocking = builder.olapCompactionBlocking;
         olapLog4jConfig = builder.olapLog4jConfig;
         olapServerIsolatedRoles = builder.olapServerIsolatedRoles;
         olapServerYarnQueues = builder.olapServerYarnQueues;
         olapServerIsolatedCompaction = builder.olapServerIsolatedCompaction;
         olapServerIsolatedCompactionQueueName = builder.olapServerIsolatedCompactionQueueName;
+        olapCompactionAutomaticallyPurgeDeletedRows = builder.olapCompactionAutomaticallyPurgeDeletedRows;
+        olapCompactionAutomaticallyPurgeOldUpdates = builder.olapCompactionAutomaticallyPurgeOldUpdates;
         resolutionOnFlushes = builder.resolutionOnFlushes;
-        reservedSlotsTimeout = builder.reservedSlotsTimeout;
         storageFactoryHome = builder.storageFactoryHome;
         nestedLoopJoinBatchSize = builder.nestedLoopJoinBatchSize;
         controlExecutionRowLimit = builder.controlExecutionRowLimit;
@@ -1058,11 +1155,6 @@ public final class SConfigurationImpl implements SConfiguration {
     }
 
     @Override
-    public int getCompactionReservedSlots() {
-        return compactionReservedSlots;
-    }
-
-    @Override
     public int getOlapCompactionMaximumWait() {
         return olapCompactionMaximumWait;
     }
@@ -1085,6 +1177,11 @@ public final class SConfigurationImpl implements SConfiguration {
     @Override
     public int getOlapCompactionResolutionBufferSize() {
         return olapCompactionResolutionBufferSize;
+    }
+
+    @Override
+    public int getLocalCompactionResolutionBufferSize() {
+        return localCompactionResolutionBufferSize;
     }
 
     @Override
@@ -1120,11 +1217,6 @@ public final class SConfigurationImpl implements SConfiguration {
     @Override
     public boolean getResolutionOnFlushes() {
         return resolutionOnFlushes;
-    }
-
-    @Override
-    public int getReservedSlotsTimeout() {
-        return reservedSlotsTimeout;
     }
 
     @Override

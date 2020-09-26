@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -533,20 +533,16 @@ public	class DD_Version implements	Formatable
 			//hold on to stale plans.
 			bootingDictionary.clearSPSPlans();
 
-			DD_Version lastRun;
-			
 			if (softUpgradeRun)
 			{
 				// log a version that will cause a minor revision change
 				// for any subsequent re-boot, including an old Cloudscape version
 				fromVersion.minorVersionNumber = 1; // see getJBMSMinorVersionNumber
-				lastRun = fromVersion;
 			}
 			else
 			{
 				// log the new version
-				lastRun = this;
-			
+
 				// and change the in-memory version.
 				fromVersion.majorVersionNumber = majorVersionNumber;
 				fromVersion.minorVersionNumber = minorVersionNumber;
@@ -564,19 +560,6 @@ public	class DD_Version implements	Formatable
 			bootingDictionary.setReadOnlyUpgrade();
 		}
 
-	}
-	
-	/**
- 	 * Make a catalog.
-	 *	@param	tc	TransactionController
-	 *	@exception StandardException  Standard Derby error policy.
-	 */
-	protected void makeSystemCatalog(TransactionController tc,
-									 TabInfoImpl ti)
-		throws StandardException
-	{
-		SchemaDescriptor sd = bootingDictionary.getSystemSchemaDescriptor();
-		bootingDictionary.makeCatalog(ti,sd,tc);
 	}
 
 	/**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -44,7 +44,7 @@ public class ZkTimestampBlockManager implements TimestampBlockManager{
     }
 
 
-    public void reserveNextBlock(long nextMax) throws TimestampIOException{
+    public void persistMaxTimestamp(long nextMax) throws TimestampIOException{
         byte[] data = Bytes.toBytes(nextMax);
         try {
             rzk.setData(blockNode, data, -1 /* version */); // durably reserve the next block

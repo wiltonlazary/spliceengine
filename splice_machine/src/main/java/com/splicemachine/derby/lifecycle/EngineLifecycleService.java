@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -70,11 +70,13 @@ public class EngineLifecycleService implements DatabaseLifecycleService{
     private ManifestReader manifestReader;
     private Logging logging;
     private SpliceDatabase db;
+    private boolean isRegionServer;
 
-    public EngineLifecycleService(DistributedDerbyStartup startup,SConfiguration configuration,boolean isMaster){
+    public EngineLifecycleService(DistributedDerbyStartup startup,SConfiguration configuration,boolean isMaster, boolean isRegionServer){
         this.startup=startup;
         this.configuration=configuration;
         this.isMaster = isMaster;
+        this.isRegionServer = isRegionServer;
         dbProperties.put(EmbedConnection.INTERNAL_CONNECTION,"true");
     }
 
@@ -95,6 +97,7 @@ public class EngineLifecycleService implements DatabaseLifecycleService{
         // External connections to Derby are created later when the Derby network server is started.
         EmbedConnectionMaker maker = new EmbedConnectionMaker();
         toUpgrade.set(isMaster);
+        dbProperties.put("isHBaseJVM", isRegionServer||isMaster?"true":"false");
         if(startup.connectAsFirstTime()){
             isCreate.set(Boolean.TRUE);
             internalConnection=maker.createFirstNew(configuration,dbProperties);

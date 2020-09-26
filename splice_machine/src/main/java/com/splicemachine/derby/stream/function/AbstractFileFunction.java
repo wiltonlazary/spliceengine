@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -20,10 +20,7 @@ import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.io.ArrayUtil;
 import com.splicemachine.db.iapi.services.io.StoredFormatIds;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
-import com.splicemachine.db.iapi.types.DataTypeDescriptor;
-import com.splicemachine.db.iapi.types.DataValueDescriptor;
-import com.splicemachine.db.iapi.types.DateTimeDataValue;
-import com.splicemachine.db.iapi.types.SQLTimestamp;
+import com.splicemachine.db.iapi.types.*;
 import com.splicemachine.db.shared.common.reference.SQLState;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.InsertOperation;
@@ -245,6 +242,7 @@ public abstract class AbstractFileFunction<I> extends SpliceFlatMapFunction<Spli
                     case StoredFormatIds.SQL_CHAR_ID:
                     case StoredFormatIds.SQL_VARCHAR_ID:
                     case StoredFormatIds.SQL_CLOB_ID:
+                    case StoredFormatIds.SQL_DECIMAL_ID:
                         dvd.setValue(value);
                         //normalize the char type
                         if(dataTypeDescriptors != null && !dvd.isNull()){

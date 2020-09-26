@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -33,6 +33,7 @@ package com.splicemachine.db.impl.sql.execute;
 
 import com.splicemachine.db.catalog.UUID;
 import com.splicemachine.db.iapi.error.StandardException;
+import com.splicemachine.db.iapi.jdbc.ConnectionContext;
 import com.splicemachine.db.iapi.reference.EngineType;
 import com.splicemachine.db.iapi.services.context.ContextManager;
 import com.splicemachine.db.iapi.services.io.FormatableBitSet;
@@ -259,35 +260,42 @@ public abstract class GenericExecutionFactory implements ModuleControl, ModuleSu
      *
      * @throws StandardException Thrown on error
      */
-    public TriggerExecutionContext getTriggerExecutionContext(String statementText,
+    public TriggerExecutionContext getTriggerExecutionContext(ConnectionContext cc,
+                                                              String statementText,
                                                               int[] changedColIds,
                                                               String[] changedColNames,
                                                               UUID targetTableId,
                                                               String targetTableName,
                                                               Vector<AutoincrementCounter> aiCounters) throws StandardException {
-        return new TriggerExecutionContext(statementText,
+        return new TriggerExecutionContext(cc,
+                statementText,
                 changedColIds,
                 changedColNames,
                 targetTableId,
                 targetTableName,
                 aiCounters,
-                null);
+                null,
+                false);
     }
 
-    public TriggerExecutionContext getTriggerExecutionContext(String statementText,
+    public TriggerExecutionContext getTriggerExecutionContext(ConnectionContext cc,
+                                                              String statementText,
                                                               int[] changedColIds,
                                                               String[] changedColNames,
                                                               UUID targetTableId,
                                                               String targetTableName,
                                                               Vector<AutoincrementCounter> aiCounters,
-                                                              FormatableBitSet heapList) throws StandardException {
-        return new TriggerExecutionContext(statementText,
+                                                              FormatableBitSet heapList,
+                                                              boolean fromSparkExecution) throws StandardException {
+        return new TriggerExecutionContext(cc,
+                statementText,
                 changedColIds,
                 changedColNames,
                 targetTableId,
                 targetTableName,
                 aiCounters,
-                heapList);
+                heapList,
+                fromSparkExecution);
     }
     /*
         Old RowFactory interface

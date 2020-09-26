@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -71,6 +71,24 @@ public class SpliceDateFunctionsTest {
         c.add(Calendar.MONTH, 2);
         Date s = new Date(c.getTime().getTime());
         assertEquals(SpliceDateFunctions.ADD_MONTHS(t, 2), s);
+    }
+
+    @Test
+    public void testAddDays() {
+        Calendar c = Calendar.getInstance();
+        Date t = new Date(c.getTime().getTime());
+        c.add(Calendar.DAY_OF_MONTH, 2);
+        Date s = new Date(c.getTime().getTime());
+        assertEquals(SpliceDateFunctions.ADD_DAYS(t, 2), s);
+    }
+
+    @Test
+    public void testAddYears() {
+        Calendar c = Calendar.getInstance();
+        Date t = new Date(c.getTime().getTime());
+        c.add(Calendar.YEAR, 2);
+        Date s = new Date(c.getTime().getTime());
+        assertEquals(SpliceDateFunctions.ADD_YEARS(t, 2), s);
     }
 
     @Test

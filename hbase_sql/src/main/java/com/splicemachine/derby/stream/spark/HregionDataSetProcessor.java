@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -33,8 +33,10 @@ import com.splicemachine.si.api.server.Transactor;
 import com.splicemachine.si.api.txn.TxnSupplier;
 import com.splicemachine.si.impl.driver.SIDriver;
 import com.splicemachine.storage.*;
+import com.splicemachine.storage.SplitRegionScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.regionserver.HBasePlatformUtils;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.log4j.Logger;
 import java.io.IOException;
@@ -80,8 +82,8 @@ public class HregionDataSetProcessor extends ControlDataSetProcessor {
                         }
                     });
 
-
-                    long conglomId = Long.parseLong(hregion.getTableDesc().getTableName().getQualifierAsString());
+                    String tableName = hregion.getTableDescriptor().getTableName().getQualifierAsString();
+                    long conglomId = Long.parseLong(tableName);
                     TransactionalRegion region=SIDriver.driver().transactionalPartition(conglomId,new RegionPartition(hregion));
                     this.region(region)
                             .template(template)

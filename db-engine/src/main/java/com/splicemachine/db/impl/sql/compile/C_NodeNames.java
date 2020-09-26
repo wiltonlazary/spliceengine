@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -47,97 +47,97 @@ package com.splicemachine.db.impl.sql.compile;
 public interface C_NodeNames
 {
 
-	// The names are in alphabetic order.
-	//
+    // The names are in alphabetic order.
+    //
     // WARNING: WHEN ADDING NODE TYPES HERE, YOU MUST ALSO ADD
     // THEM TO tools/jar/DBMSnodes.properties
 
-	String AGGREGATE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.AggregateNode";
-	String ALL_RESULT_COLUMN_NAME = "com.splicemachine.db.impl.sql.compile.AllResultColumn";
+    String AGGREGATE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.AggregateNode";
+    String ALL_RESULT_COLUMN_NAME = "com.splicemachine.db.impl.sql.compile.AllResultColumn";
 
-	String ALTER_TABLE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.AlterTableNode";
+    String ALTER_TABLE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.AlterTableNode";
 
-	String AND_NODE_NAME = "com.splicemachine.db.impl.sql.compile.AndNode";
+    String AND_NODE_NAME = "com.splicemachine.db.impl.sql.compile.AndNode";
 
-	String BASE_COLUMN_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BaseColumnNode";
+    String BASE_COLUMN_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BaseColumnNode";
 
-	String BETWEEN_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BetweenOperatorNode";
+    String BETWEEN_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BetweenOperatorNode";
 
-	String BINARY_ARITHMETIC_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BinaryArithmeticOperatorNode";
+    String BINARY_ARITHMETIC_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BinaryArithmeticOperatorNode";
 
-	String BINARY_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BinaryOperatorNode";
+    String BINARY_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BinaryOperatorNode";
 
-	String BINARY_RELATIONAL_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BinaryRelationalOperatorNode";
+    String BINARY_RELATIONAL_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BinaryRelationalOperatorNode";
 
-	String BIT_CONSTANT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BitConstantNode";
+    String BIT_CONSTANT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BitConstantNode";
 
-	String BOOLEAN_CONSTANT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BooleanConstantNode";
-	
-	String LIST_VALUE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ListValueNode";
+    String BOOLEAN_CONSTANT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BooleanConstantNode";
 
-	String CALL_STATEMENT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CallStatementNode";
+    String LIST_VALUE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ListValueNode";
 
-	String CAST_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CastNode";
+    String CALL_STATEMENT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CallStatementNode";
 
-	String CHAR_CONSTANT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CharConstantNode";
+    String CAST_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CastNode";
 
-	String COALESCE_FUNCTION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CoalesceFunctionNode";
+    String CHAR_CONSTANT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CharConstantNode";
 
-	String COLUMN_DEFINITION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ColumnDefinitionNode";
+    String COALESCE_FUNCTION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CoalesceFunctionNode";
 
-	String COLUMN_REFERENCE_NAME = "com.splicemachine.db.impl.sql.compile.ColumnReference";
+    String COLUMN_DEFINITION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ColumnDefinitionNode";
 
-	String CONCATENATION_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ConcatenationOperatorNode";
+    String COLUMN_REFERENCE_NAME = "com.splicemachine.db.impl.sql.compile.ColumnReference";
 
-	String CONDITIONAL_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ConditionalNode";
+    String CONCATENATION_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ConcatenationOperatorNode";
 
-	String CONSTRAINT_DEFINITION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ConstraintDefinitionNode";
+    String CONDITIONAL_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ConditionalNode";
 
-	String CREATE_ALIAS_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateAliasNode";
+    String CONSTRAINT_DEFINITION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ConstraintDefinitionNode";
 
-	String CREATE_ROLE_NODE_NAME =
-		"com.splicemachine.db.impl.sql.compile.CreateRoleNode";
+    String CREATE_ALIAS_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateAliasNode";
 
-	String CREATE_INDEX_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateIndexNode";
+    String CREATE_ROLE_NODE_NAME =
+        "com.splicemachine.db.impl.sql.compile.CreateRoleNode";
 
-	String CREATE_SCHEMA_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateSchemaNode";
+    String CREATE_INDEX_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateIndexNode";
+
+    String CREATE_SCHEMA_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateSchemaNode";
 
     String CREATE_SEQUENCE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateSequenceNode";
 
     String CREATE_TABLE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateTableNode";
 
-	String CREATE_TRIGGER_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateTriggerNode";
+    String CREATE_TRIGGER_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateTriggerNode";
 
-	String CREATE_VIEW_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateViewNode";
+    String CREATE_VIEW_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreateViewNode";
 
-	String CURRENT_DATETIME_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CurrentDatetimeOperatorNode";
+    String CURRENT_DATETIME_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CurrentDatetimeOperatorNode";
 
-	String CURRENT_OF_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CurrentOfNode";
+    String CURRENT_OF_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CurrentOfNode";
 
-	String CURRENT_ROW_LOCATION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CurrentRowLocationNode";
+    String CURRENT_ROW_LOCATION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CurrentRowLocationNode";
 
-	String SPECIAL_FUNCTION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.SpecialFunctionNode";
+    String SPECIAL_FUNCTION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.SpecialFunctionNode";
 
-	String CURSOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CursorNode";
+    String CURSOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CursorNode";
 
-	String DB2_LENGTH_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DB2LengthOperatorNode";
+    String DB2_LENGTH_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DB2LengthOperatorNode";
 
-	String DML_MOD_STATEMENT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DMLModStatementNode";
+    String DML_MOD_STATEMENT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DMLModStatementNode";
 
-	String DEFAULT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DefaultNode";
+    String DEFAULT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DefaultNode";
 
-	String DELETE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DeleteNode";
+    String DELETE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DeleteNode";
 
-	String DISTINCT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DistinctNode";
+    String DISTINCT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DistinctNode";
 
-	String DROP_ALIAS_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DropAliasNode";
+    String DROP_ALIAS_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DropAliasNode";
 
-	String DROP_INDEX_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DropIndexNode";
+    String DROP_INDEX_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DropIndexNode";
 
-	String DROP_ROLE_NODE_NAME =
-		"com.splicemachine.db.impl.sql.compile.DropRoleNode";
+    String DROP_ROLE_NODE_NAME =
+        "com.splicemachine.db.impl.sql.compile.DropRoleNode";
 
-	String DROP_SCHEMA_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DropSchemaNode";
+    String DROP_SCHEMA_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DropSchemaNode";
 
     String DROP_SEQUENCE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DropSequenceNode";
 
@@ -145,25 +145,25 @@ public interface C_NodeNames
 
 	String DROP_TRIGGER_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DropTriggerNode";
 
-	String DROP_VIEW_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DropViewNode";
+    String DROP_VIEW_NODE_NAME = "com.splicemachine.db.impl.sql.compile.DropViewNode";
 
-	String EXEC_SPS_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ExecSPSNode";
+    String EXEC_SPS_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ExecSPSNode";
 
-	String EXTRACT_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ExtractOperatorNode";
+    String EXTRACT_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ExtractOperatorNode";
 
-	String ARRAY_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ArrayOperatorNode";
+    String ARRAY_OPERATOR_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ArrayOperatorNode";
 
-	String ARRAY_CONSTANT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ArrayConstantNode";
+    String ARRAY_CONSTANT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ArrayConstantNode";
 
-	String FK_CONSTRAINT_DEFINITION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.FKConstraintDefinitionNode";
+    String FK_CONSTRAINT_DEFINITION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.FKConstraintDefinitionNode";
 
-	String FROM_BASE_TABLE_NAME = "com.splicemachine.db.impl.sql.compile.FromBaseTable";
+    String FROM_BASE_TABLE_NAME = "com.splicemachine.db.impl.sql.compile.FromBaseTable";
 
-	String FROM_LIST_NAME = "com.splicemachine.db.impl.sql.compile.FromList";
+    String FROM_LIST_NAME = "com.splicemachine.db.impl.sql.compile.FromList";
 
-	String FROM_SUBQUERY_NAME = "com.splicemachine.db.impl.sql.compile.FromSubquery";
+    String FROM_SUBQUERY_NAME = "com.splicemachine.db.impl.sql.compile.FromSubquery";
 
-	String FROM_VTI_NAME = "com.splicemachine.db.impl.sql.compile.FromVTI";
+    String FROM_VTI_NAME = "com.splicemachine.db.impl.sql.compile.FromVTI";
 
 	String GENERATION_CLAUSE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.GenerationClauseNode";
 
@@ -253,6 +253,8 @@ public interface C_NodeNames
 
 	String ROW_RESULT_SET_NODE_NAME = "com.splicemachine.db.impl.sql.compile.RowResultSetNode";
 
+	String SCALAR_MIN_MAX_FUNCTION_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ScalarMinMaxFunctionNode";
+
 	String SQL_BOOLEAN_CONSTANT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.SQLBooleanConstantNode";
 
 	String SQL_TO_JAVA_VALUE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.SQLToJavaValueNode";
@@ -276,7 +278,9 @@ public interface C_NodeNames
 
 	String STATIC_METHOD_CALL_NODE_NAME = "com.splicemachine.db.impl.sql.compile.StaticMethodCallNode";
 
-	String SUBQUERY_LIST_NAME = "com.splicemachine.db.impl.sql.compile.SubqueryList";
+    String STRING_AGGREGATE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.StringAggregateNode";
+
+    String SUBQUERY_LIST_NAME = "com.splicemachine.db.impl.sql.compile.SubqueryList";
 
 	String SUBQUERY_NODE_NAME = "com.splicemachine.db.impl.sql.compile.SubqueryNode";
 
@@ -334,13 +338,13 @@ public interface C_NodeNames
 
     String EXPLAIN_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ExplainNode";
 
-	String EXPORT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ExportNode";
-	
-	String BINARY_EXPORT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BinaryExportNode";
+    String EXPORT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ExportNode";
+
+    String BINARY_EXPORT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BinaryExportNode";
+
+	String KAFKA_EXPORT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.KafkaExportNode";
 
     String TRUNC_NODE_NAME = "com.splicemachine.db.impl.sql.compile.TruncateOperatorNode";
-
-    String BATCH_ONCE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.BatchOnceNode";
 
 	String CREATE_PIN_NODE_NAME = "com.splicemachine.db.impl.sql.compile.CreatePinNode";
 
@@ -352,11 +356,23 @@ public interface C_NodeNames
 
 	String SELF_REFERENCE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.SelfReferenceNode";
 
-	String SIGNAL_NAME = "com.splicemachine.db.impl.sql.compile.SignalNode";
+    String SIGNAL_NAME = "com.splicemachine.db.impl.sql.compile.SignalNode";
 
-	String SET_NAME = "com.splicemachine.db.impl.sql.compile.SetNode";
+    String SET_NAME = "com.splicemachine.db.impl.sql.compile.SetNode";
 
-	String FULL_OUTER_JOIN_NODE_NAME = "com.splicemachine.db.impl.sql.compile.FullOuterJoinNode";
+    String FULL_OUTER_JOIN_NODE_NAME = "com.splicemachine.db.impl.sql.compile.FullOuterJoinNode";
+
+    String TIME_SPAN_NODE_NAME = "com.splicemachine.db.impl.sql.compile.TimeSpanNode";
+
+    String EMPTY_DEFAULT_CONSTANT_NODE = "com.splicemachine.db.impl.sql.compile.EmptyDefaultConstantNode";
+
+    String VALUE_TUPLE_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ValueTupleNode";
+
+    String STATEMENT_LIST_NODE_NAME = "com.splicemachine.db.impl.sql.compile.StatementListNode";
+
+    String TO_INSTANT_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ToInstantOperatorNode";
+
+	String TO_HBASE_ESCAPED_NODE_NAME = "com.splicemachine.db.impl.sql.compile.ToHbaseEscapedOperatorNode";
 
 	// WARNING: WHEN ADDING NODE TYPES HERE, YOU MUST ALSO ADD
     // THEM TO tools/jar/DBMSnodes.properties

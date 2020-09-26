@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -1096,7 +1096,6 @@ public class DDLUtils {
             // remove role grant cache
             String roleName = change.getGrantRevokeRole().getRoleName();
             String granteeName = change.getGrantRevokeRole().getGranteeName();
-            String grantorName = change.getGrantRevokeRole().getGrantorName();
             dd.getDataDictionaryCache().roleGrantCacheRemove(new Pair<>(roleName, granteeName));
         } catch (Exception e) {
             e.printStackTrace();

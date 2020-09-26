@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,8 +14,9 @@
 
 package com.splicemachine.impl;
 
-import org.spark_project.guava.base.Predicate;
-import org.spark_project.guava.collect.Sets;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import splice.com.google.common.base.Predicate;
+import splice.com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
@@ -23,15 +24,16 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.mockito.internal.util.reflection.*;
 import com.splicemachine.hbase.util.IteratorRegionScanner;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.*;
@@ -44,9 +46,10 @@ public class MockRegionUtils{
     private MockRegionUtils(){
     }
 
-    public static HRegion getMockRegion() throws IOException{
+    public static HRegion getMockRegion() throws Exception {
         final Map<byte[], Set<Cell>> rowMap = new TreeMap(Bytes.BYTES_COMPARATOR);
         HRegion fakeRegion=mock(HRegion.class);
+        new FieldSetter(fakeRegion, HRegion.class.getDeclaredField("scannerReadPoints")).set(new ConcurrentHashMap<>());
         HRegionInfo fakeInfo=mock(HRegionInfo.class);
         when(fakeInfo.getStartKey()).thenReturn(HConstants.EMPTY_BYTE_ARRAY);
         when(fakeInfo.getEndKey()).thenReturn(HConstants.EMPTY_BYTE_ARRAY);
@@ -156,7 +159,7 @@ public class MockRegionUtils{
             @Override
             public RegionScanner answer(InvocationOnMock invocationOnMock) throws Throwable{
                 Scan scan=(Scan)invocationOnMock.getArguments()[0];
-                return new IteratorRegionScanner(rowMap.values().iterator(),scan);
+                return new IteratorRegionScanner(fakeRegion, rowMap.values().iterator(),scan);
             }
         });
 

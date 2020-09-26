@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -15,7 +15,7 @@
 package com.splicemachine.tools.version;
 
 import com.splicemachine.access.api.DatabaseVersion;
-import org.spark_project.guava.base.Splitter;
+import splice.com.google.common.base.Splitter;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.regex.Matcher;

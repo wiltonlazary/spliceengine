@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,8 +14,6 @@
 
 package com.splicemachine.derby.impl.sql.execute.operations;
 
-import org.spark_project.guava.collect.Sets;
-import com.splicemachine.derby.test.framework.SpliceWatcher;
 import com.splicemachine.derby.test.framework.SpliceSchemaWatcher;
 import com.splicemachine.derby.test.framework.SpliceWatcher;
 import com.splicemachine.homeless.TestUtils;
@@ -24,6 +22,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
+import splice.com.google.common.collect.Sets;
 
 import java.sql.ResultSet;
 import java.util.List;
@@ -108,4 +107,18 @@ public class AnyOperationIT {
         assertEquals(Sets.newHashSet(false), Sets.newHashSet(resultBooleanList));
     }
 
+    @Test
+    public void testNonCorrelatedSubqueryWithExcept() throws Exception {
+        String sqlText = "select * from t2 where a2 in (\n" +
+                "select a1 from t1\n" +
+                "except \n" +
+                "values 2)";
+        String expected = "A2 |B2 |\n" +
+                "--------\n" +
+                " 1 | 1 |";
+        try (ResultSet rs = methodWatcher.executeQuery(sqlText)) {
+            String resultString = TestUtils.FormattedResult.ResultFactory.toString(rs);
+            assertEquals("\n" + sqlText + "\n" + "expected result: " + expected + "\n, actual result: " + resultString, expected, resultString);
+        }
+    }
 }

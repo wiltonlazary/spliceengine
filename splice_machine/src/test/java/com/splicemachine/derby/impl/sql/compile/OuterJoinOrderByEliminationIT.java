@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -17,13 +17,15 @@ import com.splicemachine.derby.test.framework.SpliceSchemaWatcher;
 import com.splicemachine.derby.test.framework.SpliceUnitTest;
 import com.splicemachine.derby.test.framework.SpliceWatcher;
 import com.splicemachine.homeless.TestUtils;
+import com.splicemachine.test.LongerThanTwoMinutes;
 import com.splicemachine.test_tools.TableCreator;
 import org.junit.*;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -38,6 +40,7 @@ import static org.junit.Assert.assertEquals;
  * Created by yxia on 12/15/17.
  */
 @RunWith(Parameterized.class)
+@Category(LongerThanTwoMinutes.class)
 public class OuterJoinOrderByEliminationIT extends SpliceUnitTest {
     public static final String CLASS_NAME = OuterJoinOrderByEliminationIT.class.getSimpleName().toUpperCase();
     protected static SpliceWatcher spliceClassWatcher = new SpliceWatcher(CLASS_NAME);
@@ -259,7 +262,8 @@ public class OuterJoinOrderByEliminationIT extends SpliceUnitTest {
         rs.close();
 
         /* Q4 inner join inside the outer table of the left join */
-        sqlText = format("select a1,b1,a2,a3 from t1 --splice-properties index=null \n" +
+        sqlText = format("select a1,b1,a2,a3 from --splice-properties joinOrder=fixed\n" +
+                        "t1 --splice-properties index=null \n" +
                          "inner join t3 --splice-properties index=null, joinStrategy=%s\n on a1=a3 " +
                         "left join t2 --splice-properties index=null, joinStrategy=%s, useSpark=%s\n " +
                         "on a1=a2 order by a1 {limit 20}",

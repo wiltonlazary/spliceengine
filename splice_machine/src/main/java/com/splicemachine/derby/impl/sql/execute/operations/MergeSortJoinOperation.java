@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -27,6 +27,7 @@ import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.loader.GeneratedMethod;
 import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.log4j.Logger;
 import java.io.IOException;
 import java.io.ObjectInput;
@@ -122,14 +123,14 @@ public class MergeSortJoinOperation extends JoinOperation {
                                   GeneratedMethod restriction,
                                   int resultSetNumber,
                                   boolean oneRowRightSide,
-                                  boolean notExistsRightSide,
+                                  byte semiJoinType,
                                   boolean rightFromSSQ,
                                   double optimizerEstimatedRowCount,
                                   double optimizerEstimatedCost,
                                   String userSuppliedOptimizerOverrides,
                                   String sparkExpressionTreeAsString) throws StandardException {
         super(leftResultSet, leftNumCols, rightResultSet, rightNumCols,
-                activation, restriction, resultSetNumber, oneRowRightSide, notExistsRightSide, rightFromSSQ,
+                activation, restriction, resultSetNumber, oneRowRightSide, semiJoinType, rightFromSSQ,
                 optimizerEstimatedRowCount, optimizerEstimatedCost, userSuppliedOptimizerOverrides,
                 sparkExpressionTreeAsString);
         SpliceLogUtils.trace(LOG, "instantiate");
@@ -180,17 +181,25 @@ public class MergeSortJoinOperation extends JoinOperation {
             throw new IllegalStateException("Operation is not open");
 
         OperationContext<JoinOperation> operationContext = dsp.<JoinOperation>createOperationContext(this);
+        dsp.incrementOpDepth();
+        boolean useNativeSparkJoin = (dsp.getType().equals(DataSetProcessor.Type.SPARK)   &&
+                                      (restriction == null || hasSparkJoinPredicate()) &&
+                                      !rightFromSSQ && !containsUnsafeSQLRealComparison());
+
+        if (useNativeSparkJoin)
+            dsp.finalizeTempOperationStrings();
 
         // Prepare Left
-
         DataSet<ExecRow> leftDataSet1 = leftResultSet.getDataSet(dsp)
                 .map(new CloneFunction<>(operationContext));
 
        // operationContext.pushScopeForOp("Prepare Left Side");
         DataSet<ExecRow> leftDataSet2 =
             leftDataSet1.map(new CountJoinedLeftFunction(operationContext));
-        if (joinType == JoinNode.INNERJOIN && !notExistsRightSide)
+        if (joinType == JoinNode.INNERJOIN && !isAntiJoin())
             leftDataSet2 = leftDataSet2.filter(new InnerJoinNullFilterFunction(operationContext,leftHashKeys));
+
+        dsp.finalizeTempOperationStrings();
 
         // Prepare Right
         DataSet<ExecRow> rightDataSet1 = rightResultSet.getDataSet(dsp).map(new CloneFunction<>(operationContext));
@@ -200,26 +209,27 @@ public class MergeSortJoinOperation extends JoinOperation {
         if (joinType != JoinNode.FULLOUTERJOIN)
             rightDataSet2 = rightDataSet2.filter(new InnerJoinNullFilterFunction(operationContext,rightHashKeys));
 
+        dsp.decrementOpDepth();
         if (LOG.isDebugEnabled()) {
             SpliceLogUtils.debug(LOG, "getDataSet Performing MergeSortJoin type=%s, antiJoin=%s, hasRestriction=%s",
-                    getJoinTypeString(), notExistsRightSide, restriction != null);
+                    getJoinTypeString(), isAntiJoin(), restriction != null);
         }
         rightDataSet1.map(new CountJoinedRightFunction(operationContext));
         DataSet<ExecRow> joined;
-        if (dsp.getType().equals(DataSetProcessor.Type.SPARK)   &&
-            (restriction == null || hasSparkJoinPredicate()) &&
-            !rightFromSSQ && !containsUnsafeSQLRealComparison()){
+
+        if (useNativeSparkJoin){
             if (joinType == JoinNode.LEFTOUTERJOIN)
                 joined = leftDataSet2.join(operationContext,rightDataSet2, DataSet.JoinType.LEFTOUTER,false);
             else if (joinType == JoinNode.FULLOUTERJOIN)
                 joined = leftDataSet2.join(operationContext,rightDataSet2, DataSet.JoinType.FULLOUTER,false);
-            else if (notExistsRightSide)
+            else if (isAntiJoin())
                 joined = leftDataSet2.join(operationContext,rightDataSet2, DataSet.JoinType.LEFTANTI,false);
-            else if (isOneRowRightSide())
+            else if (isInclusionJoin())
                 joined = leftDataSet2.join(operationContext,rightDataSet2, DataSet.JoinType.LEFTSEMI,false);
             else
                 joined = leftDataSet2.join(operationContext,rightDataSet2, DataSet.JoinType.INNER,false);
         } else{
+
             PairDataSet<ExecRow, ExecRow> rightDataSet =
                     rightDataSet2.keyBy(new KeyerFunction(operationContext, rightHashKeys));
 //            operationContext.popScope();
@@ -228,8 +238,9 @@ public class MergeSortJoinOperation extends JoinOperation {
 
             if (LOG.isDebugEnabled())
                 SpliceLogUtils.debug(LOG, "getDataSet Performing MergeSortJoin type=%s, antiJoin=%s, rightFromSSQ=%s, hasRestriction=%s",
-                        getJoinTypeString(), notExistsRightSide, rightFromSSQ, restriction != null);
+                        getJoinTypeString(), isAntiJoin(), rightFromSSQ, restriction != null);
             joined = getJoinedDataset(operationContext, leftDataSet, rightDataSet);
+            handleSparkExplain(joined, leftDataSet2, rightDataSet2, dsp);
         }
             return joined;
                     //.map(new CountProducedFunction(operationContext), true);
@@ -251,7 +262,7 @@ public class MergeSortJoinOperation extends JoinOperation {
                     .map(new SetCurrentLocatedRowFunction<>(operationContext));
         }
         else {
-            if (this.notExistsRightSide) { // antijoin
+            if (isAntiJoin()) { // antijoin
                 if (restriction !=null) { // with restriction
                     return leftDataSet.cogroup(rightDataSet, "Cogroup Left and Right", operationContext).values(operationContext)
                         .flatMap(new CogroupAntiJoinRestrictionFlatMapFunction(operationContext));
@@ -260,6 +271,7 @@ public class MergeSortJoinOperation extends JoinOperation {
                             .map(new AntiJoinFunction(operationContext));
                 }
             } else { // Inner Join
+                // if inclusion join or regular inner join with one matching row on right
                 if (isOneRowRightSide()) {
                     return leftDataSet.cogroup(rightDataSet, "Cogroup Left and Right", operationContext).values(operationContext)
                         .flatMap(new CogroupInnerJoinRestrictionFlatMapFunction(operationContext));
@@ -276,11 +288,13 @@ public class MergeSortJoinOperation extends JoinOperation {
         }
     }
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP",justification = "Intentional")
     @Override
     public int[] getLeftHashKeys() {
         return leftHashKeys;
     }
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP",justification = "Intentional")
     @Override
     public int[] getRightHashKeys() {
         return rightHashKeys;

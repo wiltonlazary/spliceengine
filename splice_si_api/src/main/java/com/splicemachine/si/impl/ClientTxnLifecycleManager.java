@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -16,6 +16,9 @@ package com.splicemachine.si.impl;
 
 import com.carrotsearch.hppc.LongHashSet;
 import com.splicemachine.annotations.ThreadSafe;
+import com.splicemachine.db.iapi.error.StandardException;
+import com.splicemachine.db.iapi.reference.SQLState;
+import com.splicemachine.primitives.Bytes;
 import com.splicemachine.si.api.data.ExceptionFactory;
 import com.splicemachine.si.api.txn.*;
 import com.splicemachine.si.constants.SIConstants;
@@ -24,6 +27,7 @@ import com.splicemachine.si.impl.txn.WritableTxn;
 import com.splicemachine.timestamp.api.TimestampSource;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 
 /**
  * Represents a Client Transaction Lifecycle Manager.
@@ -43,6 +47,8 @@ public class ClientTxnLifecycleManager implements TxnLifecycleManager{
     @ThreadSafe private final ExceptionFactory exceptionFactory;
 
     private volatile boolean restoreMode=false;
+
+    private volatile String replicationRole = SIConstants.REPLICATION_ROLE_NONE;
 
     public ClientTxnLifecycleManager(TimestampSource timestampSource,
                                      ExceptionFactory exceptionFactory){
@@ -131,7 +137,7 @@ public class ClientTxnLifecycleManager implements TxnLifecycleManager{
                 if (subId <= SIConstants.SUBTRANSANCTION_ID_MASK)
                     return createWritableTransaction(parent.getBeginTimestamp(), subId, parent, isolationLevel, additive, parentTxn, destinationTable, null);
             }
-            long timestamp = timestampSource.nextTimestamp();
+            long timestamp = getTimestamp();
             return createWritableTransaction(timestamp, 0, null, isolationLevel, additive, parentTxn, destinationTable, taskId);
         }else
             return createReadableTransaction(isolationLevel,additive,parentTxn);
@@ -187,7 +193,21 @@ public class ClientTxnLifecycleManager implements TxnLifecycleManager{
     }
 
     @Override
+    public void setReplicationRole (String role) {
+        this.replicationRole = role;
+    }
+
+    @Override
+    public String getReplicationRole() {
+        return replicationRole;
+    }
+
+    @Override
     public Txn elevateTransaction(Txn txn,byte[] destinationTable) throws IOException{
+        if (replicationRole.compareToIgnoreCase(SIConstants.REPLICATION_ROLE_REPLICA) == 0 &&
+                Bytes.compareTo(destinationTable, "replication".getBytes(Charset.defaultCharset().name())) != 0) {
+            throw new IOException(StandardException.newException(SQLState.READ_ONLY));
+        }
         if(!txn.allowsWrites()){
             //we've elevated from a read-only to a writable, so make sure that we add
             //it to the keep alive
@@ -241,7 +261,11 @@ public class ClientTxnLifecycleManager implements TxnLifecycleManager{
                                           TxnView parentTxn,
                                           byte[] destinationTable,
                                           TaskId taskId) throws IOException{
-		/*
+		if (restoreMode || replicationRole.compareToIgnoreCase(SIConstants.REPLICATION_ROLE_REPLICA) == 0 &&
+        Bytes.compareTo(destinationTable, "replication".getBytes(Charset.defaultCharset().name())) != 0) {
+            throw new IOException(StandardException.newException(SQLState.READ_ONLY));
+        }
+        /*
 		 * Create a writable transaction directly.
 		 *
 		 * This uses 2 network calls--once to get a beginTimestamp, and then once to record the
@@ -281,7 +305,7 @@ public class ClientTxnLifecycleManager implements TxnLifecycleManager{
 		 *
 		 */
         if(parentTxn.equals(Txn.ROOT_TRANSACTION)){
-            long beginTimestamp=timestampSource.nextTimestamp();
+            long beginTimestamp=getTimestamp();
             Txn newTxn = ReadOnlyTxn.createReadOnlyParentTransaction(beginTimestamp, beginTimestamp, isolationLevel, this, exceptionFactory, additive);
             // keep track of this transaction
             store.registerActiveTransaction(newTxn);
@@ -291,4 +315,12 @@ public class ClientTxnLifecycleManager implements TxnLifecycleManager{
         }
     }
 
+    private long getTimestamp() {
+        if (isRestoreMode())
+            return timestampSource.currentTimestamp();
+        else if (replicationRole.compareToIgnoreCase(SIConstants.REPLICATION_ROLE_REPLICA) == 0)
+            return timestampSource.currentTimestamp();
+        else
+            return timestampSource.nextTimestamp();
+    }
 }

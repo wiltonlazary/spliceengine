@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -15,18 +15,22 @@
 package com.splicemachine.derby.stream.iapi;
 
 import com.splicemachine.db.iapi.error.StandardException;
+import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.store.access.Qualifier;
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
+import com.splicemachine.db.impl.sql.compile.ExplainNode;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
-import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.derby.stream.function.Partitioner;
 import com.splicemachine.derby.utils.marshall.KeyHashDecoder;
+import com.splicemachine.si.api.txn.TxnView;
+import com.splicemachine.system.CsvOptions;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
 import java.io.InputStream;
 import java.util.Iterator;
+import java.util.List;
 
 /**
  * Higher level constructs for getting datasets and manipulating the processing mechanisms.
@@ -44,6 +48,8 @@ public interface DataSetProcessor {
     <V> DataSet<V> getEmpty();
 
     <V> DataSet<V> getEmpty(String name);
+
+    <V> DataSet<V> getEmpty(String name, OperationContext context);
 
     /**
      * Generates a single row dataset from a value.
@@ -178,9 +184,10 @@ public interface DataSetProcessor {
      * Splice Machine implement natively the Spark interface so we use this to the constraint check.
      * @param storedAs
      * @param location
+     * @param csvOptions
      * @return
      */
-    StructType getExternalFileSchema(String storedAs, String location, boolean mergeSchema) throws StandardException;
+    StructType getExternalFileSchema(String storedAs, String location, boolean mergeSchema, CsvOptions csvOptions) throws StandardException;
     /**
      * This is used when someone modify the external table outside of Splice.
      * One need to refresh the schema table if the underlying file have been modify outside Splice because
@@ -231,18 +238,17 @@ public interface DataSetProcessor {
      * Reads Text files given the scan variables.  The qualifiers in conjunctive normal form
      * will be applied in the parquet storage layer.
      *
+     * @param <V>
      * @param op
      * @param location
-     * @param characterDelimiter
-     * @param columnDelimiter
-     * @param baseColumnMap
+     * @param csvOptions
      * @param context
      * @param execRow
-     * @param <V>
+     * @param baseColumnMap
      * @return
      * @throws StandardException
      */
-    <V> DataSet<ExecRow> readTextFile(SpliceOperation op, String location, String characterDelimiter, String columnDelimiter, int[] baseColumnMap,
+    <V> DataSet<ExecRow> readTextFile(SpliceOperation op, String location, CsvOptions csvOptions, int[] baseColumnMap,
                                          OperationContext context, Qualifier[][] qualifiers, DataValueDescriptor probeValue, ExecRow execRow,
                                          boolean useSample, double sampleFraction) throws StandardException;
 
@@ -264,5 +270,24 @@ public interface DataSetProcessor {
 
     Boolean isCached(long conglomerateId) throws StandardException;
 
-    TableChecker getTableChecker(String schemaName, String tableName, DataSet tableDataSet, KeyHashDecoder decoder, ExecRow key);
+    TableChecker getTableChecker(String schemaName, String tableName, DataSet tableDataSet, KeyHashDecoder decoder,
+                                 ExecRow key, TxnView txn, boolean fix, int[] baseColumnMap, boolean isSystemTable);
+
+    // Operations related to spark explain ->
+    boolean isSparkExplain();
+    ExplainNode.SparkExplainKind getSparkExplainKind();
+    void setSparkExplain(ExplainNode.SparkExplainKind newValue);
+    void prependSpliceExplainString(String explainString);
+    void appendSpliceExplainString(String explainString);
+    void prependSparkExplainStrings(List<String> stringsToAdd, boolean firstOperationSource, boolean lastOperationSource);
+    void popSpliceOperation();
+    void finalizeTempOperationStrings();
+    List<String> getNativeSparkExplain();
+    int getOpDepth();
+    void incrementOpDepth();
+    void decrementOpDepth();
+    void resetOpDepth();
+    // <- End operations related to spark explain.
+
+    <V> DataSet<ExecRow> readKafkaTopic(String topicName, OperationContext op) throws StandardException;
 }

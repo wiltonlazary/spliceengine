@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,24 +14,16 @@
 
 package com.splicemachine.lifecycle;
 
-import java.io.IOException;
-import java.io.InterruptedIOException;
-import java.net.SocketTimeoutException;
-import java.util.concurrent.TimeUnit;
-
+import com.splicemachine.access.configuration.SQLConfiguration;
+import com.splicemachine.access.hbase.HBaseConnectionFactory;
+import com.splicemachine.concurrent.Clock;
+import com.splicemachine.derby.lifecycle.DistributedDerbyStartup;
+import com.splicemachine.hbase.SpliceMasterObserver;
+import com.splicemachine.hbase.ZkUtils;
 import com.splicemachine.pipeline.InitializationCompleted;
-import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.HColumnDescriptor;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.MasterNotRunningException;
-import org.apache.hadoop.hbase.PleaseHoldException;
-import org.apache.hadoop.hbase.TableExistsException;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.TableNotEnabledException;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.Connection;
-import org.apache.hadoop.hbase.client.RegionOfflineException;
-import org.apache.hadoop.hbase.client.RetriesExhaustedException;
+import com.splicemachine.si.impl.driver.SIDriver;
+import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.ipc.CallTimeoutException;
 import org.apache.hadoop.hbase.ipc.RemoteWithExtrasException;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -39,13 +31,10 @@ import org.apache.hadoop.ipc.RemoteException;
 import org.apache.log4j.Logger;
 import org.apache.zookeeper.KeeperException;
 
-import com.splicemachine.access.configuration.SQLConfiguration;
-import com.splicemachine.access.hbase.HBaseConnectionFactory;
-import com.splicemachine.concurrent.Clock;
-import com.splicemachine.derby.lifecycle.DistributedDerbyStartup;
-import com.splicemachine.hbase.SpliceMasterObserver;
-import com.splicemachine.hbase.SpliceMetrics;
-import com.splicemachine.hbase.ZkUtils;
+import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.net.SocketTimeoutException;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author Scott Fines
@@ -71,8 +60,12 @@ public class RegionServerLifecycle implements DistributedDerbyStartup{
                 onHold=false;
                 TableName spliceInit = TableName.valueOf(SpliceMasterObserver.INIT_TABLE);
                 try{
-                    HTableDescriptor desc=new HTableDescriptor(spliceInit);
-                    desc.addFamily(new HColumnDescriptor(Bytes.toBytes("FOO")));
+                    TableDescriptor desc = TableDescriptorBuilder
+                            .newBuilder(spliceInit)
+                            .setColumnFamily(
+                                    ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes("FOO")).build()
+                            ).build();
+
                     // Create the special "SPLICE_INIT" table which triggers the creation of the SpliceMasterObserver and ultimately
                     // triggers the creation of the "SPLICE_*" HBase tables.  This is an asynchronous call and so we "loop" via a
                     // "please hold" exception and a recursive call to bootDatabase() along with a sleep.
@@ -91,14 +84,6 @@ public class RegionServerLifecycle implements DistributedDerbyStartup{
                      * When this is returned, it means that a connection to HBase and the creation (or previous existence) of the
                      * "SPLICE_*" tables in HBase has been successful.
                      */
-
-                    /*
-                     * If an upgrade has been forced, we are now finished with it since this bit of code here only runs
-                     * on the region servers and we don't ever run upgrade code on region servers.  Only the master server
-                     * runs upgrade code via the SpliceMasterObserver.  So we mark the flag to false to ensure that the
-                     * region servers don't run the upgrade.
-                     */
-                    SQLConfiguration.upgradeForced = false;
 
                     // Ensure ZK paths exist.
                     try {
@@ -131,7 +116,8 @@ public class RegionServerLifecycle implements DistributedDerbyStartup{
             }while(onHold);
         }
         //register splice metrics
-        new SpliceMetrics();
+        // TODO: reimplement using metric2 framework
+        //new SpliceMetrics();
     }
 
     private boolean causeIsPleaseHold(Throwable e) {

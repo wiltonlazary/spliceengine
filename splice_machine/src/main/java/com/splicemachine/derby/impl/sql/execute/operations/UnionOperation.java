@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -23,7 +23,7 @@ import com.splicemachine.derby.stream.function.SetCurrentLocatedRowFunction;
 import com.splicemachine.derby.stream.iapi.DataSet;
 import com.splicemachine.derby.stream.iapi.DataSetProcessor;
 import com.splicemachine.derby.stream.iapi.OperationContext;
-import org.spark_project.guava.base.Strings;
+import splice.com.google.common.base.Strings;
 
 import java.io.IOException;
 import java.io.ObjectInput;
@@ -169,13 +169,18 @@ public class UnionOperation extends SpliceBaseOperation {
 			operationContext.popScope();
 			return result;
 		} else {
+		        dsp.incrementOpDepth();
+		        dsp.finalizeTempOperationStrings();
 			DataSet<ExecRow> left = leftResultSet.getDataSet(dsp);
+			dsp.finalizeTempOperationStrings();
 			DataSet<ExecRow> right = rightResultSet.getDataSet(dsp);
+		        dsp.decrementOpDepth();
 			operationContext.pushScope();
 			result = left
 					.union(right, operationContext)
 					.map(new SetCurrentLocatedRowFunction<SpliceOperation>(operationContext), true);
 			operationContext.popScope();
+		        handleSparkExplain(result, left, right, dsp);
 		}
 		return result;
     }

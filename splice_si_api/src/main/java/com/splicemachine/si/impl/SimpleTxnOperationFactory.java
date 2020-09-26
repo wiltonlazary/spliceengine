@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -35,6 +35,9 @@ import java.io.ObjectInput;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.function.Function;
 
 import static com.splicemachine.si.constants.SIConstants.*;
 
@@ -102,7 +105,7 @@ public class SimpleTxnOperationFactory implements TxnOperationFactory{
             return operationFactory.newDelete(key);
         }
         DataPut put = operationFactory.newPut(key);
-        put.addCell(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.SNAPSHOT_ISOLATION_TOMBSTONE_COLUMN_BYTES,txn.getTxnId(),SIConstants.EMPTY_BYTE_ARRAY);
+        put.addCell(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.TOMBSTONE_COLUMN_BYTES,txn.getTxnId(),SIConstants.EMPTY_BYTE_ARRAY);
         put.addAttribute(SIConstants.SI_DELETE_PUT,SIConstants.TRUE_BYTES);
         encodeForWrites(put,txn);
         return put;
@@ -202,26 +205,32 @@ public class SimpleTxnOperationFactory implements TxnOperationFactory{
     }
 
     public TxnView decodeStack(ObjectInputStream ois) throws IOException {
-        int len = ois.readInt();
-        byte[] bytes = new byte[len];
-        ois.readFully(bytes);
-
-        MultiFieldDecoder decoder=MultiFieldDecoder.wrap(bytes, 0, bytes.length);
-        long txnId=decoder.decodeNextLong();
-        long beginTs=decoder.decodeNextLong();
-        boolean additive=decoder.decodeNextBoolean();
-        Txn.IsolationLevel level=Txn.IsolationLevel.fromByte(decoder.decodeNextByte());
-        boolean allowsWrites=decoder.decodeNextBoolean();
-
-        TxnView parent=Txn.ROOT_TRANSACTION;
+        Deque<Function<TxnView, TxnView>> factoryStack = new ArrayDeque<>();
         while(ois.available() > 0){
-            parent = decodeStack(ois);
+            int len = ois.readInt();
+            byte[] bytes = new byte[len];
+            ois.readFully(bytes);
+
+            MultiFieldDecoder decoder=MultiFieldDecoder.wrap(bytes, 0, bytes.length);
+            long txnId=decoder.decodeNextLong();
+            long beginTs=decoder.decodeNextLong();
+            boolean additive=decoder.decodeNextBoolean();
+            Txn.IsolationLevel level=Txn.IsolationLevel.fromByte(decoder.decodeNextByte());
+            boolean allowsWrites=decoder.decodeNextBoolean();
+
+            factoryStack.addFirst((TxnView parent) -> {
+                if (allowsWrites)
+                    return new ActiveWriteTxn(txnId, beginTs, parent, additive, level);
+                else
+                    return new ReadOnlyTxn(txnId, beginTs, level, parent, UnsupportedLifecycleManager.INSTANCE, exceptionLib, additive);
+            });
         }
 
-        if(allowsWrites)
-            return new ActiveWriteTxn(txnId,beginTs,parent,additive,level);
-        else
-            return new ReadOnlyTxn(txnId,beginTs,level,parent,UnsupportedLifecycleManager.INSTANCE,exceptionLib,additive);
+        TxnView current = Txn.ROOT_TRANSACTION;
+        while(!factoryStack.isEmpty()) {
+            current = factoryStack.removeFirst().apply(current);
+        }
+        return current;
     }
 
     public TxnView decode(byte[] data,int offset,int length){

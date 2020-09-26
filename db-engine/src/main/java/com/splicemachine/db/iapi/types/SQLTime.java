@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -54,11 +54,8 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import com.splicemachine.db.iapi.types.DataValueFactoryImpl.Format;
 import com.yahoo.sketches.theta.UpdateSketch;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeArrayWriter;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.joda.time.DateTime;
@@ -91,6 +88,10 @@ public final class SQLTime extends DataType
 	private int		encodedTime;
 	private int		encodedTimeFraction; //currently always 0 since we don't
 											 //support time precision
+
+	private static boolean skipDBContext = false;
+
+	public static void setSkipDBContext(boolean value) { skipDBContext = value; }
 
 	/*
 	** DataValueDescriptor interface
@@ -271,6 +272,7 @@ public final class SQLTime extends DataType
 	 *
 	 * @exception StandardException thrown on failure
 	 */
+	@SuppressFBWarnings(value = "RV_NEGATING_RESULT_OF_COMPARETO", justification = "intentional")
 	public int compare(DataValueDescriptor other)
 		throws StandardException
 	{
@@ -425,7 +427,8 @@ public final class SQLTime extends DataType
     private static final String[] AM_PM = {"AM", "PM"};
     private static final char[] END_OF_STRING = {(char) 0};
     
-    private void parseTime( String timeStr, boolean isJdbcEscape, LocaleFinder localeFinder, Calendar cal)
+    @SuppressFBWarnings(value = "SF_SWITCH_NO_DEFAULT", justification = "intentional, read comment")
+	private void parseTime(String timeStr, boolean isJdbcEscape, LocaleFinder localeFinder, Calendar cal)
         throws StandardException
     {
         boolean validSyntax = true;
@@ -1089,7 +1092,7 @@ public final class SQLTime extends DataType
 	public void setValue(String theValue,Calendar cal) throws StandardException{
 		restoreToNull();
 		if (theValue != null) {
-			DatabaseContext databaseContext = (DatabaseContext) ContextService.getContext(DatabaseContext.CONTEXT_ID);
+			DatabaseContext databaseContext = skipDBContext ? null : (DatabaseContext) ContextService.getContext(DatabaseContext.CONTEXT_ID);
 			parseTime( theValue,
 					false,
 					(databaseContext == null) ? null : databaseContext.getDatabase(),
@@ -1130,81 +1133,6 @@ public final class SQLTime extends DataType
     public Format getFormat() {
     	return Format.TIME;
     }
-
-	/**
-	 *
-	 * Write to a Project Tungsten Format (UnsafeRow).  We encode Time as
-	 * 2 ints.
-	 *
-	 * @param unsafeRowWriter
-	 * @param ordinal
-     */
-	@Override
-	public void write(UnsafeRowWriter unsafeRowWriter, int ordinal) {
-		if (isNull())
-			unsafeRowWriter.setNullAt(ordinal);
-		else {
-			unsafeRowWriter.write(ordinal,(((long)encodedTime) << 32) | (encodedTimeFraction & 0xffffffffL));
-		}
-	}
-
-	/**
-	 *
-	 * Write Element into Positioned Array
-	 *
-	 * @param unsafeArrayWriter
-	 * @param ordinal
-	 * @throws StandardException
-     */
-	@Override
-	public void writeArray(UnsafeArrayWriter unsafeArrayWriter, int ordinal) throws StandardException {
-		if (isNull())
-			unsafeArrayWriter.setNull(ordinal);
-		else {
-			unsafeArrayWriter.write(ordinal,(((long)encodedTime) << 32) | (encodedTimeFraction & 0xffffffffL));
-		}
-	}
-
-	/**
-	 *
-	 * Read Element from Positioned Array
-	 *
-	 * @param unsafeArrayData
-	 * @param ordinal
-	 * @throws StandardException
-     */
-	@Override
-	public void read(UnsafeArrayData unsafeArrayData, int ordinal) throws StandardException {
-		if (unsafeArrayData.isNullAt(ordinal))
-			setToNull();
-		else {
-			long l = unsafeArrayData.getLong(ordinal);
-			encodedTime = (int)(l >> 32);
-			encodedTimeFraction = (int)l;
-			isNull = false;
-		}
-	}
-
-	/**
-	 *
-	 * Read data into a Project Tungsten Format (UnsafeRow).  We read
-	 * data as two ints.
-	 *
-	 * @param unsafeRow
-	 * @param ordinal
-	 * @throws StandardException
-     */
-	@Override
-	public void read(UnsafeRow unsafeRow, int ordinal) throws StandardException {
-		if (unsafeRow.isNullAt(ordinal))
-			setToNull();
-		else {
-			long l = unsafeRow.getLong(ordinal);
-			encodedTime = (int)(l >> 32);
-			encodedTimeFraction = (int)l;
-			isNull = false;
-		}
-	}
 
 	@Override
 	public void read(Row row, int ordinal) throws StandardException {

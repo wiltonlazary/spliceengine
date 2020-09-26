@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.db.impl.sql.compile.subquery.ssq;
@@ -39,8 +39,8 @@ import com.splicemachine.db.impl.ast.ColumnUtils;
 import com.splicemachine.db.impl.sql.compile.*;
 import com.splicemachine.db.impl.sql.compile.subquery.FlatteningUtils;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.collect.Iterables;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Iterables;
+import splice.com.google.common.collect.Lists;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -154,6 +154,8 @@ public class ScalarSubqueryFlatteningVisitor extends AbstractSpliceVisitor imple
                 topSelectNode.getContextManager());
         fromSubquery.setTableNumber(topSelectNode.getCompilerContext().getNextTableNumber());
         fromSubquery.setFromSSQ(true);
+        // the fromSubquery's dependency map will be updated in the outer Select block to include all the non-SSQs
+        fromSubquery.setOuterJoinLevel(topSelectNode.getCompilerContext().getNextOJLevel());
 
         // for top 1 with no order by case, we need to flag the fromSubquery so that execution can return after getting the first
         // matching row
@@ -182,6 +184,8 @@ public class ScalarSubqueryFlatteningVisitor extends AbstractSpliceVisitor imple
         for (int i = 0; i < correlatedSubqueryPreds.size(); i++) {
             ValueNode pred = correlatedSubqueryPreds.get(i);
             pred.accept(scalarSubqueryCorrelatedPredicateVisitor);
+            /* set OuterJoinLevel for this condition */
+            pred.setOuterJoinLevel(fromSubquery.getOuterJoinLevel());
             /*
              * Finally add the predicate to the outer query.
              */

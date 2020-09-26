@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -118,7 +118,7 @@ public class PipelineTest{
             dg = testEnv.getOperationFactory().newDataGet(txn,data.getRowKey(),null);
             try(Partition p = testEnv.getPartition(DESTINATION_TABLE,tts)){
                 DataResult dr = p.get(dg,null);
-                Assert.assertTrue("Row was still found!",dr==null || dr.size()<=0);
+                Assert.assertTrue("Row was still found!",dr==null || dr.isEmpty());
             }
         }finally{
             txn.rollback();
@@ -195,7 +195,7 @@ public class PipelineTest{
                     dg=testEnv.getOperationFactory().newDataGet(txn,d.getRowKey(),dg);
                     result=p.get(dg,result);
                     if(i%2==0){
-                        Assert.assertTrue("Row was deleted, but still found!",result==null||result.size()<=0);
+                        Assert.assertTrue("Row was deleted, but still found!",result==null||result.isEmpty());
                     }else{
                         assertCorrectPresence(txn,d,result);
                     }
@@ -275,8 +275,8 @@ public class PipelineTest{
 
     protected void assertCorrectPresence(Txn txn1,KVPair data,DataResult result){
         Assert.assertNotNull("Row was not written!");
-        Assert.assertTrue("Incorrect number of cells returned!",result.size()>0);
-        Assert.assertNull("Returned a tombstone!",result.tombstone());
+        Assert.assertFalse("Incorrect number of cells returned!",result.isEmpty());
+        Assert.assertNull("Returned a tombstone!",result.tombstoneOrAntiTombstone());
         DataCell dataCell=result.userData();
         Assert.assertNotNull("No User data written!");
         Assert.assertArrayEquals("Incorrect user data value!",data.getValue(),dataCell.value());

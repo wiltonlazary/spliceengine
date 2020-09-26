@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -54,7 +54,7 @@ public class UpdateSensitiveClobLocatorInputStream
      * @throws SqlException If any exception occurs during stream
      *                      creation.
      */
-    public UpdateSensitiveClobLocatorInputStream(Connection con, Clob clob)
+    public UpdateSensitiveClobLocatorInputStream(ClientConnection con, Clob clob)
     throws SqlException {
         super(con, clob, new BufferedInputStream
                 (new ClobLocatorInputStream(con, clob)));

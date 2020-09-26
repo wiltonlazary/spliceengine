@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.db.iapi.error;
@@ -201,5 +201,22 @@ public class ExceptionUtil
             }
         }
         return out.toString();
+    }
+
+    /**
+     * Throw a checked exception without declaring one.
+     * Use {@code throw throwAsRuntime(exception);} in contexts where javac needs to know about execution abruption,
+     * f.e. in methods returning a value.
+     * @param t a checked exception, f.e. IOException, to be thrown as an unchecked one.
+     * @return a bogus value to be thrown in the calling method when needed.
+     */
+    public static RuntimeException throwAsRuntime(Throwable t) {
+        ExceptionUtil.<RuntimeException> doThrow(t);
+        return new RuntimeException();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void doThrow(Throwable t) throws T {
+        throw (T) t;
     }
 }

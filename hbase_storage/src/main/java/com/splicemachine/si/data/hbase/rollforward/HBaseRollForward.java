@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -23,8 +23,9 @@ import com.splicemachine.si.api.txn.TxnView;
 import com.splicemachine.si.impl.readresolve.SynchronousReadResolver;
 import com.splicemachine.storage.Partition;
 import com.splicemachine.utils.ByteSlice;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.util.concurrent.ThreadFactoryBuilder;
+import splice.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.io.IOException;
 import java.util.List;
@@ -83,6 +84,7 @@ public class HBaseRollForward implements RollForward {
     }
 
     @Override
+    @SuppressFBWarnings(value = "RV_RETURN_VALUE_IGNORED_BAD_PRACTICE", justification = "DB-9844")
     public void submitForResolution(Partition partition, long txnId, List<ByteSlice> rowKeys) {
         firstQueue.offer(new RFEvent(partition, rowKeys, txnId, System.currentTimeMillis()));
     }
@@ -104,6 +106,7 @@ public class HBaseRollForward implements RollForward {
         }
 
         @Override
+        @SuppressFBWarnings(value = "RV_RETURN_VALUE_IGNORED_BAD_PRACTICE", justification = "DB-9844")
         public void run() {
             while(true) {
                 try {

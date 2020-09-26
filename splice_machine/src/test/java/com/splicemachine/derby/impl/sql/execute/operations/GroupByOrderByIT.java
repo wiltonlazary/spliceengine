@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -109,6 +109,21 @@ public class GroupByOrderByIT {
         System.out.println("testSelectAllColumnsGroupBy");
         Assert.assertEquals(12, verifyColumns(rs, Arrays.asList("EMPNUM", "PNUM", "HOURS"), Arrays.asList("HOURS"), true));
 
+        // group by position must be 1-based
+        try {
+            methodWatcher.executeQuery(String.format("SELECT EMPNUM, PNUM, HOURS FROM %1$s GROUP BY 1,0,2", t1Watcher.toString()));
+            Assert.fail("expect group by position error");
+        } catch (SQLException e) {
+            Assert.assertEquals("42X77", e.getSQLState());
+        }
+
+        // group by position must be positive
+        try {
+            methodWatcher.executeQuery(String.format("SELECT EMPNUM, PNUM, HOURS FROM %1$s GROUP BY -1", t1Watcher.toString()));
+            Assert.fail("expect group by position error");
+        } catch (SQLException e) {
+            Assert.assertEquals("42X77", e.getSQLState());
+        }
     }
 
     @Test

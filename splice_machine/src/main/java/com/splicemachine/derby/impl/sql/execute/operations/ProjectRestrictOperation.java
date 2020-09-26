@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -21,31 +21,34 @@ import com.splicemachine.db.iapi.services.loader.GeneratedMethod;
 import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.execute.ExecIndexRow;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
-import com.splicemachine.db.iapi.sql.execute.NoPutResultSet;
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.iapi.types.HBaseRowLocation;
 import com.splicemachine.db.iapi.types.RowLocation;
 import com.splicemachine.db.impl.sql.GenericStorablePreparedStatement;
+import com.splicemachine.db.impl.sql.compile.ExplainNode;
 import com.splicemachine.db.impl.sql.execute.BaseActivation;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperationContext;
 import com.splicemachine.derby.impl.SpliceMethod;
 import com.splicemachine.derby.impl.sql.execute.operations.iapi.Restriction;
+import com.splicemachine.derby.impl.sql.execute.operations.iapi.ScanInformation;
 import com.splicemachine.derby.stream.function.ProjectRestrictMapFunction;
 import com.splicemachine.derby.stream.function.ProjectRestrictPredicateFunction;
-import com.splicemachine.derby.impl.sql.execute.operations.iapi.ScanInformation;
 import com.splicemachine.derby.stream.iapi.DataSet;
 import com.splicemachine.derby.stream.iapi.DataSetProcessor;
 import com.splicemachine.derby.stream.iapi.OperationContext;
 import com.splicemachine.derby.utils.EngineUtils;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.base.Strings;
+import splice.com.google.common.base.Strings;
 
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.util.Arrays;
 import java.util.List;
+
+import static com.splicemachine.db.impl.sql.compile.ExplainNode.SparkExplainKind.NONE;
 
 
 public class ProjectRestrictOperation extends SpliceBaseOperation {
@@ -66,13 +69,12 @@ public class ProjectRestrictOperation extends SpliceBaseOperation {
 		private boolean alwaysFalse;
 		public SpliceMethod<DataValueDescriptor> restriction;
 		public SpliceMethod<ExecRow> projection;
-        public ExecRow projectionResult;
-		public NoPutResultSet[] subqueryTrackingArray;
 		private ExecRow execRowDefinition;
 		private ExecRow projRow;
 		private String filterPred = null;
 		private String[] expressions = null;
 		private boolean hasGroupingFunction;
+		private String subqueryText;
 
 	    protected static final String NAME = ProjectRestrictOperation.class.getSimpleName().replaceAll("Operation","");
 
@@ -98,6 +100,7 @@ public class ProjectRestrictOperation extends SpliceBaseOperation {
 		        return "true";
         }
 
+		@SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9844")
 		public String[] getExpressions() {
 		    return expressions;
         }
@@ -105,10 +108,12 @@ public class ProjectRestrictOperation extends SpliceBaseOperation {
 		@SuppressWarnings("UnusedDeclaration")
 		public ProjectRestrictOperation() { super(); }
 
+		@SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "DB-9844")
 		public ProjectRestrictOperation(SpliceOperation source,
                                         Activation activation,
                                         GeneratedMethod restriction,
                                         GeneratedMethod projection,
+                                        int resultColumnTypeArrayItem,
                                         int resultSetNumber,
                                         GeneratedMethod cr,
                                         int mapRefItem,
@@ -119,8 +124,9 @@ public class ProjectRestrictOperation extends SpliceBaseOperation {
                                         double optimizerEstimatedCost,
                                         String filterPred,
                                         String[] expressions,
-				        boolean hasGroupingFunction) throws StandardException {
-				super(activation,resultSetNumber,optimizerEstimatedRowCount,optimizerEstimatedCost);
+				        boolean hasGroupingFunction,
+                                        String subqueryText) throws StandardException {
+				super(activation,resultColumnTypeArrayItem, resultSetNumber,optimizerEstimatedRowCount,optimizerEstimatedCost);
 				this.restrictionMethodName = (restriction == null) ? null : restriction.getMethodName();
 				this.projectionMethodName = (projection == null) ? null : projection.getMethodName();
 				this.constantRestrictionMethodName = (cr == null) ? null : cr.getMethodName();
@@ -132,6 +138,7 @@ public class ProjectRestrictOperation extends SpliceBaseOperation {
 				this.filterPred = filterPred;
 				this.expressions = expressions;
 				this.hasGroupingFunction = hasGroupingFunction;
+				this.subqueryText = subqueryText;
 				init();
 		}
 
@@ -169,6 +176,7 @@ public class ProjectRestrictOperation extends SpliceBaseOperation {
 				    }
 				    hasGroupingFunction = in.readBoolean();
 				}
+				subqueryText = readNullableString(in);
 		}
 
 		@Override
@@ -193,6 +201,7 @@ public class ProjectRestrictOperation extends SpliceBaseOperation {
 				    }
 				}
 				out.writeBoolean(hasGroupingFunction);
+				writeNullableString(subqueryText, out);
 		}
 
 		@Override
@@ -232,6 +241,7 @@ public class ProjectRestrictOperation extends SpliceBaseOperation {
 				return source;
 		}
 
+		@SuppressFBWarnings(value = "RCN_REDUNDANT_NULLCHECK_WOULD_HAVE_BEEN_A_NPE", justification = "DB-9844")
 		public ExecRow doProjection(ExecRow sourceRow) throws StandardException {
 			if (reuseResult && projRow != null)
 				return projRow;
@@ -253,7 +263,7 @@ public class ProjectRestrictOperation extends SpliceBaseOperation {
 				}
 				// Copy any mapped columns from the source
 				for (int index = 0; index < projectMapping.length; index++) {
-						if (sourceRow != null && projectMapping[index] != -1) {
+						if (projectMapping[index] != -1) {
 								DataValueDescriptor dvd = sourceRow.getColumn(projectMapping[index]);
 								// See if the column has been marked for cloning.
 								// If the value isn't a stream, don't bother cloning it.
@@ -363,13 +373,38 @@ public class ProjectRestrictOperation extends SpliceBaseOperation {
 		if (alwaysFalse) {
             return dsp.getEmpty();
         }
+        boolean sparkExplainWithSubquery = subqueryText != null && subqueryText.length() != 0;
         OperationContext operationContext = dsp.createOperationContext(this);
+	dsp.incrementOpDepth();
+	ExplainNode.SparkExplainKind sparkExplainKind = NONE;
+	if (sparkExplainWithSubquery) {
+	    sparkExplainKind = dsp.getSparkExplainKind();
+        }
         DataSet<ExecRow> sourceSet = source.getDataSet(dsp);
+        DataSet<ExecRow> originalSourceDataset = sourceSet;
+        if (sparkExplainWithSubquery)
+            dsp.setSparkExplain(sparkExplainKind);
+        dsp.decrementOpDepth();
         try {
             operationContext.pushScope();
             if (restrictionMethodName != null)
                 sourceSet = sourceSet.filter(new ProjectRestrictPredicateFunction<>(operationContext));
-            return sourceSet.map(new ProjectRestrictMapFunction<>(operationContext, expressions));
+            DataSet<ExecRow> projection = sourceSet.map(new ProjectRestrictMapFunction<>(operationContext, expressions));
+
+            handleSparkExplain(projection, originalSourceDataset, dsp);
+            if (sparkExplainWithSubquery) {
+                String lines[] = subqueryText.split("\\r?\\n");
+                int increment = 0;
+                for (String str:lines) {
+                    dsp.appendSpliceExplainString(str);
+                    dsp.incrementOpDepth();
+                    increment++;
+                }
+                for (int i = 0; i < increment; i++)
+                    dsp.decrementOpDepth();
+            }
+
+            return projection;
         } finally {
             operationContext.popScope();
         }

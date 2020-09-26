@@ -1,6 +1,6 @@
 
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -96,7 +96,7 @@ public class IndexController extends SpliceController{
             Iterator<DataResult> results = htable.batchGet(get, rowKeys);
             while (results.hasNext()) {
                 DataResult result = results.next();
-                if(result!=null && result.size()>0) {
+                if(result != null && !result.isEmpty()) {
                     return ConglomerateController.ROWISDUPLICATE;
                 }
             }
@@ -149,9 +149,9 @@ public class IndexController extends SpliceController{
     @Override
     @SuppressFBWarnings(value = "REC_CATCH_EXCEPTION",justification = "Intentional")
     public boolean replace(RowLocation loc,DataValueDescriptor[] row,FormatableBitSet validColumns) throws StandardException{
-        assert row!=null:"Cannot replace using a null row!";
         if(LOG.isTraceEnabled())
             LOG.trace(String.format("replace conglomerate: %s, rowlocation: %s, destRow: %s, validColumns: %s",this.getConglomerate(),loc,(row==null?null:Arrays.toString(row)),validColumns));
+        assert row!=null:"Cannot replace using a null row!";
         Partition htable = getTable();
         try{
             boolean[] sortOrder=((IndexConglomerate)this.openSpliceConglomerate.getConglomerate()).getAscDescInfo();

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.splicemachine.derby.stream.function.CloneFunction;
-import org.spark_project.guava.base.Strings;
+import splice.com.google.common.base.Strings;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.loader.GeneratedMethod;
 import com.splicemachine.db.iapi.sql.Activation;
@@ -126,14 +126,19 @@ public class WindowOperation extends SpliceBaseOperation {
 
         OperationContext<WindowOperation> operationContext = dsp.createOperationContext(this);
         operationContext.pushScopeForOp(OperationContext.Scope.WINDOW);
-        DataSet dataSet = source.getDataSet(dsp).map(new CloneFunction<>(operationContext));
+        dsp.incrementOpDepth();
+        DataSet<ExecRow> sourceDataSet = source.getDataSet(dsp);
+        dsp.decrementOpDepth();
+        DataSet<ExecRow> dataSet = sourceDataSet.map(new CloneFunction<>(operationContext));
         operationContext.popScope();
 
         try {
-            return  dataSet.windows(windowContext,operationContext,true, OperationContext.Scope.EXECUTE.displayName());
+            dataSet = dataSet.windows(windowContext,operationContext,true, OperationContext.Scope.EXECUTE.displayName());
+            handleSparkExplain(dataSet, sourceDataSet, dsp);
         } finally {
             operationContext.popScope();
         }
+        return dataSet;
     }
 
 

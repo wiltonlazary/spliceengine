@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -25,7 +25,7 @@ import com.splicemachine.test_tools.TableCreator;
 import org.junit.*;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
-import org.spark_project.guava.collect.Iterables;
+import splice.com.google.common.collect.Iterables;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -40,7 +40,6 @@ import static org.junit.Assert.*;
 /**
  * Foreign Key tests for *defining* FK constraints.
  */
-@Category(value = {SerialTest.class})
 public class ForeignKey_Define_IT{
 
     private static final String SCHEMA=ForeignKey_Define_IT.class.getSimpleName();

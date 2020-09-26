@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -33,6 +33,7 @@ package com.splicemachine.db.impl.sql.compile;
 
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.reference.SQLState;
+import com.splicemachine.db.iapi.services.io.StoredFormatIds;
 import com.splicemachine.db.iapi.sql.compile.CompilerContext;
 import com.splicemachine.db.iapi.sql.compile.OptimizablePredicate;
 import com.splicemachine.db.iapi.types.*;
@@ -262,13 +263,14 @@ public class OperatorToString {
      * Returns The string representation of a Derby expression tree.
      * 
      * @param  operand           The expression tree to parse and translate to text.
-     * @param  vars.sparkExpression
+     * @param  vars              It contains the following parameters:
+     *      vars.sparkExpression
      *                           True, if converting the expression to spark SQL,
      *                           otherwise false.
-     * @param  vars.sparkVersion
+     *      vars.sparkVersion
      *                           The spark major version for which we're generating
      *                           the spark SQL expression, if "sparkExpression" is true.
-     * @param  vars.relationalOpDepth
+     *      vars.relationalOpDepth
      *                           The current number of relational operators or other
      *                           null-hiding expressions, such as CASE, which we
      *                           are nested within.  Used in determining if a spark
@@ -315,11 +317,16 @@ public class OperatorToString {
                     String functionName = eon.sparkFunctionName();
 
                     // Splice extracts fractional seconds, but spark only extracts whole seconds.
-                    if (functionName.equals("SECOND") || functionName.equals("WEEK") ||
-                        functionName.equals("WEEKDAY") || functionName.equals("WEEKDAYNAME"))
+                    // Spark by default counts weeks starting on Sunday.
+                    if (functionName.equals("SECOND") || functionName.equals("WEEK")) {
                         throwNotImplementedError();
-                    else
+                    } else if (functionName.equals("WEEKDAY")) {
+                        return format("cast(date_format(%s, \"u\") as int) ", opToString2(uop.getOperand(), vars));
+                    } else if (functionName.equals("WEEKDAYNAME")) {
+                        return format("date_format(%s, \"EEEE\") ", opToString2(uop.getOperand(), vars));
+                    } else {
                         return format("%s(%s) ", functionName, opToString2(uop.getOperand(), vars));
+                    }
                 }
                 else if (operand instanceof DB2LengthOperatorNode) {
                     DB2LengthOperatorNode lengthOp = (DB2LengthOperatorNode)operand;
@@ -345,9 +352,9 @@ public class OperatorToString {
                     else if (operatorString.equals("ABS/ABSVAL"))
                         operatorString = "abs";
                 }
-                else if (operand instanceof SimpleStringOperatorNode) {
-                    SimpleStringOperatorNode sso = (SimpleStringOperatorNode) operand;
-                    return format("%s(%s) ", operatorString, opToString2(sso.getOperand(), vars));
+                else if (operand instanceof SimpleStringOperatorNode ||
+                         operand instanceof NotNode) {
+                    return format("%s(%s) ", operatorString, opToString2(uop.getOperand(), vars));
                 }
                 else
                     throwNotImplementedError();
@@ -369,6 +376,36 @@ public class OperatorToString {
                 leftExpr = vars.sparkExpressionTree;
                 String rightOperandString = opToString2(bron.getRightOperand(), vars);
                 rightExpr = vars.sparkExpressionTree;
+
+                // do explict padding for comparison of fixed char types
+                if (vars.sparkExpression) {
+                    ValueNode leftOperand = bron.getLeftOperand();
+                    ValueNode rightOperand = bron.getRightOperand();
+                    if (leftOperand.getTypeId() != null && leftOperand.getTypeId().getTypeFormatId() == StoredFormatIds.CHAR_TYPE_ID &&
+                        rightOperand.getTypeId() != null && rightOperand.getTypeId().getTypeFormatId() == StoredFormatIds.CHAR_TYPE_ID) {
+                        
+                        if (leftOperand.getTypeServices() != null && rightOperand.getTypeServices() != null) {
+                            int leftWidth = leftOperand.getTypeServices().getMaximumWidth();
+                            int rightWidth = rightOperand.getTypeServices().getMaximumWidth();
+                            if (leftWidth > rightWidth) {
+                                // pad right
+                                rightOperandString = format("RPAD(%s, %d, ' ') ",
+                                        rightOperandString,
+                                        leftWidth);
+                                if (vars.buildExpressionTree)
+                                    rightExpr = new SparkStringPadOperator(rightExpr, leftWidth, " ", true);
+                            } else if (leftWidth < rightWidth) {
+                                // pad left
+                                leftOperandString = format("RPAD(%s, %d, ' ') ",
+                                        leftOperandString,
+                                        rightWidth);
+                                if (vars.buildExpressionTree)
+                                    leftExpr = new SparkStringPadOperator(leftExpr, rightWidth, " ", true);
+                            }
+                        }
+                    }
+                }
+
                 String opString =
                         format("(%s %s %s)", leftOperandString,
                                bron.getOperatorString(), rightOperandString);
@@ -444,20 +481,20 @@ public class OperatorToString {
                 if (operand instanceof ConcatenationOperatorNode) {
                     if (vars.buildExpressionTree)
                         throwNotImplementedError();
-                    return format("concat(%s, %s) ", opToString2(leftOperand, vars),
-                                                     opToString2(rightOperand, vars));
+                    return format("concat(%s, %s) ", leftOperandString,
+                                                     rightOperandString);
                 }
                 else if (operand instanceof TruncateOperatorNode) {
                     if (vars.buildExpressionTree)
                         throwNotImplementedError();
                     if (leftOperand.getTypeId().getTypeFormatId() == DATE_TYPE_ID) {
-                        return format("trunc(%s, %s) ", opToString2(leftOperand, vars),
-                                                       opToString2(rightOperand, vars));
+                        return format("trunc(%s, %s) ", leftOperandString,
+                                                        rightOperandString);
                     }
                     else if (vars.sparkVersion.greaterThanOrEqualTo(spark_2_3_0) &&
                                leftOperand.getTypeId().getTypeFormatId() == TIMESTAMP_TYPE_ID) {
-                        return format("date_trunc(%s, %s) ", opToString2(rightOperand, vars),
-                                                            opToString2(leftOperand, vars));
+                        return format("date_trunc(%s, %s) ", leftOperandString,
+                                                             rightOperandString);
                     } else
                         throwNotImplementedError();
                 }
@@ -488,8 +525,12 @@ public class OperatorToString {
                         bao.getTypeId().getTypeFormatId() &&
                         rightOperand.getTypeId().getTypeFormatId() !=
                         bao.getTypeId().getTypeFormatId()) {
-                        doCast = true;
-                        targetType = bao.getTypeServices().toSparkString();
+                        // if date difference or date subtraction operation, the input parameter and result types are meant to be different */
+                        if (!(bao.getOperatorString() == "-" &&
+                                leftOperand.getTypeId().getTypeFormatId() == DATE_TYPE_ID)) {
+                            doCast = true;
+                            targetType = bao.getTypeServices().toSparkString();
+                        }
                     }
                     if (doCast) {
                         if (leftOperand.getTypeServices().getTypeId().typePrecedence() >
@@ -530,8 +571,7 @@ public class OperatorToString {
                         if (leftOperand.getTypeId().getTypeFormatId() == DATE_TYPE_ID) {
                             if (vars.buildExpressionTree)
                                 throwNotImplementedError();
-                            return format("date_add(%s, %s) ", opToString2(leftOperand, vars),
-                            opToString2(rightOperand, vars));
+                            return format("date_add(%s, %s) ", leftOperandString, rightOperandString );
                         }
                         else if (leftOperand.getTypeId().getTypeFormatId() == TIMESTAMP_TYPE_ID)
                             throwNotImplementedError();
@@ -542,11 +582,9 @@ public class OperatorToString {
                                 throwNotImplementedError();
                             /* use datediff if both operands are of date type */
                             if (rightOperand.getTypeId().getTypeFormatId() == DATE_TYPE_ID)
-                                return format("datediff(%s, %s) ", opToString2(leftOperand, vars),
-                                        opToString2(rightOperand, vars));
+                                return format("datediff(%s, %s) ", leftOperandString, rightOperandString);
                             else
-                                return format("date_sub(%s, %s) ", opToString2(leftOperand, vars),
-                            opToString2(rightOperand, vars));
+                                return format("date_sub(%s, %s) ", leftOperandString, rightOperandString);
                         }
                         else if (leftOperand.getTypeId().getTypeFormatId() == TIMESTAMP_TYPE_ID)
                             throwNotImplementedError();
@@ -577,8 +615,15 @@ public class OperatorToString {
             // Need to CAST if the final type is decimal because the precision
             // or scale used by spark to hold the result may not match what
             // splice has chosen, and could cause an overflow.
+            //
+            // DB-9333
+            // Also need a final CAST for division operator because Spark may
+            // decide to use a different result type. It happens when at least
+            // one operand of the division is an aggregate function. Plus, minus,
+            // and multiplication of aggregate functions are fine.
             boolean doCast = operand instanceof BinaryArithmeticOperatorNode &&
-                             operand.getTypeId().getTypeFormatId() == DECIMAL_TYPE_ID &&
+                             (operand.getTypeId().getTypeFormatId() == DECIMAL_TYPE_ID ||
+                              ((BinaryArithmeticOperatorNode)operand).getOperatorString().equals("/")) &&
                              vars.sparkExpression;
             String expressionString =
                     format("(%s %s %s)", leftOperandString,
@@ -629,18 +674,22 @@ public class OperatorToString {
                     vars.relationalOpDepth.increment();
                     if (top.getOperator().equals("LOCATE") ||
                         top.getOperator().equals("replace") ||
-                        top.getOperator().equals("substring") ) {
-
-                        if (vars.sparkVersion.lessThan(spark_2_3_0) && top.getOperator().equals("replace"))
-                            throwNotImplementedError();
+                        (top.getOperator().equals("substring") && top.getRightOperand() != null)) {
 
                         vars.relationalOpDepth.decrement();
                         String retval = format("%s(%s, %s, %s) ", top.getOperator(), opToString2(top.getReceiver(), vars),
                                 opToString2(top.getLeftOperand(), vars), opToString2(top.getRightOperand(), vars));
                         vars.relationalOpDepth.decrement();
                         return retval;
-                    }
-                    else if (top.getOperator().equals("trim")) {
+                    } else if (top.getOperator().equals("substring")) {
+                        assert top.getRightOperand() == null;
+                        vars.relationalOpDepth.decrement();
+                        String retval = format("%s(%s, %s) ", top.getOperator(), opToString2(top.getReceiver(), vars),
+                                opToString2(top.getLeftOperand(), vars));
+                        vars.relationalOpDepth.decrement();
+                        return retval;
+
+                    } else if (top.getOperator().equals("trim")) {
                         // Trim is supported starting at Spark 2.3.
                         if (vars.sparkVersion.lessThan(spark_2_3_0))
                             throwNotImplementedError();
@@ -966,10 +1015,14 @@ public class OperatorToString {
                         // for the ROUND function.
                         // ADD_MONTHS returns incorrect results on
                         // Spark for old dates.
+                        // The ROUND function came from Splice package (uppercase) and java.lang.StrictMath (lowercase),
+                        // we need to handle it especially.
                         if (methodName.equals("MONTH_BETWEEN") ||
                             methodName.equals("REGEXP_LIKE")   ||
                             methodName.equals("ADD_MONTHS")    ||
-                            methodName.equals("ROUND"))
+                            methodName.equals("ADD_YEARS")     ||
+                            methodName.equals("ADD_DAYS")      ||
+                            methodName.equalsIgnoreCase("ROUND"))
                             throwNotImplementedError();
                         else if (methodName.equals("toDegrees"))
                             methodName = "degrees";

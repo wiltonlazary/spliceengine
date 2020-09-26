@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -42,7 +42,7 @@ import com.splicemachine.derby.stream.iapi.DataSetProcessor;
 import com.splicemachine.derby.stream.iapi.OperationContext;
 import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.base.Strings;
+import splice.com.google.common.base.Strings;
 
 import java.io.IOException;
 import java.io.ObjectInput;
@@ -316,9 +316,14 @@ public class IndexRowToBaseRowOperation extends SpliceBaseOperation{
         }
         OperationContext context = dsp.createOperationContext(this);
         readerBuilder.transaction(context.getTxn());
-        return source.getDataSet(dsp)
-            .mapPartitions(new IndexToBaseRowFlatMapFunction(context,readerBuilder), false, true, "Fetch Base Rows")
+        dsp.incrementOpDepth();
+        DataSet sourceDS = source.getDataSet(dsp);
+        DataSet ds =
+            sourceDS.mapPartitions(new IndexToBaseRowFlatMapFunction(context,readerBuilder), false, true, "Fetch Base Rows")
             .filter(new IndexToBaseRowFilterPredicateFunction(context), true, true, "Apply Filter");
+        dsp.decrementOpDepth();
+        handleSparkExplain(ds, sourceDS, dsp);
+        return ds;
     }
 
     private FormatableBitSet getMainTableAccessedKeyColumns() throws StandardException {

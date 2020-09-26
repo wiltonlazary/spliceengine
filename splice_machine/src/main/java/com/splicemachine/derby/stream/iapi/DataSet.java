@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -16,12 +16,14 @@ package com.splicemachine.derby.stream.iapi;
 
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
+import com.splicemachine.db.impl.sql.compile.ExplainNode;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.MultiProbeTableScanOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.framework.SpliceGenericAggregator;
 import com.splicemachine.derby.impl.sql.execute.operations.window.WindowContext;
 import com.splicemachine.derby.stream.function.*;
 import com.splicemachine.derby.stream.output.*;
+import com.splicemachine.system.CsvOptions;
 import com.splicemachine.utils.Pair;
 
 import java.io.Serializable;
@@ -97,7 +99,6 @@ public interface DataSet<V> extends //Iterable<V>,
      * @return
      */
     <Op extends SpliceOperation, U> DataSet<U> mapPartitions(SpliceFlatMapFunction<Op,Iterator<V>, U> f);
-
 
     /**
      *
@@ -263,6 +264,8 @@ public interface DataSet<V> extends //Iterable<V>,
 
     ExportDataSetWriterBuilder<String> saveAsTextFile(OperationContext operationContext);
 
+    KafkaDataSetWriterBuilder writeToKafka();
+
     void persist();
 
     void setAttribute(String name, String value);
@@ -275,7 +278,7 @@ public interface DataSet<V> extends //Iterable<V>,
 
     DataSet<V> join(OperationContext operationContext, DataSet<V> rightDataSet,JoinType joinType, boolean isBroadcast) throws StandardException;
 
-    DataSet<V> crossJoin(OperationContext operationContext, DataSet<V> rightDataSet) throws StandardException;
+    DataSet<V> crossJoin(OperationContext operationContext, DataSet<V> rightDataSet, Broadcast type) throws StandardException;
 
     /**
      *  Window Function abstraction. Take a window context that defines the the partition, the sorting , the frame boundary
@@ -333,16 +336,12 @@ public interface DataSet<V> extends //Iterable<V>,
      *
      * Write text file to the Hadoop compliant location.
      *
-     * @param op
      * @param location
-     * @param characterDelimiter
-     * @param columnDelimiter
-     * @param baseColumnMap
      * @param context
      * @return
      */
-    DataSet<ExecRow> writeTextFile(SpliceOperation op, String location, String characterDelimiter, String columnDelimiter, int[] baseColumnMap,
-                                      OperationContext context) throws StandardException;
+    DataSet<ExecRow> writeTextFile(String location, CsvOptions csvOptions,
+                                   OperationContext context) throws StandardException;
 
     /**
      *
@@ -369,4 +368,14 @@ public interface DataSet<V> extends //Iterable<V>,
     DataSet upgradeToSparkNativeDataSet(OperationContext operationContext) throws StandardException;
 
     DataSet applyNativeSparkAggregation(int[] groupByColumns, SpliceGenericAggregator[] aggregates, boolean isRollup, OperationContext operationContext);
+
+    List<String> buildNativeSparkExplain(ExplainNode.SparkExplainKind sparkExplainKind);
+
+    boolean isNativeSpark();
+
+    enum Broadcast {
+        NONE,
+        LEFT,
+        RIGHT
+    }
 }

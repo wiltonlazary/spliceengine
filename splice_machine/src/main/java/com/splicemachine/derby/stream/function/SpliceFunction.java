@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -27,7 +27,7 @@ import java.io.Serializable;
  */
 public abstract class SpliceFunction<Op extends SpliceOperation, From, To>
     extends AbstractSpliceFunction<Op>
-		implements ExternalizableFunction<From, To>, org.spark_project.guava.base.Function<From,To>, Serializable {
+		implements ExternalizableFunction<From, To>, splice.com.google.common.base.Function<From,To>, Serializable {
 
 	public SpliceFunction() {
         super();

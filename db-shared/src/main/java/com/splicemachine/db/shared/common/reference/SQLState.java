@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -751,6 +751,7 @@ public interface SQLState {
     String LANG_MISSING_LEAD_LAG_DEFAULT                               = "2202C";
 	String LANG_NONULL_DATATYPE                                        = "2202D";
 	String LANG_INVALID_AGGREGATION_DATATYPE                           = "2202E";
+    String LANG_INVALID_TIME_SPAN_OPERATION                            = "2202F";
 	/*
 	** Integrity violations.
 	*/
@@ -816,9 +817,10 @@ public interface SQLState {
 	String LANG_NO_SUCH_RUNNING_OPERATION                              = "4251P";
 	String LANG_DB2_NOT_NULL_COLUMN_INVALID_DEFAULT                    = "42601";
 	String LANG_DB2_INVALID_HEXADECIMAL_CONSTANT                    = "42606";
+    String LANG_DB2_OPERATION_NOT_SUPPORTED_IN_READ_ONLY_MODE       = "51045";
 	String LANG_DB2_STRING_CONSTANT_TOO_LONG                    = "54002";
 	String LANG_DB2_NUMBER_OF_ARGS_INVALID                   = "42605";
-	String LANG_DB2_COALESCE_FUNCTION_ALL_PARAMS                   = "42610";
+	String LANG_DB2_MULTINARY_FUNCTION_ALL_PARAMS                   = "42610";
 	String LANG_DB2_LENGTH_PRECISION_SCALE_VIOLATION                   = "42611";
 	String LANG_DB2_MULTIPLE_ELEMENTS								   = "42613";
 	String LANG_DB2_INVALID_CHECK_CONSTRAINT                           = "42621";
@@ -828,7 +830,7 @@ public interface SQLState {
 	String LANG_DB2_ADD_UNIQUE_OR_PRIMARY_KEY_ON_NULL_COLS			   = "42831";
 	String LANG_ADD_PRIMARY_KEY_ON_NULL_COLS                           = "42831.S.1";
 	String LANG_DB2_REPLACEMENT_ERROR								   = "42815.S.713";
-	String LANG_DB2_COALESCE_DATATYPE_MISMATCH								   = "42815.S.171";
+	String LANG_DB2_MULTINARY_DATATYPE_MISMATCH                        = "42815.S.171";
 	String LANG_DB2_TOO_LONG_FLOATING_POINT_LITERAL			           = "42820";
 	String LANG_DB2_LIKE_SYNTAX_ERROR 						           = "42824";
 	String LANG_INVALID_FK_COL_FOR_SETNULL                             = "42834";
@@ -844,6 +846,7 @@ public interface SQLState {
 	String LANG_TABLE_REQUIRES_COLUMN_NAMES                            = "42909";
 	String LANG_DELETE_RULE_VIOLATION		   					       = "42915";
 	String LANG_SYNONYM_CIRCULAR   		   					           = "42916";
+	String LANG_INVALID_INDEX_EXPRESSION                               = "429BX";  // DB2 compatible code
 	String LANG_SYNTAX_ERROR                                           = "42X01";
 	String LANG_LEXICAL_ERROR                                          = "42X02";
 	String LANG_AMBIGUOUS_COLUMN_NAME                                  = "42X03";
@@ -1174,6 +1177,13 @@ public interface SQLState {
 
 	String LANG_RESUBMIT_DISTRIBUTED                                    = "42ZD0";
 	
+	String LANG_INVALID_SPARK_AND_CONTROL = "42ZD1";
+
+	String LANG_ILLEGAL_TIME_TRAVEL = "42ZD2";
+
+	String LANG_INVALID_TABLE_LIMIT_FOR_EXHAUSTIVE_SEARCH              = "42ZD5";
+	String LANG_UNSUPPORTED_TYPE_FOR_SCALAR_MIN_MAX                    = "42ZD6";
+
 	//following 3 matches the DB2 sql states
 	String LANG_DECLARED_GLOBAL_TEMP_TABLE_ONLY_IN_SESSION_SCHEMA = "428EK";
 	String LANG_TEMP_TABLE_DELETE_ROWS_NO_SUPPORTED = "428C2";
@@ -1374,6 +1384,7 @@ public interface SQLState {
 
 	// INTERNAL EXCEPTIONS
 	String LANG_UNABLE_TO_GENERATE                                     = "42Z50";
+	String LANG_UNABLE_TO_LOAD_GENERATE_CODE                           = "42Z51";
 	String LANG_UNAVAILABLE_ACTIVATION_NEED                            = "42Z53";
 	String LANG_PARSE_ONLY                                             = "42Z54.U";
 	String LANG_STOP_AFTER_PARSING                                     = "42Z55.U";
@@ -1735,7 +1746,7 @@ public interface SQLState {
     String AUTH_ENCRYPT_NOT_DB_OWNER                        = "08004.C.5";
     String AUTH_HARD_UPGRADE_NOT_DB_OWNER                   = "08004.C.6";
     //DERBY-1828: AUTH_x_NOT_DB_OWNER used to be "2850H/I/J.C";
-    String CANNOT_CONNECT_TO_DB_IN_SLAVE_MODE               = "08004.C.7";
+    String CANNOT_CONNECT_TO_DB_IN_REPLICA_MODE             = "08004.C.7";
     String AUTH_REPLICATION_NOT_DB_OWNER                    = "08004.C.8";
     //DERBY-2109: new state/msg (considered sql state 28101.C not appropriate)
     String AUTH_SHUTDOWN_MISSING_PERMISSION                 = "08004.C.9";
@@ -1929,15 +1940,15 @@ public interface SQLState {
     */
     String LOGMODULE_DOES_NOT_SUPPORT_REPLICATION                  = "XRE00";
     String REPLICATION_LOG_CORRUPTED                               = "XRE01";
-    String REPLICATION_MASTER_SLAVE_VERSION_MISMATCH               = "XRE02";
+    String REPLICATION_PRIMARY_REPLICA_VERSION_MISMATCH            = "XRE02";
     String REPLICATION_UNEXPECTED_EXCEPTION                        = "XRE03";
     String REPLICATION_CONNECTION_EXCEPTION                        = "XRE04.C.1";
     String REPLICATION_CONNECTION_LOST                             = "XRE04.C.2";
     String REPLICATION_LOG_OUT_OF_SYNCH                            = "XRE05.C";
     String REPLICATION_MASTER_TIMED_OUT                            = "XRE06";
     String REPLICATION_NOT_IN_MASTER_MODE                          = "XRE07";
-    String REPLICATION_SLAVE_STARTED_OK                            = "XRE08";
-    String CANNOT_START_SLAVE_ALREADY_BOOTED                       = "XRE09.C";
+    String REPLICATION_REPLICA_STARTED_OK                          = "XRE08";
+    String CANNOT_START_REPLICA_ALREADY_BOOTED                     = "XRE09.C";
     String REPLICATION_CONFLICTING_ATTRIBUTES                      = "XRE10";
     String REPLICATION_DB_NOT_BOOTED                               = "XRE11.C";
     String REPLICATION_UNEXPECTED_MESSAGEID                        = "XRE12";
@@ -1945,13 +1956,15 @@ public interface SQLState {
     String REPLICATION_FAILOVER_UNSUCCESSFUL                       = "XRE21.C";
     String REPLICATION_MASTER_ALREADY_BOOTED                       = "XRE22.C";
     String REPLICATION_UNLOGGED_OPERATIONS_IN_PROGRESS             = "XRE23";
-    String REPLICATION_NOT_IN_SLAVE_MODE                           = "XRE40";
-    String SLAVE_OPERATION_DENIED_WHILE_CONNECTED                  = "XRE41.C";
-    String REPLICATION_SLAVE_SHUTDOWN_OK                           = "XRE42.C";
-    String REPLICATION_STOPSLAVE_NOT_INITIATED                     = "XRE43";
+    String REPLICATION_NOT_IN_REPLICA_MODE                         = "XRE40";
+    String REPLICA_OPERATION_DENIED_WHILE_CONNECTED                = "XRE41.C";
+    String REPLICATION_REPLICA_SHUTDOWN_OK                         = "XRE42.C";
+    String REPLICATION_STOPREPLICA_NOT_INITIATED                   = "XRE43";
+
+	//Inherited DB2 error codes
+    String LANG_CANCELLATION_EXCEPTION                             = "57014";
 
     //general SPlice errors
-    String LANG_CANCELLATION_EXCEPTION                             = "SE008";
     String LANG_INVALID_DAY                                        = "SE022";
     String ERROR_PARSING_EXCEPTION                                 = "SE023";
     String PARAMETER_CANNOT_BE_NULL                                = "SE024";
@@ -1984,7 +1997,20 @@ public interface SQLState {
 	String POINT_IN_TIME_TOO_SMALL                                 = "BR022";
 	String RESTORE_TXNID_TOO_LARGE								   = "BR023";
 	String NO_BACKUP_EXT_TABLE									   = "BR024";
-
+	String EMPTY_SCHEMA                                            = "BR025";
+	String CANNOT_CONNECT_DURING_RESTORE                           = "BR026";
+	/**
+	 * Replication
+	 */
+	String INVALID_REPLICATION_ROLE									= "RPL001";
+	String PEER_EXISTS									            = "RPL002";
+	String INVALID_REPLICATION_PEER									= "RPL003";
+    String CANNOT_CONNECT_PEER                                      = "RPL004";
+	String READ_ONLY												= "RPL005";
+	String REPLICATION_CONFIG_ERROR                                 = "RPL006";
+    /**
+     * External table
+     */
 	String ROW_FORMAT_NOT_ALLOWED_WITH_PARQUET					   	= "EXT01";
 	String ROW_FORMAT_NOT_ALLOWED_WITH_ORC						   	= "EXT02";
 	String STORED_AS_REQUIRED_WITH_EXTERNAL_TABLES		   			= "EXT03";

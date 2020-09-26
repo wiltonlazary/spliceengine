@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -16,17 +16,19 @@ package com.splicemachine.derby.impl.sql.execute.operations;
 
 import com.splicemachine.derby.test.framework.*;
 import com.splicemachine.homeless.TestUtils;
+import com.splicemachine.test.LongerThanTwoMinutes;
 import com.splicemachine.test_dao.TableDAO;
 import com.splicemachine.test_tools.TableCreator;
 import org.junit.ClassRule;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -43,6 +45,7 @@ import static org.junit.Assert.*;
  */
 @SuppressWarnings("unchecked")
 @RunWith(Parameterized.class)
+@Category(LongerThanTwoMinutes.class)
 public class WindowFunctionIT extends SpliceUnitTest {
     private Boolean useSpark;
 
@@ -4726,7 +4729,7 @@ public class WindowFunctionIT extends SpliceUnitTest {
                 "        A.PRSN_KEY, " +
                 "         ROW_NUMBER() OVER (PARTITION BY A.PRSN_KEY ORDER BY " +
                 "MOST_RECENT_STAGING_DATE DESC) \"ROWNUM\", " +
-                "         LEAD(STAGE_NUM) OVER (PARTITION BY B.PRSN_KEY ORDER BY " +
+                "         LEAD(STAGE_NUM) OVER (PARTITION BY A.PRSN_KEY ORDER BY " +
                 "MOST_RECENT_STAGING_DATE DESC ) \"PREV_STAGE_NUM\" " +
                 "        from ( " +
                 "                select " +
@@ -5384,6 +5387,60 @@ public class WindowFunctionIT extends SpliceUnitTest {
                 "  Susan  | 10000 |   5   |     Vendas      |12000 | 1 |";
         ResultSet rs = methodWatcher.executeQuery(sqlText);
         assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+        rs.close();
+    }
+
+    @Test
+    public void testMaxWindowFunctionWithNulls() throws Exception {
+        String sqlText =
+                String.format("select years, month, max(amount) over (partition by years order by month rows between unbounded preceding and current row) X\n" +
+                        "from %s --splice-properties useSpark=%s\n" +
+                        "where years=2005 and emp_id=21 order by years, month", this.getTableReference(ALL_SALES), useSpark);
+
+        ResultSet rs = methodWatcher.executeQuery(sqlText);
+        String expected =
+                "YEARS | MONTH |    X    |\n" +
+                        "--------------------------\n" +
+                        " 2005  |   1   |26034.84 |\n" +
+                        " 2005  |   2   |26034.84 |\n" +
+                        " 2005  |   3   |26034.84 |\n" +
+                        " 2005  |   4   |26034.84 |\n" +
+                        " 2005  |   5   |26034.84 |\n" +
+                        " 2005  |   6   |26034.84 |\n" +
+                        " 2005  |   7   |62654.82 |\n" +
+                        " 2005  |   8   |62654.82 |\n" +
+                        " 2005  |   9   |62654.82 |\n" +
+                        " 2005  |  10   |62654.82 |\n" +
+                        " 2005  |  11   |62654.82 |\n" +
+                        " 2005  |  12   |62654.82 |";
+        assertEquals("\n"+sqlText+"\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+        rs.close();
+    }
+
+    @Test
+    public void testMinWindowFunctionWithNulls() throws Exception {
+        String sqlText =
+                String.format("select years, month, min(amount) over (partition by years order by month rows between unbounded preceding and current row) X\n" +
+                        "from %s --splice-properties useSpark=%s\n" +
+                        "where years=2005 and emp_id=21 order by years, month", this.getTableReference(ALL_SALES), useSpark);
+
+        ResultSet rs = methodWatcher.executeQuery(sqlText);
+        String expected =
+                "YEARS | MONTH |    X    |\n" +
+                        "--------------------------\n" +
+                        " 2005  |   1   |26034.84 |\n" +
+                        " 2005  |   2   |12644.65 |\n" +
+                        " 2005  |   3   |12644.65 |\n" +
+                        " 2005  |   4   |12644.65 |\n" +
+                        " 2005  |   5   |12644.65 |\n" +
+                        " 2005  |   6   |12644.65 |\n" +
+                        " 2005  |   7   |12644.65 |\n" +
+                        " 2005  |   8   |12644.65 |\n" +
+                        " 2005  |   9   |12644.65 |\n" +
+                        " 2005  |  10   |12644.65 |\n" +
+                        " 2005  |  11   |12644.65 |\n" +
+                        " 2005  |  12   |10032.64 |";
+        assertEquals("\n"+sqlText+"\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
         rs.close();
     }
 }

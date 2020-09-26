@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,37 +14,36 @@
 
 package com.splicemachine.access.hbase;
 
-import com.splicemachine.access.api.TableDescriptor;
 import com.splicemachine.si.constants.SIConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 
 /**
  * Created by jyuan on 3/3/16.
  */
-public class HBaseTableDescriptor implements TableDescriptor{
+public class HBaseTableDescriptor implements com.splicemachine.access.api.TableDescriptor{
 
-    HTableDescriptor hTableDescriptor;
+    TableDescriptor tableDescriptor;
 
-    public HBaseTableDescriptor(HTableDescriptor hTableDescriptor) {
-        this.hTableDescriptor = hTableDescriptor;
+    public HBaseTableDescriptor(TableDescriptor tableDescriptor) {
+        this.tableDescriptor = tableDescriptor;
     }
 
     @Override
     public String getTableName() {
-        return hTableDescriptor.getNameAsString();
+        return tableDescriptor.getTableName().getNameAsString();
     }
 
     @Override
     public String getTransactionId() {
-        return hTableDescriptor.getValue(SIConstants.TRANSACTION_ID_ATTR);
+        return tableDescriptor.getValue(SIConstants.TRANSACTION_ID_ATTR);
     }
 
     @Override
     public String getDroppedTransactionId() {
-        return hTableDescriptor.getValue(SIConstants.DROPPED_TRANSACTION_ID_ATTR);
+        return tableDescriptor.getValue(SIConstants.DROPPED_TRANSACTION_ID_ATTR);
     }
 
-    public HTableDescriptor getHTableDescriptor() {
-        return hTableDescriptor;
+    public TableDescriptor getTableDescriptor() {
+        return tableDescriptor;
     }
 }

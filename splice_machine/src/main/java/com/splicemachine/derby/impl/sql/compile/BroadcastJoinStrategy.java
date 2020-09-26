@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -145,8 +145,7 @@ public class BroadcastJoinStrategy extends HashableJoinStrategy {
                  // allow full outer join without equality join condition
                  outerCost.getJoinType() == JoinNode.FULLOUTERJOIN||
                  // allow left or inner join with non-equality broadcast join only if using spark
-                 (innerTable instanceof FromBaseTable &&
-                        ((FromBaseTable)innerTable).isSpark(((FromBaseTable)innerTable).getdataSetProcessorTypeForAccessPath(currentAccessPath))));
+                 (innerTable instanceof FromBaseTable && optimizer.isForSpark()));
 
         if (costIt) {
             double joinSelectivity = SelectivityUtil.estimateJoinSelectivity(innerTable, cd, predList, (long) innerCost.rowCount(), (long) outerCost.rowCount(), outerCost, SelectivityUtil.JoinPredicateType.ALL);

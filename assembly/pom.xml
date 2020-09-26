@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright (c) 2012 - 2019 Splice Machine, Inc.
+  ~ Copyright (c) 2012 - 2020 Splice Machine, Inc.
   ~
   ~ This file is part of Splice Machine.
   ~ Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -21,7 +21,7 @@
     <parent>
         <artifactId>spliceengine-parent</artifactId>
         <groupId>com.splicemachine</groupId>
-        <version>3.1.0.1943-SNAPSHOT</version>
+        <version>3.1.0.1977-SNAPSHOT</version>
     </parent>
     <dependencies>
         <dependency>
@@ -30,16 +30,46 @@
             <artifactId>hbase_sql</artifactId>
             <version>${project.version}</version>
             <classifier>${envClassifier}</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.kafka</groupId>
+                    <artifactId>kafka_${scala.binary.version}</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>splice_spark</artifactId>
             <version>${project.version}</version>
             <classifier>${envClassifier}</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.kafka</groupId>
+                    <artifactId>kafka_${scala.binary.version}</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>splice_spark2</artifactId>
+            <version>${project.version}</version>
+            <classifier>${envClassifier}</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.kafka</groupId>
+                    <artifactId>kafka_${scala.binary.version}</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>spark_sql</artifactId>
+            <version>${project.version}</version>
+            <classifier>${envClassifier}</classifier>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>splice_ck</artifactId>
             <version>${project.version}</version>
             <classifier>${envClassifier}</classifier>
         </dependency>
@@ -58,6 +88,7 @@
             spark_sql,
             splice_access_api,
             splice_encoding,
+            splice_ck,
             splice_machine,
             splice_protocol,
             splice_si_api,
@@ -69,18 +100,20 @@
             concurrentlinkedhashmap-lru,
             kryo-serializers,
             lucene-core,
-	    scala_util,
+            scala_util,
             hbase_pipeline,
             hbase_storage,
             hbase_sql,
             splice_ee,
             splice_backup,
             splice_replication,
+            splice_replication_monitor,
             splice_auth,
             splice_colperms,
             splice_encryption,
             akka-remote_${scala.binary.version},
             splice_spark,
+            splice_spark2,
             super-csv,
             c3p0,
             mchange-commons-java,
@@ -94,7 +127,8 @@
             slice,
             orc-protobuf,
             spark-avro_2.11,
-            jython-standalone
+            jython-standalone,
+            picocli
         </commonArtifacts>
     </properties>
     <build>
@@ -214,8 +248,14 @@
                                         <copy todir="target/SPLICEMACHINE-${project.version}.${envClassifier}.${parcel.patch}/bin">
                                             <fileset dir="common/src/main/resources/bin" includes="sqlshell.sh"/>
                                         </copy>
+                                        <copy todir="target/SPLICEMACHINE-${project.version}.${envClassifier}.${parcel.patch}/bin">
+                                            <fileset dir="common/src/main/resources/bin" includes="spliceck.sh"/>
+                                        </copy>
                                         <replace token="##SPLICELIBDIR##" value="${splice.lib.dir}" dir="target/SPLICEMACHINE-${project.version}.${envClassifier}.${parcel.patch}/bin">
                                             <include name="sqlshell.sh"/>
+                                        </replace>
+                                        <replace token="##SPLICELIBDIR##" value="${splice.lib.dir}" dir="target/SPLICEMACHINE-${project.version}.${envClassifier}.${parcel.patch}/bin">
+                                            <include name="spliceck.sh"/>
                                         </replace>
                                         <copy todir="target/SPLICEMACHINE-${project.version}.${envClassifier}.${parcel.patch}/scripts">
                                             <fileset dir="target/classes/scripts" includes="**/*" excludes="**/flatten.sh,**/restart.sh" />
@@ -343,7 +383,8 @@
                                         javax.servlet-api,
                                         javax.ws.rs-api,
                                         jython-standalone,
-                                        splice_spark
+                                        splice_spark,
+                                        splice_spark2
                                     </includeArtifactIds>
                                 </configuration>
                             </execution>
@@ -517,6 +558,9 @@
                                         <replace token="##SPLICELIBDIR##" value="${splice.lib.dir}" dir="target/SPLICEMACHINE-${project.version}.${envClassifier}.${parcel.patch}/bin">
                                             <include name="sqlshell.sh"/>
                                         </replace>
+                                        <replace token="##SPLICELIBDIR##" value="${splice.lib.dir}" dir="target/SPLICEMACHINE-${project.version}.${envClassifier}.${parcel.patch}/bin">
+                                            <include name="spliceck.sh"/>
+                                        </replace>
                                         <copy todir="target/SPLICEMACHINE-${project.version}.${envClassifier}.${parcel.patch}/scripts">
                                             <fileset dir="target/classes/scripts" includes="**/*" excludes="**/flatten.sh,**/restart.sh" />
                                             <fileset dir="common/src/main/resources/scripts" includes="**/*"/>
@@ -617,6 +661,12 @@
                                                 <source>
                                                     <location>common/src/main/resources/bin/sqlshell.sh</location>
                                                 </source>
+                                                <source>
+                                                    <location>common/src/main/resources/scripts/install-test.sql</location>
+                                                </source>
+                                                <source>
+                                                    <location>common/src/main/resources/bin/spliceck.sh</location>
+                                                </source>
                                             </sources>
                                             <filemode>
                                                 755
@@ -627,7 +677,7 @@
                                         </mapping>
                                     </mappings>
                                     <postinstallScriptlet>
-                                      <script>sed -i 's/##SPLICELIBDIR##/\/var\/lib\/splicemachine/g' /var/lib/splicemachine/sqlshell.sh</script>
+                                      <script>sed -i 's/##SPLICELIBDIR##/\/var\/lib\/splicemachine/g' /var/lib/splicemachine/spliceck.sh /var/lib/splicemachine/sqlshell.sh</script>
                                     </postinstallScriptlet>
                                 </configuration>
                             </execution>
@@ -657,10 +707,10 @@
                                             </sources>
                                         </mapping>
                                         <mapping>
-                                            <directory>/var/lib/ambari-server/resources/stacks/HDP/2.6/services/SPLICEMACHINE</directory>
+                                            <directory>/var/lib/ambari-server/resources/stacks/HDP/3.1/services/SPLICEMACHINE</directory>
                                             <sources>
                                                 <source>
-                                                    <location>${project.build.directory}/classes/stacks/HDP/2.6/services/SPLICEMACHINE</location>
+                                                    <location>${project.build.directory}/classes/stacks/HDP/3.1/services/SPLICEMACHINE</location>
                                                 </source>
                                             </sources>
                                         </mapping>
@@ -1158,6 +1208,9 @@
                                                 <source>
                                                     <location>common/src/main/resources/bin/sqlshell.sh</location>
                                                 </source>
+                                                <source>
+                                                    <location>common/src/main/resources/bin/spliceck.sh</location>
+                                                </source>
                                             </sources>
                                             <filemode>755</filemode>
                                         </mapping>
@@ -1173,6 +1226,7 @@
                                                     <include>com.splicemachine:db-shared</include>
                                                     <include>com.splicemachine:db-tools-ij</include>
                                                     <include>com.splicemachine:splice_spark</include>
+                                                    <include>com.splicemachine:splice_spark2</include>
                                                     <include>tomcat:jasper-runtime</include>
                                                     <include>tomcat:tomcat-parent</include>
                                                     <include>org.apache.commons:commons-lang</include>
@@ -1480,6 +1534,9 @@
                                         <replace token="##SPLICELIBDIR##" value="${splice.lib.dir}" dir="target/SPLICEMACHINE-${project.version}.${envClassifier}.${parcel.patch}/bin">
                                             <include name="sqlshell.sh"/>
                                         </replace>
+                                        <replace token="##SPLICELIBDIR##" value="${splice.lib.dir}" dir="target/SPLICEMACHINE-${project.version}.${envClassifier}.${parcel.patch}/bin">
+                                            <include name="spliceck.sh"/>
+                                        </replace>
                                         <copy todir="target/SPLICEMACHINE-${project.version}.${envClassifier}.${parcel.patch}/conf">
                                             <fileset dir="target/classes/conf" includes="**/*"/>
                                         </copy>
@@ -1577,6 +1634,7 @@
                                 <directory>common/src/main/resources/bin</directory>
                                 <includes>
                                   <include>sqlshell.sh</include>
+                                  <include>winsqlshell.cmd</include>
                                 </includes>
                             </resource>
                           </resources>
@@ -1600,7 +1658,7 @@
             </build>
         </profile>
 
-        <profile>
+       <profile>
             <id>standalone</id>
             <dependencies>
                 <dependency>

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -272,12 +272,16 @@ public class ScrollInsensitiveOperation extends SpliceBaseOperation {
 
         OperationContext operationContext = dsp.createOperationContext(this);
         // we are returning data to the client, get a resultDataSet
+        dsp.incrementOpDepth();
         DataSet<ExecRow> sourceSet = source.getResultDataSet(dsp);
+        dsp.decrementOpDepth();
 
         dsp.setSchedulerPool("query");
         operationContext.pushScope();
         try {
-            return sourceSet.map(new ScrollInsensitiveFunction(operationContext), true);
+            DataSet<ExecRow> ds = sourceSet.map(new ScrollInsensitiveFunction(operationContext), true);
+            handleSparkExplain(ds, sourceSet, dsp);
+            return ds;
         } finally {
             operationContext.popScope();
         }

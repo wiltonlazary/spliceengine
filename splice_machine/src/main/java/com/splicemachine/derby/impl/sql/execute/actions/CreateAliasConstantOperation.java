@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -300,7 +300,7 @@ public class CreateAliasConstantOperation extends DDLConstantOperation {
 			DataDescriptorGenerator ddg = dd.getDataDescriptorGenerator();
 			td = ddg.newTableDescriptor(aliasName, sd, TableDescriptor.SYNONYM_TYPE,
 						TableDescriptor.DEFAULT_LOCK_GRANULARITY,-1,
-					null,null,null,null,null,null,false,false);
+					null,null,null,null,null,null,false,false,null);
 			dd.addDescriptor(td, sd, DataDictionary.SYSTABLES_CATALOG_NUM, false, tc, false);
             break;
 		

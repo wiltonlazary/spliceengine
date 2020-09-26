@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -58,7 +58,7 @@ public class BlobLocatorInputStream extends java.io.InputStream
      * @throws SqlException if an error occurs when obtaining the
      *         length of the <code>Blob</code>.
      */
-    public BlobLocatorInputStream(Connection connection, Blob blob) 
+    public BlobLocatorInputStream(ClientConnection connection, Blob blob)
         throws SqlException
     {        
         if (SanityManager.DEBUG) {
@@ -91,7 +91,7 @@ public class BlobLocatorInputStream extends java.io.InputStream
      * @throws SqlException if an error occurs when obtaining the
      *         length of the <code>Blob</code>.
      */
-    public BlobLocatorInputStream(Connection connection, Blob blob,
+    public BlobLocatorInputStream(ClientConnection connection, Blob blob,
                                   long position, long length) 
         throws SqlException
     {    
@@ -191,7 +191,7 @@ public class BlobLocatorInputStream extends java.io.InputStream
     /**
      * Connection used to read Blob from server.
      */
-    private final Connection connection;
+    private final ClientConnection connection;
     
     /**
      * The Blob to be accessed.

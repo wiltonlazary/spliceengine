@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -36,11 +36,13 @@ public class RemoteQueryJob extends DistributedJob {
     String sql;
     int streamingBatches;
     int streamingBatchSize;
+    int parallelPartitions;
+    Integer shufflePartitions;
 
 
     public RemoteQueryJob(ActivationHolder ah, int rootResultSetNumber, UUID uuid, String host, int port,
                           String session, String userId, String sql,
-                          int streamingBatches, int streamingBatchSize) {
+                          int streamingBatches, int streamingBatchSize, int parallelPartitions, Integer shufflePartitionsProperty) {
         this.ah = ah;
         this.rootResultSetNumber = rootResultSetNumber;
         this.uuid = uuid;
@@ -51,6 +53,8 @@ public class RemoteQueryJob extends DistributedJob {
         this.sql = sql;
         this.streamingBatches = streamingBatches;
         this.streamingBatchSize = streamingBatchSize;
+        this.parallelPartitions = parallelPartitions;
+        this.shufflePartitions = shufflePartitionsProperty;
     }
 
     @Override

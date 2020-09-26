@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -27,7 +27,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.log4j.Logger;
-import org.spark_project.guava.util.concurrent.ThreadFactoryBuilder;
+import splice.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import com.splicemachine.SqlExceptionFactory;
 import com.splicemachine.access.api.SConfiguration;
@@ -63,7 +63,6 @@ public class AsynchronousDDLWatcher implements DDLWatcher,CommunicationListener{
                                   DDLWatchChecker ddlWatchChecker,
                                   SqlExceptionFactory exceptionFactory,
                                   TxnSupplier txnSupplier){
-        long maxDdlWait = config.getMaxDdlWait() << 1;
         this.refreshWaitMs = config.getDdlRefreshInterval();
         this.checker = ddlWatchChecker;
         this.refresher = new DDLWatchRefresher(checker,

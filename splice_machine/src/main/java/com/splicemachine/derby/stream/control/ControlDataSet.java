@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -22,6 +22,7 @@ import com.splicemachine.db.iapi.sql.conn.ControlExecutionLimiter;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.iapi.types.SQLLongint;
+import com.splicemachine.db.impl.sql.compile.ExplainNode;
 import com.splicemachine.db.impl.sql.execute.ValueRow;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.DMLWriteOperation;
@@ -56,6 +57,7 @@ import com.splicemachine.derby.stream.output.update.UpdateTableWriterBuilder;
 import com.splicemachine.pipeline.Exceptions;
 import com.splicemachine.primitives.Bytes;
 import com.splicemachine.si.impl.driver.SIDriver;
+import com.splicemachine.system.CsvOptions;
 import com.splicemachine.utils.Pair;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.collections.IteratorUtils;
@@ -66,12 +68,12 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-import org.spark_project.guava.base.Function;
-import org.spark_project.guava.base.Predicate;
-import org.spark_project.guava.collect.Iterators;
-import org.spark_project.guava.collect.Sets;
-import org.spark_project.guava.io.Closeables;
-import org.spark_project.guava.util.concurrent.Futures;
+import splice.com.google.common.base.Function;
+import splice.com.google.common.base.Predicate;
+import splice.com.google.common.collect.Iterators;
+import splice.com.google.common.collect.Sets;
+import splice.com.google.common.io.Closeables;
+import splice.com.google.common.util.concurrent.Futures;
 import scala.Tuple2;
 
 import javax.annotation.Nullable;
@@ -80,13 +82,7 @@ import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.io.OutputStream;
 import java.nio.file.StandardOpenOption;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
@@ -314,7 +310,7 @@ public class ControlDataSet<V> implements DataSet<V> {
             ExecutorCompletionService<Iterator<V>> completionService = new ExecutorCompletionService<>(es);
             NonOrderPreservingFutureIterator<V> futureIterator = new NonOrderPreservingFutureIterator<>(completionService, dataSetList.size());
             for (DataSet<V> aSet: dataSetList) {
-                completionService.submit(new NonLazy(((ControlDataSet<V>)aSet).iterator));
+                completionService.submit(new NonLazy(((DataSet<V>)aSet).toLocalIterator()));
             }
             return new ControlDataSet<>(futureIterator);
         } catch (Exception e) {
@@ -412,6 +408,11 @@ public class ControlDataSet<V> implements DataSet<V> {
     @Override
     public ExportDataSetWriterBuilder writeToDisk(){
         return new ControlExportDataSetWriter.Builder<>(this);
+    }
+
+    @Override
+    public KafkaDataSetWriterBuilder writeToKafka() {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -513,7 +514,7 @@ public class ControlDataSet<V> implements DataSet<V> {
     }
 
     @Override
-    public DataSet<V> crossJoin(OperationContext operationContext, DataSet<V> rightDataSet) {
+    public DataSet<V> crossJoin(OperationContext operationContext, DataSet<V> rightDataSet, Broadcast type) {
         throw new UnsupportedOperationException("Not Implemented in Control Side");
     }
 
@@ -557,6 +558,7 @@ public class ControlDataSet<V> implements DataSet<V> {
      * @return
      */
     @Override
+    @SuppressFBWarnings(value="REC_CATCH_EXCEPTION", justification="DB-9846")
     public DataSet<ExecRow> writeParquetFile(DataSetProcessor dsp, int[] partitionBy, String location, String compression, OperationContext context) {
 
         try {
@@ -591,7 +593,7 @@ public class ControlDataSet<V> implements DataSet<V> {
                     ValueRow vr = (ValueRow) iterator.next();
                     context.recordWrite();
 
-                    rw.write(null, encoder.toRow(vr));
+                    rw.write(null, ParquetWriterService.getFactory().encodeToRow(tableSchema, vr, encoder));
                 }
             } finally {
                 rw.close(null);
@@ -636,19 +638,10 @@ public class ControlDataSet<V> implements DataSet<V> {
     }
 
     /**
-     *
      * Not Supported
-     *
-     * @param op
-     * @param location
-     * @param characterDelimiter
-     * @param columnDelimiter
-     * @param baseColumnMap
-     * @param context
-     * @return
      */
     @Override
-    public DataSet<ExecRow> writeTextFile(SpliceOperation op, String location, String characterDelimiter, String columnDelimiter, int[] baseColumnMap,  OperationContext context) {
+    public DataSet<ExecRow> writeTextFile(String location, CsvOptions csvOptions, OperationContext context) {
         throw new UnsupportedOperationException("Cannot write text files");
     }
 
@@ -734,7 +727,7 @@ public class ControlDataSet<V> implements DataSet<V> {
             @Override
             public DataSetWriter build() throws StandardException{
                 assert txn!=null:"Txn is null";
-                DeletePipelineWriter dpw = new DeletePipelineWriter(txn,token,heapConglom,operationContext);
+                DeletePipelineWriter dpw = new DeletePipelineWriter(txn,token,heapConglom, tempConglomID, tableVersion, execRowDefinition, operationContext);
                 dpw.setRollforward(true);
                 return new ControlDataSetWriter<>((ControlDataSet<ExecRow>)ControlDataSet.this,dpw,operationContext, updateCounts);
             }
@@ -755,6 +748,7 @@ public class ControlDataSet<V> implements DataSet<V> {
                         autoIncrementRowLocationArray,
                         spliceSequences,
                         heapConglom,
+                        tempConglomID,
                         txn,
                         token, operationContext,
                         isUpsert);
@@ -772,7 +766,7 @@ public class ControlDataSet<V> implements DataSet<V> {
             @Override
             public DataSetWriter build() throws StandardException{
                 assert txn!=null: "Txn is null";
-                UpdatePipelineWriter upw =new UpdatePipelineWriter(heapConglom,
+                UpdatePipelineWriter upw =new UpdatePipelineWriter(heapConglom, tempConglomID,
                         formatIds,columnOrdering,pkCols,pkColumns,tableVersion,
                         txn,token,execRowDefinition,heapList,operationContext);
 
@@ -789,4 +783,15 @@ public class ControlDataSet<V> implements DataSet<V> {
 
     @Override
     public DataSet applyNativeSparkAggregation(int[] groupByColumns, SpliceGenericAggregator[] aggregates, boolean isRollup, OperationContext operationContext) { return null; }
+
+    @Override
+    public boolean isNativeSpark() {
+        return false;
+    }
+
+    public List<String> buildNativeSparkExplain(ExplainNode.SparkExplainKind sparkExplainKind) {
+        List<String> warnMsg = new ArrayList<>();
+        warnMsg.add("Spark EXPLAIN not available.\n");
+        return warnMsg;
+    }
 }

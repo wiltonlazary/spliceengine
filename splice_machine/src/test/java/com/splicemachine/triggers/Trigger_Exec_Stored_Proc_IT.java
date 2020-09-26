@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -21,6 +21,7 @@ import java.util.Properties;
 
 import com.splicemachine.derby.test.framework.SpliceUnitTest;
 import com.splicemachine.derby.test.framework.TestConnection;
+import com.splicemachine.test.LongerThanTwoMinutes;
 import com.splicemachine.test.SerialTest;
 import org.junit.*;
 import com.splicemachine.derby.test.framework.SpliceSchemaWatcher;
@@ -30,7 +31,7 @@ import com.splicemachine.test_dao.TriggerDAO;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 /**
  * Tests trigger execution of stored procedures.
@@ -38,7 +39,7 @@ import org.spark_project.guava.collect.Lists;
  * Note the dependency on user-defined stored procedures in this test class.<br/>
  * See {@link TriggerProcs} for instructions on adding/modifying store procedures.
  */
-@Category(value = {SerialTest.class})
+@Category({SerialTest.class, LongerThanTwoMinutes.class})
 @RunWith(Parameterized.class)
 public class Trigger_Exec_Stored_Proc_IT  extends SpliceUnitTest {
 

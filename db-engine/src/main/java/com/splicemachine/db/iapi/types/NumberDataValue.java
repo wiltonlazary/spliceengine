@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -43,6 +43,7 @@ public interface NumberDataValue extends DataValueDescriptor
 	 * The minimum scale when dividing Decimals
 	 */
 	int MIN_DECIMAL_DIVIDE_SCALE = 4;
+	int MIN_DECIMAL_MULTIPLICATION_SCALE = 6;
 	int MAX_DECIMAL_PRECISION_SCALE = DB2_MAX_DECIMAL_PRECISION_SCALE;
 	int OLD_MAX_DECIMAL_PRECISION_SCALE = 31;
 	int MAX_DECIMAL_PRECISION_WITH_RESERVE_FOR_SCALE = MAX_DECIMAL_PRECISION_SCALE - MIN_DECIMAL_DIVIDE_SCALE;

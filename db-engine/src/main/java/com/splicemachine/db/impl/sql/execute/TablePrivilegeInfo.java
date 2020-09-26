@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -38,7 +38,8 @@ import com.splicemachine.db.iapi.sql.conn.LanguageConnectionContext;
 import com.splicemachine.db.iapi.sql.depend.DependencyManager;
 import com.splicemachine.db.iapi.sql.dictionary.*;
 import com.splicemachine.db.iapi.store.access.TransactionController;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 import java.util.List;
 
@@ -46,11 +47,11 @@ public class TablePrivilegeInfo extends BasicPrivilegeInfo
 {
 
 	private TableDescriptor td;
-	protected SchemaDescriptor sd;
-	
+
 	/**
 	 * @param actionAllowed actionAllowed[action] is true if action is in the privilege set.
 	 */
+	@SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "DB-9844")
 	public TablePrivilegeInfo( TableDescriptor td,
 							   boolean[] actionAllowed,
 							   FormatableBitSet[] columnBitSets,

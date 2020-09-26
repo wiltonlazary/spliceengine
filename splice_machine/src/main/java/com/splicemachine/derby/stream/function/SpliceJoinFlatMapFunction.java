@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -46,7 +46,7 @@ public abstract class SpliceJoinFlatMapFunction<Op extends SpliceOperation, From
             numberOfColumns = op.getLeftNumCols()+op.getRightNumCols();
             executionFactory = op.getExecutionFactory();
             forSSQ = op.rightFromSSQ;
-            isSemiJoin = op.isOneRowRightSide();
+            isSemiJoin = op.isInclusionJoin();
             initialized = true;
         }
     }

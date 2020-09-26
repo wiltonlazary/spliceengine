@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -44,7 +44,7 @@ public class CreateSchemaIT {
     protected static SpliceSchemaWatcher sullivan1SchemaWatcher = new SpliceSchemaWatcher("SULLIVAN1");
     protected static SpliceSchemaWatcher sullivanSchemaWatcher = new SpliceSchemaWatcher("SULLIVAN");
     protected static SpliceSchemaWatcher cmprod = new SpliceSchemaWatcher("cmprod");
-    protected static SpliceUserWatcher cmprodUser = new SpliceUserWatcher("cmprod","bigdata4u");
+    protected static SpliceUserWatcher cmprodUser = new SpliceUserWatcher("cmprod","cmprod_password");
 
 
     @ClassRule
@@ -112,7 +112,7 @@ public class CreateSchemaIT {
         try {
             methodWatcher.execute("call SYSCS_UTIL.SYSCS_UPDATE_SCHEMA_OWNER('cmprod','cmprod')");
             methodWatcher.execute("create table cmprod.table1 (col1 int)");
-            connection = SpliceNetConnection.getConnectionAs("cmprod", "bigdata4u");
+            connection = SpliceNetConnection.newBuilder().user("cmprod").password("cmprod_password").build();
             ResultSet rs = connection.createStatement().executeQuery("select * from cmprod.table1");
             rs.next();
             rs.close();
@@ -122,4 +122,21 @@ public class CreateSchemaIT {
         }
     }
 
+    // DB-8357
+    @Test
+    public void testSchemaAutoCreation() throws Exception {
+        try {
+            methodWatcher.execute("create table AUTO_SCHEMA.AAA (col1 int)");
+            ResultSet rs = methodWatcher.executeQuery("SELECT SCHEMANAME FROM SYS.SYSSCHEMAS WHERE SCHEMANAME = 'AUTO_SCHEMA'");
+            String expected = "SCHEMANAME  |\n" +
+                    "-------------\n" +
+                    "AUTO_SCHEMA |";
+            assertEquals("list of schemas does not match", expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+            rs.close();
+        }
+        finally {
+            methodWatcher.execute("DROP TABLE AUTO_SCHEMA.AAA");
+            methodWatcher.execute("DROP SCHEMA AUTO_SCHEMA RESTRICT");
+        }
+    }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -20,6 +20,7 @@ import com.splicemachine.metrics.TimeView;
 import com.splicemachine.metrics.Timer;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -67,6 +68,14 @@ public class MeasuredResultScanner implements ResultScanner{
     @Override
     public void close(){
         resultScanner.close();
+    }
+
+    public boolean renewLease() {
+        return false;
+    }
+
+    public ScanMetrics getScanMetrics() {
+        return resultScanner.getScanMetrics();
     }
 
     @Override

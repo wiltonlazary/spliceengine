@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -21,14 +21,14 @@ import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
-import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import com.splicemachine.ipc.SpliceRpcController;
 import org.apache.log4j.Logger;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
+import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 
 /**
  * @author Scott Fines
@@ -40,7 +40,7 @@ public abstract class SkeletonTxnNetworkLayer implements TxnNetworkLayer{
     public void beginTransaction(byte[] rowKey,TxnMessage.TxnInfo txnInfo) throws IOException{
         TxnMessage.TxnLifecycleService service=getLifecycleService(rowKey);
         ServerRpcController controller=new ServerRpcController();
-        service.beginTransaction(controller,txnInfo,new BlockingRpcCallback<TxnMessage.VoidResponse>());
+        service.beginTransaction(controller,txnInfo,new BlockingRpcCallback<>());
         dealWithError(controller);
     }
 
@@ -112,7 +112,7 @@ public abstract class SkeletonTxnNetworkLayer implements TxnNetworkLayer{
     @Override
     public TxnMessage.Txn getTxn(byte[] rowKey,TxnMessage.TxnRequest request) throws IOException{
         TxnMessage.TxnLifecycleService service=getLifecycleService(rowKey);
-        SpliceRpcControl controller = new SpliceRpcControl();
+        SpliceRpcController controller = new SpliceRpcController();
         controller.setPriority(HConstants.HIGH_QOS);
         BlockingRpcCallback<TxnMessage.Txn> done=new BlockingRpcCallback<>();
         service.getTransaction(controller,request,done);
@@ -128,6 +128,48 @@ public abstract class SkeletonTxnNetworkLayer implements TxnNetworkLayer{
         service.getTaskId(controller,request,done);
         dealWithError(controller);
         return done.get();
+    }
+
+    @Override
+    public TxnMessage.TxnAtResponse getTxnAt(final TxnMessage.TxnAtRequest request) throws IOException {
+        Map<byte[], TxnMessage.TxnAtResponse> data=coprocessorService(TxnMessage.TxnLifecycleService.class,
+                HConstants.EMPTY_START_ROW,HConstants.EMPTY_END_ROW, instance -> {
+                    ServerRpcController controller=new ServerRpcController();
+                    BlockingRpcCallback<TxnMessage.TxnAtResponse> response=new BlockingRpcCallback<>();
+
+                    instance.getTxnAt(controller,request,response);
+                    dealWithError(controller);
+                    return response.get();
+                });
+        TxnMessage.TxnAtResponse.Builder result = TxnMessage.TxnAtResponse.newBuilder();
+        result.setTs(Long.MAX_VALUE);
+        result.setTxnId(-1);
+        boolean allAfter = true;
+        for(TxnMessage.TxnAtResponse response : data.values())
+        {
+            if(response.getTxnId() != -1)
+            {
+                allAfter = false;
+                break;
+            }
+        }
+        if(allAfter) {
+            return result.build();
+        }
+
+        for(TxnMessage.TxnAtResponse response : data.values())
+        {
+            if(response.getTxnId() == -1)
+            {
+                continue;
+            }
+            if(Math.abs(response.getTs() - request.getTs()) <= Math.abs(result.getTs() - request.getTs()))
+            {
+                result.setTs(response.getTs());
+                result.setTxnId(response.getTxnId());
+            }
+        }
+        return result.build();
     }
 
 
@@ -151,14 +193,5 @@ public abstract class SkeletonTxnNetworkLayer implements TxnNetworkLayer{
         }
         SpliceLogUtils.error(LOG, ex);
         throw ex;
-    }
-
-    class SpliceRpcControl extends PayloadCarryingRpcController {
-        // Prevent resetting PRC priority by super class
-        public void setPriority(final TableName tn) {
-            if (getPriority() == HConstants.NORMAL_QOS) {
-                super.setPriority(tn);
-            }
-        }
     }
 }

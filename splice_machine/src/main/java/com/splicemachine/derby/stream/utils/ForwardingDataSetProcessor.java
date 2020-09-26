@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -19,14 +19,20 @@ import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.store.access.Qualifier;
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
+import com.splicemachine.db.impl.sql.compile.ExplainNode;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.stream.function.Partitioner;
 import com.splicemachine.derby.stream.iapi.*;
 import com.splicemachine.derby.utils.marshall.KeyHashDecoder;
+import com.splicemachine.si.api.txn.TxnView;
+import com.splicemachine.system.CsvOptions;
 import org.apache.spark.sql.types.StructType;
 
 import java.io.InputStream;
 import java.util.Iterator;
+import java.util.List;
+
+import static com.splicemachine.db.impl.sql.compile.ExplainNode.SparkExplainKind.NONE;
 
 /**
  * @author Scott Fines
@@ -57,6 +63,11 @@ public abstract class ForwardingDataSetProcessor implements DataSetProcessor{
     @Override
     public <V> DataSet<V> getEmpty(String name){
         return delegate.getEmpty(name);
+    }
+
+    @Override
+    public <V> DataSet<V> getEmpty(String name, OperationContext context){
+        return delegate.getEmpty(name, context);
     }
 
     @Override
@@ -169,9 +180,9 @@ public abstract class ForwardingDataSetProcessor implements DataSetProcessor{
     }
 
     @Override
-    public <V> DataSet<ExecRow> readTextFile(SpliceOperation op, String location, String characterDelimiter, String columnDelimiter, int[] baseColumnMap, OperationContext context, Qualifier[][] qualifiers, DataValueDescriptor probeValue,ExecRow execRow,
+    public <V> DataSet<ExecRow> readTextFile(SpliceOperation op, String location, CsvOptions csvOptions, int[] baseColumnMap, OperationContext context, Qualifier[][] qualifiers, DataValueDescriptor probeValue,ExecRow execRow,
                                                 boolean useSample, double sampleFraction) throws StandardException {
-        return delegate.readTextFile(op, location, characterDelimiter, columnDelimiter, baseColumnMap, context,  qualifiers, probeValue, execRow, useSample, sampleFraction);
+        return delegate.readTextFile(op, location, csvOptions, baseColumnMap, context,  qualifiers, probeValue, execRow, useSample, sampleFraction);
     }
 
     @Override
@@ -191,9 +202,32 @@ public abstract class ForwardingDataSetProcessor implements DataSetProcessor{
 
     @Override
     public TableChecker getTableChecker(String schemaName, String tableName, DataSet tableDataSet,
-                                        KeyHashDecoder decoder, ExecRow key) {
-        return delegate.getTableChecker(schemaName, tableName, tableDataSet, decoder, key);
+                                        KeyHashDecoder decoder, ExecRow key, TxnView txn,  boolean fix,
+                                        int[] baseColumnMap, boolean isSystemChecker) {
+        return delegate.getTableChecker(schemaName, tableName, tableDataSet, decoder, key, txn, fix, baseColumnMap,
+                isSystemChecker);
     }
 
-}
+    // Operations specific to native spark explains
+    // have no effect on non-spark queries.
+    @Override public boolean isSparkExplain() { return false; }
+    @Override public ExplainNode.SparkExplainKind getSparkExplainKind() { return NONE; }
+    @Override public void setSparkExplain(ExplainNode.SparkExplainKind newValue) {  }
 
+    @Override public void prependSpliceExplainString(String explainString) { }
+    @Override public void appendSpliceExplainString(String explainString) { }
+    @Override public void prependSparkExplainStrings(List<String> stringsToAdd, boolean firstOperationSource, boolean lastOperationSource) { }
+    @Override public void popSpliceOperation() { }
+    @Override public void finalizeTempOperationStrings() { }
+
+    @Override public List<String> getNativeSparkExplain() { return null; }
+    @Override public int getOpDepth() { return 0; }
+    @Override public void incrementOpDepth() { }
+    @Override public void decrementOpDepth() { }
+    @Override public void resetOpDepth() { }
+
+    @Override
+    public <V> DataSet<ExecRow> readKafkaTopic(String topicName, OperationContext context) throws StandardException {
+        return delegate.readKafkaTopic(topicName, context);
+    }
+}

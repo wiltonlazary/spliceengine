@@ -25,18 +25,18 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
 package com.splicemachine.db.jdbc;
 
+import com.splicemachine.db.iapi.db.InternalDatabase;
 import com.splicemachine.db.iapi.reference.MessageId;
 import com.splicemachine.db.iapi.services.i18n.MessageService;
 
 import com.splicemachine.db.iapi.services.monitor.Monitor;
 import com.splicemachine.db.iapi.jdbc.ResourceAdapter;
-import com.splicemachine.db.iapi.db.Database;
 
 import com.splicemachine.db.iapi.reference.Property;
 
@@ -153,12 +153,12 @@ public class EmbeddedXADataSource extends EmbeddedDataSource implements
 
 					// see if database already booted, if it is, then don't make a
 					// connection. 
-					Database database = null;
+					InternalDatabase database = null;
 
 					// if monitor is never setup by any ModuleControl, getMonitor
 					// returns null and no Derby database has been booted. 
 					if (Monitor.getMonitor() != null)
-						database = (Database)
+						database = (InternalDatabase)
 							Monitor.findService(Property.DATABASE_MODULE, dbName);
 
 					if (database == null)
@@ -172,7 +172,7 @@ public class EmbeddedXADataSource extends EmbeddedDataSource implements
 							getConnection().close();
 
 						// now try to find it again
-						database = (Database)
+						database = (InternalDatabase)
 							Monitor.findService(Property.DATABASE_MODULE, dbName); 
 					}
 

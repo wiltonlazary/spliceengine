@@ -25,15 +25,15 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
 package com.splicemachine.db.impl.sql.compile;
 
-import java.util.List;
-
 import com.splicemachine.db.iapi.error.StandardException;
+
+import java.util.List;
 
 /**
  * Represents a reference to an explicitly defined window
@@ -93,4 +93,12 @@ public final class WindowReferenceNode extends WindowNode
             super.toString();
     }
 
+    @Override
+    public OverClause getOverClause() {
+        return null;
+    }
+
+    @Override
+    public void setOverClause(OverClause overClause) {
+    }
 }

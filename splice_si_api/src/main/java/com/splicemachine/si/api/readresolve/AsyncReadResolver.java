@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -24,8 +24,9 @@ import com.splicemachine.si.impl.rollforward.RollForwardStatus;
 import com.splicemachine.storage.Partition;
 import com.splicemachine.utils.ByteSlice;
 import com.splicemachine.utils.TrafficControl;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.util.concurrent.ThreadFactoryBuilder;
+import splice.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -96,7 +97,6 @@ public class AsyncReadResolver{
         Partition region;
         long txnId;
         ByteSlice rowKey=new ByteSlice();
-        RollForward rollForward;
     }
 
     private static class ResolveEventFactory implements EventFactory<ResolveEvent>{
@@ -154,7 +154,6 @@ public class AsyncReadResolver{
                 event.region=region;
                 event.txnId=txnId;
                 event.rowKey.set(rowKey.getByteCopy());
-                event.rollForward=rollForward;
             }finally{
                 ringBuffer.publish(sequence);
             }

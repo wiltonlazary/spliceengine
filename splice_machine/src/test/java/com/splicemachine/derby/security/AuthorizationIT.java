@@ -1,6 +1,6 @@
 
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -22,6 +22,7 @@ import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
 
 import java.sql.Connection;
+import java.sql.SQLException;
 
 import static com.splicemachine.derby.test.framework.SpliceUnitTest.assertFailed;
 import static java.lang.String.format;
@@ -72,9 +73,9 @@ public class AuthorizationIT {
 
     @BeforeClass
     public static void setUpClass() throws Exception {
-        user1Conn = spliceClassWatcher.createConnection(USER1, PASSWORD1);
-        user2Conn = spliceClassWatcher.createConnection(USER2, PASSWORD2);
-        user3Conn = spliceClassWatcher.createConnection(USER3, PASSWORD3);
+        user1Conn = spliceClassWatcher.connectionBuilder().user(USER1).password(PASSWORD1).build();
+        user2Conn = spliceClassWatcher.connectionBuilder().user(USER2).password(PASSWORD2).build();
+        user3Conn = spliceClassWatcher.connectionBuilder().user(USER3).password(PASSWORD3).build();
 
         user1Conn.createStatement().executeUpdate("create table STAFF " +
                 "(EMPNUM   VARCHAR(3) NOT NULL, " +
@@ -86,7 +87,14 @@ public class AuthorizationIT {
 
         Connection conn = spliceClassWatcher.createConnection();
         conn.createStatement().execute(format("grant access on schema %s to public", SCHEMA));
-        conn.createStatement().executeUpdate("CALL SYSCS_UTIL.SYSCS_ENABLE_ENTERPRISE('false')");
+        try {
+            conn.createStatement().executeUpdate("CALL SYSCS_UTIL.SYSCS_ENABLE_ENTERPRISE('false')");
+        } catch (SQLException se) {
+            //Manager is disabled, for example there is no ee profile. No need to disable an enterprise feature.
+            if (!SQLState.MANAGER_DISABLED.startsWith(se.getSQLState())) {
+                throw se;
+            }
+        }
     }
 
     @Test

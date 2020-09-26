@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -24,7 +24,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -586,7 +586,13 @@ public class ProjectRestrictSparkExpressionIT  extends SpliceUnitTest {
             "-5844 |",
             "1 |\n" +
             "----\n" +
-            " 3 |"
+            " 3 |",
+            "1 |\n" +
+            "----\n" +
+            " 1 |",
+            "1  |\n" +
+            "-----\n" +
+            "1.0 |"
         };
 
         String query[] = {
@@ -690,9 +696,11 @@ public class ProjectRestrictSparkExpressionIT  extends SpliceUnitTest {
             "select rand(13.3) from t1 --splice-properties useSpark=%s\n",
             "select (7+DATE('2017-9-22')) from t1 --splice-properties useSpark=%s\n",
             "select c || c || c || c from t1 --splice-properties useSpark=%s\n",
-            "select DATE('2017-01-01') - a from t6 --splice-properties useSpark=%s\n",
-            "select a - DATE('2017-01-01') from t6 --splice-properties useSpark=%s\n",
-            "select a - (b-3) from t6 --splice-properties useSpark=%s\n"
+            "select DATE('2017-01-01') - X.a from t6 as X --splice-properties useSpark=%s\n, t6 as Y where X.a=Y.a",
+            "select X.a - DATE('2017-01-01') from t6 as X --splice-properties useSpark=%s\n, t6 as Y where X.a=Y.a",
+            "select X.a - (X.b-3) from t6 as X --splice-properties useSpark=%s\n, t6 as Y where X.a=Y.a",
+            "select round(avg(1)) from t1 --splice-properties useSpark=%s\n",
+            "select round(avg(1),1) from t1 --splice-properties useSpark=%s\n"
         };
 
         for (int i = 0; i < query.length; i++) {
@@ -782,7 +790,11 @@ public class ProjectRestrictSparkExpressionIT  extends SpliceUnitTest {
             "---------------\n" +
             "10000000000.7 |\n" +
             "10000000000.9 |",
-            "The resulting value is outside the range for the data type DECIMAL/NUMERIC(38,28).",
+            "1             |\n" +
+            "---------------------------\n" +
+            "153333333328.733333333333 |\n" +
+            "153333333331.800000000000 |\n" +
+            "153333333331.800000000000 |",
             "The resulting value is outside the range for the data type DOUBLE.",
             "1      |\n" +
             "-------------\n" +
@@ -806,7 +818,7 @@ public class ProjectRestrictSparkExpressionIT  extends SpliceUnitTest {
         };
 
         boolean Fail[] = {
-            false, false, true, true, false, true, true, true, true, true, true, true, true, false, false, true, true
+            false, false, false, true, false, true, true, true, true, true, true, true, true, false, false, true, true
         };
 
         String query[] = {
@@ -885,7 +897,11 @@ public class ProjectRestrictSparkExpressionIT  extends SpliceUnitTest {
             "---------------\n" +
             "10000000000.7 |\n" +
             "10000000000.9 |",
-            "The resulting value is outside the range for the data type DECIMAL/NUMERIC(38,28).",
+            "A      |\n" +
+            "--------------\n" +
+            "9999999999.7 |\n" +
+            "9999999999.9 |\n" +
+            "9999999999.9 |",
             "The resulting value is outside the range for the data type DOUBLE.",
             "A      |\n" +
             "-------------\n" +
@@ -900,7 +916,7 @@ public class ProjectRestrictSparkExpressionIT  extends SpliceUnitTest {
         };
 
         boolean Fail[] = {
-        false, false, true, true, false, true, true, true, true, false, true, true, true, false, false, true, true
+        false, false, false, true, false, true, true, true, true, false, true, true, true, false, false, true, true
         };
 
         String query[] = {
@@ -935,5 +951,17 @@ public class ProjectRestrictSparkExpressionIT  extends SpliceUnitTest {
             else
                 testQuery(format(query[i], useSpark), expected[i], methodWatcher);
         }
+    }
+
+    // DB-9333
+    @Test
+    public void testDivision() throws Exception {
+        String expected =
+                "1 |\n" +
+                "----\n" +
+                " 1 |";
+
+        String query = "select sum(b)/sum(a) from t3_case --splice-properties useSpark=%s";
+        testQuery(format(query, useSpark), expected, methodWatcher);
     }
 }

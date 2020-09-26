@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -17,7 +17,6 @@ package com.splicemachine.derby.stream.spark;
 import com.splicemachine.access.HConfiguration;
 import com.splicemachine.client.SpliceClient;
 import com.splicemachine.db.iapi.error.StandardException;
-import com.splicemachine.db.iapi.reference.SQLState;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.store.access.Qualifier;
 import com.splicemachine.db.iapi.types.RowLocation;
@@ -32,8 +31,11 @@ import com.splicemachine.derby.stream.utils.ExternalTableUtils;
 import com.splicemachine.derby.stream.utils.StreamUtils;
 import com.splicemachine.mrio.MRConstants;
 import com.splicemachine.mrio.api.core.SMInputFormat;
+import com.splicemachine.si.impl.driver.SIDriver;
+import com.splicemachine.system.CsvOptions;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.types.StructType;
@@ -41,6 +43,9 @@ import org.apache.spark.sql.types.StructType;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.Future;
 
 /**
  * @author Scott Fines
@@ -84,8 +89,10 @@ public class SparkScanSetBuilder<V> extends TableScannerBuilder<V> {
             ExecRow execRow = operation==null?template:op.getExecRowDefinition();
             Qualifier[][] qualifiers = operation == null?null:operation.getScanInformation().getScanQualifiers();
             DataSet locatedRows;
-            if (storedAs.equals("T"))
-                locatedRows = dsp.readTextFile(op,location,escaped,delimited,baseColumnMap,operationContext,qualifiers,null,execRow, useSample, sampleFraction);
+            if (storedAs.equals("T")) {
+                CsvOptions csvOptions = new CsvOptions(delimited, escaped, lines);
+                locatedRows = dsp.readTextFile(op, location, csvOptions, baseColumnMap, operationContext, qualifiers, null, execRow, useSample, sampleFraction);
+            }
             else if (storedAs.equals("P"))
                 locatedRows = dsp.readParquetFile(schema, baseColumnMap,partitionByColumns,location,operationContext,qualifiers,null,execRow, useSample, sampleFraction);
             else if (storedAs.equals("A")) {
@@ -116,11 +123,10 @@ public class SparkScanSetBuilder<V> extends TableScannerBuilder<V> {
         if (useSample) {
             conf.set(MRConstants.SPLICE_SAMPLING, Double.toString(sampleFraction));
         }
-        if (op != null) {
-            ScanOperation sop = (ScanOperation) op;
-            int splitsPerTableMin = HConfiguration.getConfiguration().getSplitsPerTableMin();
+        ScanOperation sop = op instanceof ScanOperation ? (ScanOperation) op : null;
+        if (sop != null) {
             int requestedSplits = sop.getSplits();
-            conf.setInt(MRConstants.SPLICE_SPLITS_PER_TABLE, requestedSplits != 0 ? requestedSplits : (splitsPerTableMin > 0) ? splitsPerTableMin : 0);
+            conf.setInt(MRConstants.SPLICE_SPLITS_PER_TABLE, requestedSplits);
         }
         try {
              conf.set(MRConstants.SPLICE_SCAN_INFO,getTableScannerBuilderBase64String());
@@ -131,9 +137,17 @@ public class SparkScanSetBuilder<V> extends TableScannerBuilder<V> {
 
         String scopePrefix = StreamUtils.getScopeString(caller);
         SpliceSpark.pushScope(String.format("%s: Scan", scopePrefix));
+
+        String splitCacheId = UUID.randomUUID().toString();
+        conf.set(MRConstants.SPLICE_SCAN_INPUT_SPLITS_ID, splitCacheId);
+
         JavaPairRDD<RowLocation, ExecRow> rawRDD = ctx.newAPIHadoopRDD(
             conf, SMInputFormat.class, RowLocation.class, ExecRow.class);
         // rawRDD.setName(String.format(SparkConstants.RDD_NAME_SCAN_TABLE, tableDisplayName));
+
+        Future<List<InputSplit>> splitFuture = SIDriver.driver().getExecutorService().submit(new FetchSplitsJob(conf));
+        FetchSplitsJob.splitCache.put(splitCacheId, splitFuture);
+
         rawRDD.setName("Perform Scan");
         SpliceSpark.popScope();
         SparkSpliceFunctionWrapper f = new SparkSpliceFunctionWrapper(new TableScanTupleMapFunction<SpliceOperation>(operationContext));
@@ -141,7 +155,7 @@ public class SparkScanSetBuilder<V> extends TableScannerBuilder<V> {
         SpliceSpark.pushScope(String.format("%s: Deserialize", scopePrefix));
         try {
             return new SparkDataSet<>(rawRDD.map(f).filter(pred),
-                                      op != null ? op.getPrettyExplainPlan() : f.getPrettyFunctionName());
+                    op != null ? op.getPrettyExplainPlan() : f.getPrettyFunctionName());
         } finally {
             SpliceSpark.popScope();
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -143,7 +143,8 @@ public class PropertyConglomerate {
                     // Cannot get the origin class because of the dependency, so compare them by
                     // class name
                     if (className.equals("org.apache.hadoop.hbase.NotServingRegionException") ||
-                            className.equals("org.apache.hadoop.hbase.exceptions.RegionOpeningException")) {
+                            className.equals("org.apache.hadoop.hbase.exceptions.RegionOpeningException") ||
+							className.equals("org.apache.hadoop.hbase.client.RetriesExhaustedException"))  {
                         onHold = true;
                         break;
                     }

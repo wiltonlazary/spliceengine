@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -38,8 +38,8 @@ import com.splicemachine.db.iapi.sql.compile.*;
 import com.splicemachine.db.iapi.util.JBitSet;
 import com.splicemachine.db.impl.ast.PredicateUtils;
 import com.splicemachine.db.impl.ast.RSUtils;
-import org.spark_project.guava.base.Joiner;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.base.Joiner;
+import splice.com.google.common.collect.Lists;
 
 import java.util.List;
 
@@ -84,11 +84,36 @@ public class HalfOuterJoinNode extends JoinNode{
                 null);
         this.rightOuterJoin=(Boolean)rightOuterJoin;
 
-		/* We can only flatten an outer join
-         * using the null intolerant predicate xform.
-		 * In that case, we will return an InnerJoin.
+		/* We can flatten left/right join into the parent block, and use a outerJoinLevel
+		   to keep track of the inner tables of the left/right joins
 		 */
-        flattenableJoin=false;
+        flattenableJoin=true;
+    }
+
+    @Override
+    public void init(
+            Object leftResult,
+            Object rightResult,
+            Object onClause,
+            Object usingClause,
+            Object rightOuterJoin,
+            Object selectList,
+            Object tableProperties)
+            throws StandardException{
+        super.init(
+                leftResult,
+                rightResult,
+                onClause,
+                usingClause,
+                selectList,
+                tableProperties,
+                null);
+        this.rightOuterJoin=(Boolean)rightOuterJoin;
+
+		/* We can flatten left/right join into the parent block, and use a outerJoinLevel
+		   to keep track of the inner tables of the left/right joins
+		 */
+        flattenableJoin=true;
     }
 
 	/*
@@ -573,11 +598,13 @@ public class HalfOuterJoinNode extends JoinNode{
         ResultSetNode innerRS;
 
         if(predicateTree==null){
-			/* We can't transform this node, so tell both sides of the 
-			 * outer join that they can't get flattened into outer query block.
+			/* We can't transform this node, so tell right side of the
+			 * outer join that it can't get flattened into outer query block.
 			 */
-            leftResultSet.notFlattenableJoin();
-            rightResultSet.notFlattenableJoin();
+			if (isRightOuterJoin())
+			    leftResultSet.notFlattenableJoin();
+			else
+                rightResultSet.notFlattenableJoin();
             return this;
         }
 
@@ -610,12 +637,22 @@ public class HalfOuterJoinNode extends JoinNode{
                 continue;
             }
 
-			/* Only consider predicates that are relops */
-            if(left instanceof RelationalOperator){
+			/* To be conservative, only consider predicates that are relops, certain inlist, between and like ops */
+            if (left instanceof RelationalOperator ||
+                    left instanceof InListOperatorNode  ||
+                    left instanceof BetweenOperatorNode ||
+                    left instanceof LikeEscapeOperatorNode){
                 JBitSet refMap=new JBitSet(numTables);
 				/* Do not consider method calls, 
 				 * conditionals, field references, etc. */
-                if(!(left.categorize(refMap,true))){
+
+				/* only consider the left side of inlist operator, as right are ORed elements */
+                if (left instanceof InListOperatorNode) {
+                    if (!((InListOperatorNode) left).getLeftOperandList().categorize(refMap,true)) {
+                        vn=and.getRightOperand();
+                        continue;
+                    }
+                } else if(!(left.categorize(refMap,true))){
                     vn=and.getRightOperand();
                     continue;
                 }
@@ -650,11 +687,13 @@ public class HalfOuterJoinNode extends JoinNode{
             vn=and.getRightOperand();
         }
 
-		/* We can't transform this node, so tell both sides of the 
-		 * outer join that they can't get flattened into outer query block.
+		/* We can't transform this node, so tell right sides of the
+		 * outer join that it can't get flattened into outer query block.
 		 */
-        leftResultSet.notFlattenableJoin();
-        rightResultSet.notFlattenableJoin();
+        if (isRightOuterJoin())
+            leftResultSet.notFlattenableJoin();
+        else
+            rightResultSet.notFlattenableJoin();
 
         return this;
     }
@@ -723,9 +762,8 @@ public class HalfOuterJoinNode extends JoinNode{
 
     @Override
     protected void oneRowRightSide(ActivationClassBuilder acb, MethodBuilder mb) throws StandardException {
-        // always return false for now
         mb.push(rightResultSet.getFromSSQ() && rightResultSet.isOneRowResultSet());
-        mb.push(false);  //isNotExists?
+        mb.push(((FromTable)rightResultSet).getSemiJoinType());
     }
 
     /**
@@ -814,12 +852,14 @@ public class HalfOuterJoinNode extends JoinNode{
     }
 
     @Override
-    public String printExplainInformation(String attrDelim, int order) throws StandardException {
+    public String printExplainInformation(String attrDelim) throws StandardException {
         JoinStrategy joinStrategy = RSUtils.ap(this).getJoinStrategy();
         StringBuilder sb = new StringBuilder();
         sb.append(spaceToLevel())
-                .append(joinStrategy.getJoinStrategyType().niceName()).append(isRightOuterJoin()?"RightOuter":"LeftOuter").append("Join(")
-                .append("n=").append(order)
+                // at this point, all the right outer join has been converted to left join, so we
+                // should always see a left join here
+                .append(joinStrategy.getJoinStrategyType().niceName()).append("LeftOuter").append("Join(")
+                .append("n=").append(getResultSetNumber())
                 .append(attrDelim).append(getFinalCostEstimate(false).prettyProcessingString(attrDelim));
         if (joinPredicates !=null) {
             List<String> joinPreds = Lists.transform(PredicateUtils.PLtoList(joinPredicates), PredicateUtils.predToString);
@@ -838,4 +878,88 @@ public class HalfOuterJoinNode extends JoinNode{
                 super.toHTMLString();
     }
 
+    @Override
+    public FromList flatten(ResultColumnList rcl,
+                            PredicateList outerPList,
+                            SubqueryList sql,
+                            GroupByList gbl,
+                            ValueNode havingClause,
+                            int numTables) throws StandardException{
+
+        // before flattening, we should mark the inner talbe so that it can be recognized in the
+        // planning that it is different from regular tables, and can only be joined with its outer table
+        // at this point, right joins have been converted to left, so inner is the right
+        FromTable rightTable = (FromTable)rightResultSet;
+        rightTable.setOuterJoinLevel(getCompilerContext().getNextOJLevel());
+        rightTable.addToDependencyMap(leftResultSet.getReferencedTableMap());
+
+		/* Build a new FromList composed of left and right children
+		 * NOTE: We must call FL.addElement() instead of FL.addFromTable()
+		 * since there is no exposed name. (And even if there was,
+		 * we could care less about unique exposed name checking here.)
+		 */
+        FromList fromList=(FromList)getNodeFactory().getNode(
+                C_NodeTypes.FROM_LIST,
+                getNodeFactory().doJoinOrderOptimization(),
+                getContextManager());
+        fromList.addElement(leftResultSet);
+        fromList.addElement(rightResultSet);
+
+		/* Mark our RCL as redundant */
+        resultColumns.setRedundant();
+
+		/* Remap all ColumnReferences from the outer query to this node.
+		 * (We replace those ColumnReferences with clones of the matching
+		 * expression in the left and right's RCL.
+		 */
+        rcl.remapColumnReferencesToExpressions();
+        outerPList.remapColumnReferencesToExpressions();
+        if(gbl!=null){
+            gbl.remapColumnReferencesToExpressions();
+        }
+
+        if(havingClause!=null){
+            havingClause.remapColumnReferencesToExpressions();
+        }
+
+        if (delayPreprocessingJoinClause()) {
+            // at this point, we haven't preprocessed the join clause yet, do it now and
+            // flatten subquery if any
+            preprocessJoinClause(numTables, fromList, subqueryList, joinPredicates);
+        }
+
+        if(!joinPredicates.isEmpty()){
+            optimizeTrace(OptimizerFlag.JOIN_NODE_PREDICATE_MANIPULATION,0,0,0.0,
+                    "HalfOuterJoinNode flattening join predicates to outer query.",joinPredicates);
+
+            // mark predicates with the outerJoinLevel
+            for(int index=0;index<joinPredicates.size();index++) {
+                joinPredicates.elementAt(index).setOuterJoinLevel(rightTable.getOuterJoinLevel());
+            }
+            outerPList.destructiveAppend(joinPredicates);
+        }
+
+        if(subqueryList!=null && !subqueryList.isEmpty()){
+            sql.destructiveAppend(subqueryList);
+        }
+
+        return fromList;
+    }
+
+    @Override
+    public boolean isFlattenableJoinNode(){
+        if (getCompilerContext().isOuterJoinFlatteningDisabled())
+            return false;
+
+        // cannot flatten if the half join node contains subqueries
+        if (subqueryList !=null && !subqueryList.isEmpty())
+            return false;
+
+        return flattenableJoin && (outerJoinLevel == 0);
+    }
+
+    @Override
+    public boolean delayPreprocessingJoinClause() {
+        return false;
+    }
 }

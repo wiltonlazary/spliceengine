@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -114,28 +114,19 @@ public class SIConfigurations implements ConfigurationDefault {
     public static final String TIMESTAMP_SERVER_BIND_PORT = "splice.timestamp_server.port";
     private static final int DEFAULT_TIMESTAMP_SERVER_BIND_PORT = 60012;
 
-    public static final String ACTIVE_TRANSACTION_CACHE_SIZE="splice.txn.activeCacheSize";
-    private static final int DEFAULT_ACTIVE_TRANSACTION_CACHE_SIZE = 1<<12;
+    public static final String ACTIVE_TRANSACTION_MAX_CACHE_SIZE="splice.txn.activeMaxCacheSize";
+    public static final int DEFAULT_ACTIVE_TRANSACTION_MAX_CACHE_SIZE = 1<<12;
 
-    // Timeout in milliseconds
-    public static final String SPARK_COMPACTION_MAXIMUM_WAIT = "spark.compaction.maximum.wait";
-    public static final int DEFAULT_SPARK_COMPACTION_MAXIMUM_WAIT = 60000;
-
-    // Share of time spent on transaction resolution during compactions, between 0 and 1 (no time vs infinite time)
-    public static final String COMPACTION_RESOLUTION_SHARE = "splice.txn.resolution.compaction.share";
-    public static final double DEFAULT_COMPACTION_RESOLUTION_SHARE = 0.2f;
+    public static final String ACTIVE_TRANSACTION_INITIAL_CACHE_SIZE="splice.txn.activeInitialCacheSize";
+    public static final int DEFAULT_ACTIVE_TRANSACTION_INITIAL_CACHE_SIZE = 1<<7;
 
     // Share of time spent on transaction resolution during flushes, between 0 and 1 (no time vs infinite time)
     public static final String FLUSH_RESOLUTION_SHARE = "splice.txn.resolution.flush.share";
     public static final double DEFAULT_FLUSH_RESOLUTION_SHARE = 0.2f;
 
-    // Size of buffer for asynchronous transaction resolution
-    public static final String COMPACTION_RESOLUTION_BUFFER_SIZE = "splice.txn.resolution.bufferSize";
-    public static final int DEFAULT_COMPACTION_RESOLUTION_BUFFER_SIZE = 1024*100;
-
-    // Whether we block asynchronous transaction resolution when the executor is full
-    public static final String COMPACTION_BLOCKING = "splice.txn.resolution.compaction.blocking";
-    public static final boolean DEFAULT_COMPACTION_BLOCKING = true;
+    // Size of buffer for HRegionServer async transaction resolution
+    public static final String COMPACTION_RESOLUTION_BUFFER_SIZE = "splice.local.compaction.resolution.bufferSize";
+    public static final int DEFAULT_COMPACTION_RESOLUTION_BUFFER_SIZE = 100;
 
     // Whether we resolve transactions on flushes
     public static final String RESOLUTION_ON_FLUSHES = "splice.txn.resolution.flushes";
@@ -143,7 +134,6 @@ public class SIConfigurations implements ConfigurationDefault {
 
     public static final String ROLLFORWARD_QUEUE_SIZE = "splice.txn.rollforward.queueSize";
     public static final int DEFAULT_ROLLFORWARD_QUEUE_SIZE = 4096;
-
 
     // Wait time for first resolution attempt in ms
     public static final String ROLLFORWARD_FIRST_WAIT = "splice.txn.rollforward.firstQueueWait";
@@ -173,28 +163,18 @@ public class SIConfigurations implements ConfigurationDefault {
 //        builder.readResolverQueueSize  = configurationSource.getInt(READ_RESOLVER_QUEUE_SIZE, DEFAULT_READ_RESOLVER_QUEUE_SIZE);
         builder.timestampClientWaitTime  = configurationSource.getInt(TIMESTAMP_CLIENT_WAIT_TIME, DEFAULT_TIMESTAMP_CLIENT_WAIT_TIME);
         builder.timestampServerBindPort  = configurationSource.getInt(TIMESTAMP_SERVER_BIND_PORT, DEFAULT_TIMESTAMP_SERVER_BIND_PORT);
-        builder.activeTransactionCacheSize  = configurationSource.getInt(ACTIVE_TRANSACTION_CACHE_SIZE, DEFAULT_ACTIVE_TRANSACTION_CACHE_SIZE);
+        builder.activeTransactionMaxCacheSize = configurationSource.getInt(ACTIVE_TRANSACTION_MAX_CACHE_SIZE, DEFAULT_ACTIVE_TRANSACTION_MAX_CACHE_SIZE);
+        builder.activeTransactionInitialCacheSize = configurationSource.getInt(ACTIVE_TRANSACTION_INITIAL_CACHE_SIZE, DEFAULT_ACTIVE_TRANSACTION_INITIAL_CACHE_SIZE);
 
         builder.transactionTimeout = configurationSource.getLong(TRANSACTION_TIMEOUT, DEFAULT_TRANSACTION_TIMEOUT);
         builder.transactionKeepAliveInterval = configurationSource.getLong(TRANSACTION_KEEP_ALIVE_INTERVAL, DEFAULT_TRANSACTION_KEEP_ALIVE_INTERVAL);
 
         builder.ignoreMissingTxns = configurationSource.getBoolean(IGNORE_MISSING_TXN, DEFAULT_IGNORE_MISSING_TXN);
 
-        builder.olapCompactionMaximumWait = configurationSource.getInt(SPARK_COMPACTION_MAXIMUM_WAIT, DEFAULT_SPARK_COMPACTION_MAXIMUM_WAIT);
-        builder.olapCompactionResolutionShare = configurationSource.getDouble(COMPACTION_RESOLUTION_SHARE, DEFAULT_COMPACTION_RESOLUTION_SHARE);
-        if (builder.olapCompactionResolutionShare < 0)
-            builder.olapCompactionResolutionShare = 0;
-        if (builder.olapCompactionResolutionShare > 1)
-            builder.olapCompactionResolutionShare = 1;
+        builder.flushResolutionShare = configurationSource.getDouble(FLUSH_RESOLUTION_SHARE, DEFAULT_FLUSH_RESOLUTION_SHARE, 0, 1);
 
-        builder.flushResolutionShare = configurationSource.getDouble(FLUSH_RESOLUTION_SHARE, DEFAULT_FLUSH_RESOLUTION_SHARE);
-        if (builder.flushResolutionShare < 0)
-            builder.flushResolutionShare = 0;
-        if (builder.flushResolutionShare > 1)
-            builder.flushResolutionShare = 1;
+        builder.localCompactionResolutionBufferSize = configurationSource.getInt(COMPACTION_RESOLUTION_BUFFER_SIZE, DEFAULT_COMPACTION_RESOLUTION_BUFFER_SIZE);
 
-        builder.olapCompactionResolutionBufferSize = configurationSource.getInt(COMPACTION_RESOLUTION_BUFFER_SIZE, DEFAULT_COMPACTION_RESOLUTION_BUFFER_SIZE);
-        builder.olapCompactionBlocking = configurationSource.getBoolean(COMPACTION_BLOCKING, DEFAULT_COMPACTION_BLOCKING);
         builder.resolutionOnFlushes = configurationSource.getBoolean(RESOLUTION_ON_FLUSHES, DEFAULT_RESOLUTION_ON_FLUSHES);
 
         builder.rollForwardQueueSize  = configurationSource.getInt(ROLLFORWARD_QUEUE_SIZE, DEFAULT_ROLLFORWARD_QUEUE_SIZE);

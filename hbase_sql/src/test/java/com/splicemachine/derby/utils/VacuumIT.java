@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -21,17 +21,12 @@ import com.splicemachine.derby.test.framework.SpliceUnitTest;
 import com.splicemachine.derby.test.framework.SpliceWatcher;
 import com.splicemachine.primitives.Bytes;
 import com.splicemachine.si.constants.SIConstants;
+import com.splicemachine.test.LongerThanTwoMinutes;
 import com.splicemachine.test.SerialTest;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.*;
 import org.junit.Assert;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -58,7 +53,7 @@ import static org.junit.Assert.assertTrue;
  * @author Scott Fines
  * Date: 3/19/14
  */
-@Category(value = {SerialTest.class})
+@Category({SerialTest.class, LongerThanTwoMinutes.class})
 public class VacuumIT extends SpliceUnitTest{
     public static final String CLASS_NAME = VacuumIT.class.getSimpleName().toUpperCase();
     protected static String TABLE = "T";
@@ -68,13 +63,14 @@ public class VacuumIT extends SpliceUnitTest{
     protected static String TABLEG = "G";
     protected static String TABLEH = "H";
     protected static String TABLEI = "I";
+    protected static String TABLEJ = "J";
 
-	private static final SpliceWatcher spliceClassWatcher = new SpliceWatcher();
-	@ClassRule
-	public static TestRule classRule = spliceClassWatcher;
+    private static final SpliceWatcher spliceClassWatcher = new SpliceWatcher();
+    @ClassRule
+    public static TestRule classRule = spliceClassWatcher;
 
-	@Rule
-	public SpliceWatcher methodRule = new SpliceWatcher();
+    @Rule
+    public SpliceWatcher methodRule = new SpliceWatcher();
 
     @Rule
     public SpliceWatcher methodWatcher = new SpliceWatcher();
@@ -94,6 +90,8 @@ public class VacuumIT extends SpliceUnitTest{
             .schemaName, "(name varchar(40), title varchar(40), age int)");
     protected static SpliceTableWatcher spliceTableIWatcher = new SpliceTableWatcher(TABLEI, spliceSchemaWatcher
             .schemaName, "(name varchar(40), title varchar(40), age int)");
+    protected static SpliceTableWatcher spliceTableJWatcher = new SpliceTableWatcher(TABLEJ, spliceSchemaWatcher
+            .schemaName, "(name varchar(40), title varchar(40), age int)");
     @ClassRule
     public static TestRule chain = RuleChain.outerRule(spliceClassWatcher)
             .around(spliceSchemaWatcher)
@@ -103,10 +101,11 @@ public class VacuumIT extends SpliceUnitTest{
             .around(spliceTableEWatcher)
             .around(spliceTableGWatcher)
             .around(spliceTableHWatcher)
-            .around(spliceTableIWatcher);
+            .around(spliceTableIWatcher)
+            .around(spliceTableJWatcher);
 
-	@Test
-	public void testVacuumDoesNotBreakStuff() throws Exception {
+    @Test
+    public void testVacuumDoesNotBreakStuff() throws Exception {
         Connection connection = spliceClassWatcher.getOrCreateConnection();
         long[] conglomerateNumber = SpliceAdmin.getConglomNumbers(connection, CLASS_NAME, TABLE);
         String conglomerateString = Long.toString(conglomerateNumber[0]);
@@ -225,7 +224,7 @@ public class VacuumIT extends SpliceUnitTest{
             try (Admin admin = ConnectionFactory.createConnection(new Configuration()).getAdmin()) {
                 for (long congId : conglomerates) {
                     TableName tn = TableName.valueOf("splice:" + congId);
-                    HTableDescriptor td = admin.getTableDescriptor(tn);
+                    TableDescriptorBuilder.ModifyableTableDescriptor td = (TableDescriptorBuilder.ModifyableTableDescriptor)TableDescriptorBuilder.copy(admin.getTableDescriptor(tn));
                     admin.disableTable(tn);
                     admin.deleteTable(tn);
                     td.setValue(SIConstants.TRANSACTION_ID_ATTR, null);
@@ -363,7 +362,7 @@ public class VacuumIT extends SpliceUnitTest{
             for (long congId : conglomerates) {
                 // make sure the table exists in HBase and hasn't been dropped by VACUUM
                 TableName tn = TableName.valueOf("splice:" + congId);
-                HTableDescriptor td = admin.getTableDescriptor(tn);
+                TableDescriptorBuilder.ModifyableTableDescriptor td = (TableDescriptorBuilder.ModifyableTableDescriptor)TableDescriptorBuilder.copy(admin.getTableDescriptor(tn));
                 admin.disableTable(tn);
                 admin.deleteTable(tn);
                 td.setValue(SIConstants.TRANSACTION_ID_ATTR, null);
@@ -448,7 +447,7 @@ public class VacuumIT extends SpliceUnitTest{
                 for (long congId : conglomerates) {
                     // make sure the table exists in HBase and hasn't been dropped by VACUUM
                     TableName tn = TableName.valueOf("splice:" + congId);
-                    HTableDescriptor td = admin.getTableDescriptor(tn);
+                    TableDescriptorBuilder.ModifyableTableDescriptor td = (TableDescriptorBuilder.ModifyableTableDescriptor)TableDescriptorBuilder.copy(admin.getTableDescriptor(tn));
                     admin.disableTable(tn);
                     admin.deleteTable(tn);
                     td.setValue(SIConstants.DROPPED_TRANSACTION_ID_ATTR, Long.toString(txnId));
@@ -539,6 +538,39 @@ public class VacuumIT extends SpliceUnitTest{
             for(String t : deletedTables){
                 long conglom=new Long(t);
                 assertTrue(conglom>=DataDictionary.FIRST_USER_TABLE_NUMBER);
+            }
+        }
+    }
+
+    @Test
+    public void testVacuumRemoveDroppedConglomerateEntryIfTableAlreadyRemoved() throws Exception {
+        Connection connection = spliceClassWatcher.getOrCreateConnection();
+        long[] conglomerateNumbers = SpliceAdmin.getConglomNumbers(connection, CLASS_NAME, TABLEJ);
+        try (CallableStatement callableStatement = connection.prepareCall(String.format("drop table %s.J", CLASS_NAME))) {
+            callableStatement.execute();
+        }
+        try (Admin admin = ConnectionFactory.createConnection(new Configuration()).getAdmin()) {
+            for (long congId : conglomerateNumbers) {
+                TableName tableName = TableName.valueOf("splice:" + congId);
+                admin.disableTable(tableName);
+                admin.deleteTable(tableName);
+                assertFalse(admin.tableExists(tableName));
+            }
+        }
+        String name = "splice:"+ com.splicemachine.access.configuration.HBaseConfiguration.DROPPED_CONGLOMERATES_TABLE_NAME;
+        try (Table droppedConglomerates = ConnectionFactory.createConnection(new Configuration()).getTable(TableName.valueOf(name))) {
+            for (long congId : conglomerateNumbers) {
+                Result result = droppedConglomerates.get(new Get(Bytes.toBytes(congId)));
+                assertFalse(result.isEmpty());
+            }
+        }
+        try (CallableStatement callableStatement = connection.prepareCall("call SYSCS_UTIL.VACUUM()")) {
+            callableStatement.execute();
+        }
+        try (Table droppedConglomerates = ConnectionFactory.createConnection(new Configuration()).getTable(TableName.valueOf(name))) {
+            for (long congId : conglomerateNumbers) {
+                Result result = droppedConglomerates.get(new Get(Bytes.toBytes(congId)));
+                assertTrue(result.isEmpty());
             }
         }
     }

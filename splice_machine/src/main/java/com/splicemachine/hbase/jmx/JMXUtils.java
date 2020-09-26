@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -33,7 +33,7 @@ import com.splicemachine.db.impl.sql.catalog.ManagedCache;
 import com.splicemachine.db.impl.sql.catalog.ManagedCacheMBean;
 import com.splicemachine.db.impl.sql.catalog.TotalManagedCache;
 import com.splicemachine.hbase.JMXThreadPool;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 import com.splicemachine.EngineDriver;
 import com.splicemachine.access.api.DatabaseVersion;
@@ -112,18 +112,17 @@ public class JMXUtils {
         }
         return jmxThreadList;
     }
-    public static List<ManagedCacheMBean> getManagedCache(List<Pair<String,JMXConnector>> mbscArray, String [] mc) throws MalformedObjectNameException, IOException {
+    public static List<ManagedCacheMBean> getManagedCache(List<Pair<String,JMXConnector>> mbscArray, List<String> mc) throws MalformedObjectNameException, IOException {
         List<ManagedCacheMBean> managedCache =new ArrayList<>();
         for (Pair<String,JMXConnector> mbsc: mbscArray) {
-            for(int i = 0; i < mc.length; i++) {
-                managedCache.add(getNewMBeanProxy(mbsc.getSecond(), MANAGED_CACHE + mc[i], ManagedCacheMBean.class));
+            for(String s : mc) {
+                managedCache.add(getNewMBeanProxy(mbsc.getSecond(), MANAGED_CACHE + s, ManagedCacheMBean.class));
             }
         }
         return managedCache;
     }
     public static List<ManagedCacheMBean> getTotalManagedCache(List<Pair<String,JMXConnector>> mbscArray) throws MalformedObjectNameException, IOException {
         List<ManagedCacheMBean> managedCache = new ArrayList<>();
-        List<ManagedCache> mc = new ArrayList<>();
         for (Pair<String,JMXConnector> mbsc: mbscArray) {
             managedCache.add(getNewMBeanProxy(mbsc.getSecond(),TOTAL_MANAGED_CACHE, ManagedCacheMBean.class));
         }

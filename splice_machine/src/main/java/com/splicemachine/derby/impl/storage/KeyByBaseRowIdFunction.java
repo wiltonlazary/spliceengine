@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -24,7 +24,7 @@ import scala.Tuple2;
 /**
  * Created by jyuan on 2/6/18.
  */
-public class KeyByBaseRowIdFunction <Op extends SpliceOperation> extends SplicePairFunction<SpliceOperation,ExecRow,String,byte[]> {
+public class KeyByBaseRowIdFunction <Op extends SpliceOperation> extends SplicePairFunction<SpliceOperation,ExecRow,String, Tuple2<byte[], ExecRow>> {
 
     @Override
     public String genKey(ExecRow row) {
@@ -37,12 +37,12 @@ public class KeyByBaseRowIdFunction <Op extends SpliceOperation> extends SpliceP
         }
     }
 
-    public byte[] genValue(ExecRow row) {
-        return row.getKey();
+    public Tuple2<byte[], ExecRow> genValue(ExecRow row) {
+        return new Tuple2(row.getKey(), row.getClone());
     }
 
     @Override
-    public Tuple2<String, byte[]> call(ExecRow execRow) throws Exception {
+    public Tuple2<String, Tuple2<byte[], ExecRow>> call(ExecRow execRow) throws Exception {
         return new Tuple2(genKey(execRow),genValue(execRow));
     }
 }

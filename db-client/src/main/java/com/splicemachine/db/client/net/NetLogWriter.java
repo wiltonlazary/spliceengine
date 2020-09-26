@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -28,6 +28,9 @@ package com.splicemachine.db.client.net;
 // network traffic tracer.
 // This class traces communication buffers for both sends and receives.
 // The value of the hex bytes are traced along with the ascii and ebcdic translations.
+
+import com.splicemachine.db.client.am.ClientConnection;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 public class NetLogWriter extends com.splicemachine.db.client.am.LogWriter {
 
@@ -124,6 +127,7 @@ public class NetLogWriter extends com.splicemachine.db.client.am.LogWriter {
     //-----------------------------constructors/finalizer-------------------------
 
     // One NetLogWriter object is created per data source, iff tracing is enabled.
+    @SuppressFBWarnings(value = "LI_LAZY_INIT_STATIC", justification = "intentional")
     public NetLogWriter(java.io.PrintWriter printWriter, int traceLevel) {
         super(printWriter, traceLevel);
 
@@ -137,7 +141,7 @@ public class NetLogWriter extends com.splicemachine.db.client.am.LogWriter {
     //------------------------------entry points----------------------------------
 
     // Specialization of LogWriter.traceConnectsExit()
-    public void traceConnectsExit(com.splicemachine.db.client.am.Connection connection) {
+    public void traceConnectsExit(ClientConnection connection) {
         if (traceSuspended()) {
             return;
         }
@@ -158,7 +162,7 @@ public class NetLogWriter extends com.splicemachine.db.client.am.LogWriter {
         }
     }
 
-    public void traceConnectsResetExit(com.splicemachine.db.client.am.Connection connection) {
+    public void traceConnectsResetExit(ClientConnection connection) {
         if (traceSuspended()) {
             return;
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -16,41 +16,57 @@ package com.splicemachine.si.impl;
 
 import com.splicemachine.si.api.txn.Txn;
 import com.splicemachine.si.api.txn.TxnView;
-import org.spark_project.guava.cache.Cache;
-import org.spark_project.guava.cache.CacheBuilder;
+import com.splicemachine.utils.SpliceLogUtils;
+import org.apache.log4j.Logger;
+import splice.com.google.common.cache.Cache;
+import splice.com.google.common.cache.CacheBuilder;
 import java.io.IOException;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 public class DDLFilter implements Comparable<DDLFilter> {
+    private static final Logger LOG=Logger.getLogger(DDLFilter.class);
     private final TxnView myTransaction;
     private Cache<Long,Boolean> visibilityMap;
 
-		public DDLFilter(TxnView myTransaction) {
-				this.myTransaction = myTransaction;
-				visibilityMap = CacheBuilder.newBuilder().expireAfterWrite(60, TimeUnit.SECONDS).maximumSize(10000).build();
-		}
+    public DDLFilter(TxnView myTransaction) {
+        this.myTransaction = myTransaction;
+        visibilityMap = CacheBuilder.newBuilder().expireAfterWrite(60, TimeUnit.SECONDS).maximumSize(10000).build();
+    }
 
-		public boolean isVisibleBy(final TxnView txn) throws IOException {
+    public boolean isVisibleBy(final TxnView txn) throws IOException {
         Boolean visible = visibilityMap.getIfPresent(txn.getTxnId());
         if(visible!=null) return visible;
 
         //if my parent was rolled back, do nothing
-        if(myTransaction.getParentTxnView().getEffectiveState()== Txn.State.ROLLEDBACK) return false;
-
-        try{
-            return visibilityMap.get(txn.getTxnId(),new Callable<Boolean>() {
+        try {
+            if (myTransaction.getParentTxnView().getEffectiveState() == Txn.State.ROLLEDBACK) return false;
+        }
+        catch (RuntimeException e) {
+            // JY - HACK: txnId for a readonly DDL cannot be found
+            if (LOG.isDebugEnabled()) {
+                SpliceLogUtils.debug(LOG, "Get an error: %s", e);
+            }
+        }
+        try {
+            return visibilityMap.get(txn.getTxnId(), new Callable<Boolean>() {
                 @Override
                 public Boolean call() throws Exception {
                     return isVisible(txn);
                 }
             });
+        } catch (RuntimeException re) {
+            // JY - HACK: txnId for a readonly DDL cannot be found
+            if (LOG.isDebugEnabled()) {
+                SpliceLogUtils.debug(LOG, "Get an error: %s", re);
+            }
+            return false;
         }catch(ExecutionException ee){
             throw new IOException(ee.getCause());
         }
 
-		}
+    }
 
     private Boolean isVisible(TxnView txn) {
         /*
@@ -68,8 +84,8 @@ public class DDLFilter implements Comparable<DDLFilter> {
     }
 
     public TxnView getTransaction() {
-				return myTransaction;
-		}
+        return myTransaction;
+    }
 
     @Override
     public boolean equals(Object o){

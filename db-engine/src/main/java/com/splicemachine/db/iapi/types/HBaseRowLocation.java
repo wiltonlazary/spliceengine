@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -23,10 +23,6 @@ import com.splicemachine.db.shared.common.sanity.SanityManager;
 import com.splicemachine.utils.ByteSlice;
 import com.yahoo.sketches.theta.UpdateSketch;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeArrayWriter;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import java.io.IOException;
@@ -233,38 +229,6 @@ public class HBaseRowLocation extends DataType implements RowLocation {
 
     public ByteSlice getSlice() {
         return slice;
-    }
-
-    @Override
-    public void write(UnsafeRowWriter unsafeRowWriter, int ordinal) throws StandardException{
-        if (isNull())
-            unsafeRowWriter.setNullAt(ordinal);
-        else
-            unsafeRowWriter.write(ordinal,slice.getByteCopy());
-    }
-
-    @Override
-    public void writeArray(UnsafeArrayWriter unsafeArrayWriter, int ordinal) throws StandardException {
-        if (isNull())
-            unsafeArrayWriter.setNull(ordinal);
-        else
-            unsafeArrayWriter.write(ordinal,slice.getByteCopy());
-    }
-
-    @Override
-    public void read(UnsafeArrayData unsafeArrayData, int ordinal) throws StandardException {
-        if (unsafeArrayData.isNullAt(ordinal))
-            setToNull();
-        else
-            slice = ByteSlice.wrap(unsafeArrayData.getBinary(ordinal));
-    }
-
-    @Override
-    public void read(UnsafeRow unsafeRow, int ordinal) throws StandardException {
-        if (unsafeRow.isNullAt(ordinal))
-            setToNull();
-        else
-            slice = ByteSlice.wrap(unsafeRow.getBinary(ordinal));
     }
 
     @Override

@@ -25,33 +25,35 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
 package com.splicemachine.triggers;
 
 import com.splicemachine.derby.test.framework.*;
+import com.splicemachine.test.LongerThanTwoMinutes;
 import com.splicemachine.test.SerialTest;
-import com.splicemachine.test_dao.TriggerBuilder;
-import com.splicemachine.util.StatementUtils;
 import org.junit.*;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 import java.sql.*;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Properties;
 
 import static com.splicemachine.db.shared.common.reference.MessageId.SPLICE_GENERIC_EXCEPTION;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Test WHEN clause in triggers.
  */
-@Category(value = {SerialTest.class})
 @RunWith(Parameterized.class)
+@Category({SerialTest.class, LongerThanTwoMinutes.class})
 public class Trigger_When_Clause_IT extends SpliceUnitTest {
 
 
@@ -147,12 +149,10 @@ public class Trigger_When_Clause_IT extends SpliceUnitTest {
         conn.setAutoCommit(false);
         conn.setSchema(SCHEMA.toUpperCase());
 
-        c1 = classWatcher.createConnection("U1", "U1");
-        c2 = classWatcher.createConnection("U2", "U2");
+        c1 = classWatcher.connectionBuilder().user("U1").password("U1").build();
+        c2 = classWatcher.connectionBuilder().user("U2").password("U2").build();
         c1.setAutoCommit(false);
-        c1.setSchema(SCHEMA.toUpperCase());
         c2.setAutoCommit(false);
-        c2.setSchema(SCHEMA.toUpperCase());
     }
 
     @After
@@ -210,11 +210,10 @@ public class Trigger_When_Clause_IT extends SpliceUnitTest {
             + "when (new.x <> 2) insert into t2 values 'Executed tr10'");
 
             // WHEN clause contains reference to a transition table.
-            // Needs DB-8883
-//            s.executeUpdate("create trigger tr11 after insert on t1 "
-//            + "referencing new table as new "
-//            + "when (exists (select * from new where x > 5)) "
-//            + "insert into t2 values 'Executed tr11'");
+            s.executeUpdate("create trigger tr11 after insert on t1 "
+            + "referencing new table as new "
+            + "when (exists (select * from new where x > 5)) "
+            + "insert into t2 values 'Executed tr11'");
         }
         // Scalar subqueries are allowed in the WHEN clause, but they need an
         // extra set of parantheses.
@@ -278,6 +277,7 @@ public class Trigger_When_Clause_IT extends SpliceUnitTest {
             "Executed tr03 | 1 |\n" +
             "Executed tr07 | 1 |\n" +
             "Executed tr10 | 1 |\n" +
+            "Executed tr11 | 1 |\n" +
             "Executed tr12 | 1 |\n" +
             "Executed tr13 | 1 |";
             testQuery(query, expected, s);
@@ -546,45 +546,64 @@ public class Trigger_When_Clause_IT extends SpliceUnitTest {
             // Dropping any column in a statement trigger with a NEW transition
             // table fails, even if the column is not referenced in the WHEN clause
             // or in the triggered SQL text.
-            // Need DB-8883 for the following commented tests:
-//            s.executeUpdate("create trigger tr after update of x on t1 "
-//            + "referencing new table as new "
-//            + "when (exists (select 1 from new where x < y)) values 1");
-//            assertStatementError(HAS_DEPENDENTS, s,
-//            "alter table t1 drop column x restrict");
-//            assertStatementError(HAS_DEPENDENTS, s,
-//            "alter table t1 drop column y restrict");
-//            // Z is not referenced, but the transition table depends on all columns.
-//            assertStatementError(HAS_DEPENDENTS, s,
-//            "alter table t1 drop column z restrict");
-//            conn.rollback(sp);
+            sp = conn.setSavepoint();
+            s.executeUpdate("create trigger tr after update of x on t1 "
+            + "referencing new table as new "
+            + "when (exists (select 1 from new where x < y)) values 1");
+            // Z is not referenced, but the transition table depends on all columns.
+            assertStatementError(HAS_DEPENDENTS, s,
+            "alter table t1 drop column z restrict");
+            assertStatementError(HAS_DEPENDENTS, s,
+            "alter table t1 drop column x restrict");
+            assertStatementError(HAS_DEPENDENTS, s,
+            "alter table t1 drop column y restrict");
+
+            //conn.rollback(sp);
+            conn.commit();
+            s.executeUpdate("drop table t1");
+            s.executeUpdate("drop table t2");
+            s.executeUpdate("create table t1(x int, y int, z int)");
+            s.executeUpdate("create table t2(x int, y int, z int)");
 
             // Dropping any column in a statement trigger with an OLD transition
             // table fails, even if the column is not referenced in the WHEN clause
             // or in the triggered SQL text.
-//            s.executeUpdate("create trigger tr after delete on t1 "
-//            + "referencing old table as old "
-//            + "when (exists (select 1 from old where x < y)) values 1");
-//            assertStatementError(HAS_DEPENDENTS, s,
-//            "alter table t1 drop column x restrict");
-//            assertStatementError(HAS_DEPENDENTS, s,
-//            "alter table t1 drop column y restrict");
-//            // Z is not referenced, but the transition table depends on all columns.
-//            assertStatementError(HAS_DEPENDENTS, s,
-//            "alter table t1 drop column z restrict");
-//            conn.rollback(sp);
+            s.executeUpdate("create trigger tr after delete on t1 "
+            + "referencing old table as old "
+            + "when (exists (select 1 from old where x < y)) values 1");
+            // Z is not referenced, but the transition table depends on all columns.
+            assertStatementError(HAS_DEPENDENTS, s,
+            "alter table t1 drop column z restrict");
+
+            assertStatementError(HAS_DEPENDENTS, s,
+            "alter table t1 drop column x restrict");
+            assertStatementError(HAS_DEPENDENTS, s,
+            "alter table t1 drop column y restrict");
+            //conn.rollback(sp);
+            conn.commit();
+            s.executeUpdate("drop table t1");
+            s.executeUpdate("drop table t2");
+            s.executeUpdate("create table t1(x int, y int, z int)");
+            s.executeUpdate("create table t2(x int, y int, z int)");
+
 
             // References to columns in other ways than via transition variables
             // or transition tables should also be detected.
-//            s.executeUpdate("create trigger tr after delete on t1 "
-//            + "referencing old table as old "
-//            + "when (exists (select 1 from t1 where x < y)) values 1");
-//            assertStatementError(HAS_DEPENDENTS, s,
-//            "alter table t1 drop column x restrict");
-//            assertStatementError(HAS_DEPENDENTS, s,
-//            "alter table t1 drop column y restrict");
-//            s.executeUpdate("alter table t1 drop column z restrict");
-//            conn.rollback(sp);
+            s.executeUpdate("create trigger tr after delete on t1 "
+            + "referencing old table as old "
+            + "when (exists (select 1 from t1 where x < y)) values 1");
+            s.executeUpdate("alter table t1 drop column z restrict");
+            assertStatementError(HAS_DEPENDENTS, s,
+            "alter table t1 drop column x restrict");
+            assertStatementError(HAS_DEPENDENTS, s,
+            "alter table t1 drop column y restrict");
+
+            //conn.rollback(sp);
+            conn.commit();
+            s.executeUpdate("drop table t1");
+            s.executeUpdate("drop table t2");
+            s.executeUpdate("create table t1(x int, y int, z int)");
+            s.executeUpdate("create table t2(x int, y int, z int)");
 
             // References to columns in another table than the trigger table
             // should prevent them from being dropped.
@@ -1308,7 +1327,6 @@ public class Trigger_When_Clause_IT extends SpliceUnitTest {
      * Verify that aggregates (both built-in and user-defined) can be used
      * in a WHEN clause.
      */
-    @Ignore("DB-8883")
     @Test
     public void testAggregates() throws Exception {
         try(Statement s = conn.createStatement()) {
@@ -1327,24 +1345,25 @@ public class Trigger_When_Clause_IT extends SpliceUnitTest {
 
             s.execute("create trigger tr3 after insert on t1 "
             + "referencing new table as new "
-            + "when ((select mode_int(x) from new) between 0 and 3) "
+            + "when ((select min(x) from new) between 0 and 3) "
             + "insert into t2 values 'tr3'");
 
             s.execute("insert into t1 values 2, 4, 4");
 
             String query = "select * from t2 order by y";
-            String expected = "X  |\n" +
-            "------\n" +
-            "tr2 |";
+            String expected = "Y  |\n" +
+            "-----\n" +
+            "tr2 |\n" +
+            "tr3 |";
             testQuery(query, expected, s);
 
             s.execute("delete from t2");
 
             s.execute("insert into t1 values 2, 2, 3, 1, 0");
             query = "select * from t2 order by y";
-            expected = "X             | 2 |\n" +
-            "-------------------------------\n" +
-            "tr1 |" +
+            expected = "Y  |\n" +
+            "-----\n" +
+            "tr1 |\n" +
             "tr3 |";
             testQuery(query, expected, s);
 
@@ -1381,10 +1400,81 @@ public class Trigger_When_Clause_IT extends SpliceUnitTest {
     }
 
     @Test
+    public void testMultipleStatement() throws Exception {
+        try(Statement s = conn.createStatement()) {
+            s.execute("create table t1 (a int, b int)");
+            s.execute("create table t2 (a int, b int)");
+            s.execute("insert into t1 values(1,1)");
+            s.execute("insert into t2 values(1,1)");
+
+            s.execute("CREATE TRIGGER mytrig\n" +
+                    "   AFTER UPDATE OF a,b\n" +
+                    "   ON t1\n" +
+                    "   REFERENCING OLD AS OLD NEW AS NEW\n" +
+                    "   FOR EACH ROW\n" +
+                    "   WHEN (OLD.a = OLD.b)\n" +
+                    "BEGIN ATOMIC\n" +
+                    "insert into t2 values(2,2);\n" +
+                    "insert into t2 values(1,1);\n" +
+                    "END");
+
+            s.execute("UPDATE t1 SET a=4");
+
+            String query = "select * from t1";
+            String expected = "A | B |\n" +
+                    "--------\n" +
+                    " 4 | 1 |";
+            testQuery(query, expected, s);
+            query = "select * from t2 order by a";
+            expected = "A | B |\n" +
+                    "--------\n" +
+                    " 1 | 1 |\n" +
+                    " 1 | 1 |\n" +
+                    " 2 | 2 |";
+            testQuery(query, expected, s);
+        }
+    }
+
+    @Test
+    public void testFailedMultipleStatement() throws Exception {
+        try(Statement s = conn.createStatement()) {
+            s.execute("create table t1 (a int, b int)");
+            s.execute("create table t2 (a int, b int, primary key(a))");
+            s.execute("insert into t1 values(1,1)");
+            s.execute("insert into t2 values(1,1)");
+
+            s.execute("CREATE TRIGGER mytrig\n" +
+                    "   AFTER UPDATE OF a,b\n" +
+                    "   ON t1\n" +
+                    "   REFERENCING OLD AS OLD NEW AS NEW\n" +
+                    "   FOR EACH ROW\n" +
+                    "   WHEN (OLD.a = OLD.b)\n" +
+                    "BEGIN ATOMIC\n" +
+                    "insert into t2 values(2,2);\n" + // That one should work
+                    "insert into t2 values(1,1);\n" + // That one should fail
+                    "END");
+
+            testFail("23505",
+                    "UPDATE t1 SET a=4", s);
+
+            String query = "select * from t1";
+            String expected = "A | B |\n" +
+                    "--------\n" +
+                    " 1 | 1 |";
+            testQuery(query, expected, s);
+            query = "select * from t2";
+            expected = "A | B |\n" +
+                    "--------\n" +
+                    " 1 | 1 |";
+            testQuery(query, expected, s);
+        }
+    }
+
+    @Test
     public void testSignal() throws Exception {
         try (Statement s = conn.createStatement()) {
             s.execute("create table t1 (a int, b char(11))");
-            s.execute("create table t2 (a int, b int)");
+            s.execute("create table t2 (a int, b char(11))");
             s.execute("insert into t1 values(1,1)");
             s.execute("insert into t2 values(1,1)");
             s.execute("INSERT INTO t1 values(2,'hello')");

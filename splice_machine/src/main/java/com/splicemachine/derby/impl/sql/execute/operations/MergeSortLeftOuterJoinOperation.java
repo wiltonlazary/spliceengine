@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -36,26 +36,26 @@ public class MergeSortLeftOuterJoinOperation extends MergeSortJoinOperation {
 		}
 
 		public MergeSortLeftOuterJoinOperation(
-						SpliceOperation leftResultSet,
-						int leftNumCols,
-						SpliceOperation rightResultSet,
-						int rightNumCols,
-						int leftHashKeyItem,
-						int rightHashKeyItem,
-						Activation activation,
-						GeneratedMethod restriction,
-						int resultSetNumber,
-						GeneratedMethod emptyRowFun,
-						boolean wasRightOuterJoin,
-						boolean oneRowRightSide,
-						boolean notExistsRightSide,
-						boolean rightFromSSQ,
-						double optimizerEstimatedRowCount,
-						double optimizerEstimatedCost,
-						String userSuppliedOptimizerOverrides,
-						String sparkExpressionTreeAsString) throws StandardException {
+				SpliceOperation leftResultSet,
+				int leftNumCols,
+				SpliceOperation rightResultSet,
+				int rightNumCols,
+				int leftHashKeyItem,
+				int rightHashKeyItem,
+				Activation activation,
+				GeneratedMethod restriction,
+				int resultSetNumber,
+				GeneratedMethod emptyRowFun,
+				boolean wasRightOuterJoin,
+				boolean oneRowRightSide,
+				byte semiJoinType,
+				boolean rightFromSSQ,
+				double optimizerEstimatedRowCount,
+				double optimizerEstimatedCost,
+				String userSuppliedOptimizerOverrides,
+				String sparkExpressionTreeAsString) throws StandardException {
 				super(leftResultSet, leftNumCols, rightResultSet, rightNumCols, leftHashKeyItem, rightHashKeyItem,
-								activation, restriction, resultSetNumber, oneRowRightSide, notExistsRightSide, rightFromSSQ,
+								activation, restriction, resultSetNumber, oneRowRightSide, semiJoinType, rightFromSSQ,
 								optimizerEstimatedRowCount, optimizerEstimatedCost,userSuppliedOptimizerOverrides,
 								sparkExpressionTreeAsString);
 				SpliceLogUtils.trace(LOG, "instantiate");

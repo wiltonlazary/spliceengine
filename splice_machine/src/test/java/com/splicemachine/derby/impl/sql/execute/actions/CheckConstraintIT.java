@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -25,7 +25,7 @@ import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -57,25 +57,30 @@ public class CheckConstraintIT extends SpliceUnitTest {
     private SpliceWatcher methodWatcher = new SpliceWatcher(CLASS_NAME);
 
     private TestConnection conn;
-    private String connectionString;
+    private Boolean useOlap;
 
     @Parameterized.Parameters
     public static Collection<Object[]> data() {
         Collection<Object[]> params = Lists.newArrayListWithCapacity(2);
-        params.add(new Object[]{"jdbc:splice://localhost:1527/splicedb;create=true;user=splice;password=admin"});
-        params.add(new Object[]{"jdbc:splice://localhost:1527/splicedb;create=true;user=splice;password=admin;useSpark=true"});
+        params.add(new Object[]{true});
+        params.add(new Object[]{null});
+        //params.add(new Object[]{"jdbc:splice://localhost:1527/splicedb;create=true;user=splice;password=admin"});
+        //params.add(new Object[]{"jdbc:splice://localhost:1527/splicedb;create=true;user=splice;password=admin;useSpark=true"});
         return params;
     }
 
-    public CheckConstraintIT(String connecitonString) {
-        this.connectionString = connecitonString;
+    public CheckConstraintIT(Boolean useOlap) {
+        this.useOlap = useOlap;
     }
 
     @Before
     public void setUp() throws Exception{
-        conn = new TestConnection(DriverManager.getConnection(connectionString, new Properties()));
+        SpliceWatcher.ConnectionBuilder connBuilder = methodWatcher.connectionBuilder().create(true);
+        if (useOlap != null){
+            connBuilder.useOLAP(useOlap);
+        }
+        conn = connBuilder.build();
         conn.setAutoCommit(false);
-        conn.setSchema(CLASS_NAME.toUpperCase());
     }
 
     @After

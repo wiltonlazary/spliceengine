@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -73,5 +73,19 @@ public class SpliceSnappy {
             bytes = Snappy.uncompress(bytes);
         }
         return bytes;
+    }
+
+    public static int uncompress(byte[] bytes, int inputOffset, int inputLength, byte[] output, int outputOffset) throws IOException {
+        if (installed) {
+            return Snappy.uncompress(bytes, inputOffset, inputLength, output, outputOffset);
+        }
+        return bytes.length;
+    }
+
+    public static int uncompressedLength(byte[] bytes, int inputOffset, int inputLength) throws IOException {
+        if (installed) {
+            return Snappy.uncompressedLength(bytes, inputOffset, inputLength);
+        }
+        return bytes.length;
     }
 }

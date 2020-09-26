@@ -26,7 +26,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.derby.utils;
@@ -36,7 +36,6 @@ import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.types.DataTypeDescriptor;
-import com.splicemachine.db.iapi.types.SQLDecimal;
 import com.splicemachine.db.impl.sql.execute.ValueRow;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.DerbyOperationInformation;
@@ -48,6 +47,7 @@ import com.splicemachine.derby.stream.iapi.OperationContext;
 import com.splicemachine.derby.stream.iapi.ScanSetBuilder;
 import com.splicemachine.derby.stream.utils.ExternalTableUtils;
 import com.splicemachine.pipeline.Exceptions;
+import com.splicemachine.system.CsvOptions;
 import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.log4j.Logger;
 import org.apache.spark.sql.types.StructType;
@@ -103,6 +103,7 @@ public class StatisticsOperation extends SpliceBaseOperation {
         if (!isOpen)
             throw new IllegalStateException("Operation is not open");
 
+        dsp.prependSpliceExplainString(this.explainPlan);
         dsp.setSchedulerPool("admin");
         try {
             DataSet statsDataSet;
@@ -112,8 +113,10 @@ public class StatisticsOperation extends SpliceBaseOperation {
                 int[] zeroBased = Arrays.stream(builder.getColumnPositionMap()).map((int x) -> x - 1).toArray();
                 StructType schema = ExternalTableUtils.getSchema(activation, builder.getBaseTableConglomId());
                 String storedAs = scanSetBuilder.getStoredAs();
-                if (storedAs.equals("T"))
-                    statsDataSet = dsp.readTextFile(null, builder.getLocation(), builder.getEscaped(), builder.getDelimited(), zeroBased, operationContext, null, null, builder.getTemplate(), useSample, sampleFraction);
+                if (storedAs.equals("T")) {
+                    CsvOptions csvOptions = new CsvOptions(builder.getDelimited(), builder.getEscaped(), builder.getLines());
+                    statsDataSet = dsp.readTextFile(null, builder.getLocation(), csvOptions, zeroBased, operationContext, null, null, builder.getTemplate(), useSample, sampleFraction);
+                }
                 else if (storedAs.equals("P"))
                     statsDataSet = dsp.readParquetFile(schema, zeroBased, builder.getPartitionByColumnMap() , builder.getLocation(), operationContext, null, null, builder.getTemplate(), useSample, sampleFraction);
                 else if (storedAs.equals("A"))
@@ -125,6 +128,9 @@ public class StatisticsOperation extends SpliceBaseOperation {
                 }
             } else {
                 statsDataSet = scanSetBuilder.buildDataSet(scope).map(new CloneFunction<>(operationContext));
+            }
+            if(statsDataSet.partitions() == 0) {
+                statsDataSet = dsp.getEmpty(); // this has 1 partition and the following code works ok with that
             }
             DataSet stats = statsDataSet
                     .mapPartitions(

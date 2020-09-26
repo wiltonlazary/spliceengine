@@ -272,6 +272,10 @@ message Index {
         optional bool excludeNulls = 6; // Exclude Values where the first column is null
         optional bool excludeDefaults = 7; // Exclude Values where the first column is the default value
         optional bytes defaultValues = 8; // Default values for the index to validate for writing...
+        optional int32 numExprs = 9; // Number of index expressions. 0 for column-based indexes
+        repeated string generatedClassNames = 10; // Names of the generated classes of index expressions
+        repeated bytes bytecodeExprs = 11; // bytecode of the generated classes of index expressions
+        repeated int32 indexColumnFormatIds = 12;  // result types of index expressions
 }
 
 message Table {
@@ -286,6 +290,7 @@ message Table {
 message TentativeIndex {
     required Index index = 1;
     required Table table = 2;
+    required int64 txnId = 3;
 }
 
 message FKConstraintInfo {
@@ -305,6 +310,10 @@ message NotifyJarLoader {
 
 message NotifyModifyClasspath {
     optional string classpath = 1;
+}
+
+message SetReplicationRole {
+    optional string role = 1;
 }
 
 message UpdateSystemProcedures{
@@ -352,7 +361,8 @@ enum DDLChangeType {
     UPDATE_SCHEMA_OWNER=38;
     GRANT_REVOKE_ROLE = 39;
     SET_DATABASE_PROPERTY = 40;
-    UPDATE_SYSTEM_PROCEDURES = 41;
+    SET_REPLICATION_ROLE = 41;
+    UPDATE_SYSTEM_PROCEDURES = 42;
 }
 
 message DDLChange {
@@ -393,5 +403,6 @@ message DDLChange {
     optional UpdateSchemaOwner updateSchemaOwner = 35;
     optional GrantRevokeRole grantRevokeRole = 36;
     optional SetDatabaseProperty setDatabaseProperty = 37;
-    optional UpdateSystemProcedures updateSystemProcedures = 38;
+    optional SetReplicationRole setReplicationRole = 38;
+    optional UpdateSystemProcedures updateSystemProcedures = 39;
 }

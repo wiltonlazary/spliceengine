@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -101,7 +101,7 @@ public class SelfReferenceNode extends FromTable {
     public ResultSetNode bindNonVTITables(DataDictionary dataDictionary,
                                           FromList fromListParam)
             throws StandardException {
-		/* Assign the tableNumber */
+        /* Assign the tableNumber */
         if (tableNumber == -1)  // allow re-bind, in which case use old number
             tableNumber = getCompilerContext().getNextTableNumber();
 
@@ -175,7 +175,7 @@ public class SelfReferenceNode extends FromTable {
                                     FromList fromList)
             throws StandardException {
 
-		/* Generate the referenced table map */
+        /* Generate the referenced table map */
         referencedTableMap = new JBitSet(numTables);
         referencedTableMap.set(tableNumber);
 
@@ -184,23 +184,23 @@ public class SelfReferenceNode extends FromTable {
 
     protected ResultSetNode genProjectRestrict(int numTables)
             throws StandardException{
-		/* We get a shallow copy of the ResultColumnList and its
-		 * ResultColumns.  (Copy maintains ResultColumn.expression for now.)
-		 */
+        /* We get a shallow copy of the ResultColumnList and its
+         * ResultColumns.  (Copy maintains ResultColumn.expression for now.)
+         */
         ResultColumnList prRCList=resultColumns;
         resultColumns=resultColumns.copyListAndObjects();
 
-		/* Replace ResultColumn.expression with new VirtualColumnNodes
-		 * in the ProjectRestrictNode's ResultColumnList.  (VirtualColumnNodes include
-		 * pointers to source ResultSetNode, this, and source ResultColumn.)
-		 * NOTE: We don't want to mark the underlying RCs as referenced, otherwise
-		 * we won't be able to project out any of them.
-		 */
+        /* Replace ResultColumn.expression with new VirtualColumnNodes
+         * in the ProjectRestrictNode's ResultColumnList.  (VirtualColumnNodes include
+         * pointers to source ResultSetNode, this, and source ResultColumn.)
+         * NOTE: We don't want to mark the underlying RCs as referenced, otherwise
+         * we won't be able to project out any of them.
+         */
         prRCList.genVirtualColumnNodes(this,resultColumns,false);
 
-		/* Project out any unreferenced columns.  If there are no referenced
-		 * columns, generate and bind a single ResultColumn whose expression is 1.
-		 */
+        /* Project out any unreferenced columns.  If there are no referenced
+         * columns, generate and bind a single ResultColumn whose expression is 1.
+         */
         prRCList.doProjection(false);
 
         /* Finally, we create the new ProjectRestrictNode */
@@ -208,10 +208,10 @@ public class SelfReferenceNode extends FromTable {
                 C_NodeTypes.PROJECT_RESTRICT_NODE,
                 this,
                 prRCList,
-                null,	/* Restriction */
+                null,    /* Restriction */
                 null,   /* Restriction as PredicateList */
-                null,	/* Project subquery list */
-                null,	/* Restrict subquery list */
+                null,    /* Project subquery list */
+                null,    /* Restrict subquery list */
                 null,
                 getContextManager());
     }
@@ -224,7 +224,8 @@ public class SelfReferenceNode extends FromTable {
                                      RowOrdering rowOrdering) throws StandardException {
         costEstimate = subquery.costEstimate.cloneMe();
 
-        getCurrentAccessPath().getJoinStrategy().estimateCost(this, predList, cd, outerCost, optimizer, costEstimate);
+        getCurrentAccessPath().getJoinStrategy().estimateCost(
+                this, predList, cd, outerCost, optimizer, costEstimate);
 
 
         return costEstimate;
@@ -271,24 +272,24 @@ public class SelfReferenceNode extends FromTable {
     }
 
     @Override
-    public String printExplainInformation(int order, boolean fromPlanPrinter) throws StandardException {
-        return printExplainInformation(",", order, fromPlanPrinter);
+    public String printExplainInformation(boolean fromPlanPrinter) throws StandardException {
+        return printExplainInformation(",", fromPlanPrinter);
     }
 
     @Override
-    public String printExplainInformation(String attrDelim, int order) throws StandardException {
-        return printExplainInformation(attrDelim, order, false);
+    public String printExplainInformation(String attrDelim) throws StandardException {
+        return printExplainInformation(attrDelim, false);
     }
 
-    public String printExplainInformation(String attrDelim, int order, boolean fromPlanPrinter) throws StandardException {
+    public String printExplainInformation(String attrDelim, boolean fromPlanPrinter) throws StandardException {
         StringBuilder sb = new StringBuilder();
         sb.append(spaceToLevel())
                 .append("SelfReference").append("(")
-                .append("n=").append(order)
+                .append("n=").append(getResultSetNumber())
                 .append(attrDelim);
 
         sb.append(getFinalCostEstimate(false).prettyProcessingString(attrDelim));
-        sb.append(",reference=").append((fromPlanPrinter?((UnionNode)recursiveUnionRoot).getStepNumInExplain():recursiveUnionRoot.getResultSetNumber()));
+        sb.append(",reference=").append(recursiveUnionRoot.getResultSetNumber());
         sb.append(")");
         return sb.toString();
     }
@@ -303,13 +304,13 @@ public class SelfReferenceNode extends FromTable {
         // push in a local variable,
         selfReferenceResultSetRef = acb.newFieldDeclaration(Modifier.PRIVATE, ClassName.NoPutResultSet);
 
-		/* Generate the SelfReferenceResultSet:
-		 *  arg1: Activation
-		 *  arg2: resultSetNumber
-		 *  arg3: estimated row count
-		 *  arg4: estimated cost
-		 *  arg5: close method
-		 */
+        /* Generate the SelfReferenceResultSet:
+         *  arg1: Activation
+         *  arg2: resultSetNumber
+         *  arg3: estimated row count
+         *  arg4: estimated cost
+         *  arg5: close method
+         */
         acb.pushGetResultSetFactoryExpression(mb);
         acb.pushThisAsActivation(mb);
 

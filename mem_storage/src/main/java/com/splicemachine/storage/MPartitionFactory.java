@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,8 +14,9 @@
 
 package com.splicemachine.storage;
 
-import org.spark_project.guava.base.Predicate;
-import org.spark_project.guava.collect.Iterables;
+import com.splicemachine.db.iapi.error.StandardException;
+import splice.com.google.common.base.Predicate;
+import splice.com.google.common.collect.Iterables;
 import com.splicemachine.access.api.*;
 import com.splicemachine.concurrent.Clock;
 import com.splicemachine.primitives.Bytes;
@@ -63,7 +64,6 @@ public class MPartitionFactory implements PartitionFactory<Object>{
 
     private class Creator implements PartitionCreator{
         private String name;
-        private long txnId;
 
         @Override
         public PartitionCreator withName(String name){
@@ -101,6 +101,10 @@ public class MPartitionFactory implements PartitionFactory<Object>{
             return this;
         }
 
+        @Override
+        public PartitionCreator withCatalogVersion(String version) {
+            return this;
+        }
         @Override
         public Partition create() throws IOException{
             assert name!=null:"No name specified!";
@@ -220,12 +224,34 @@ public class MPartitionFactory implements PartitionFactory<Object>{
 
         @Override
         public void enableTableReplication(String tableName) throws IOException {
-
+            throw new UnsupportedOperationException("Operation not supported in mem storage engine");
         }
 
         @Override
         public void disableTableReplication(String tableName) throws IOException {
+            throw new UnsupportedOperationException("Operation not supported in mem storage engine");
 
+        }
+
+        @Override
+        public List<ReplicationPeerDescription> getReplicationPeers() throws IOException{
+            throw new UnsupportedOperationException("Operation not supported in mem storage engine");
+
+        }
+        
+        @Override
+        public boolean replicationEnabled(String tableName) throws IOException {
+            return false;
+        }
+
+        @Override
+        public void setCatalogVersion(long conglomerateNumber, String version) throws IOException {
+            throw new UnsupportedOperationException("Operation not supported in mem storage engine");
+        }
+
+        @Override
+        public String getCatalogVersion(long conglomerateNumber) throws StandardException {
+            throw new UnsupportedOperationException("Operation not supported in mem storage engine");
         }
     }
 }

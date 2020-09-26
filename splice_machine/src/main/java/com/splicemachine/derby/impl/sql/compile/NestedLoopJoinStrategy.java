@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -23,6 +23,7 @@ import com.splicemachine.db.iapi.sql.compile.*;
 import com.splicemachine.db.iapi.sql.dictionary.ConglomerateDescriptor;
 import com.splicemachine.db.iapi.sql.dictionary.DataDictionary;
 import com.splicemachine.db.iapi.store.access.TransactionController;
+import com.splicemachine.db.iapi.util.JBitSet;
 import com.splicemachine.db.impl.sql.compile.*;
 import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.log4j.Logger;
@@ -42,17 +43,17 @@ public class NestedLoopJoinStrategy extends BaseJoinStrategy{
                             boolean skipKeyCheck) throws StandardException{
         /* Nested loop is feasible, except in the corner case
          * where innerTable is a VTI that cannot be materialized
-		 * (because it has a join column as a parameter) and
-		 * it cannot be instantiated multiple times.
-		 * RESOLVE - Actually, the above would work if all of 
-		 * the tables outer to innerTable were 1 row tables, but
-		 * we don't have that info yet, and it should probably
-		 * be hidden in inner table somewhere.
-		 * NOTE: A derived table that is correlated with an outer
-		 * query block is not materializable, but it can be
-		 * "instantiated" multiple times because that only has
-		 * meaning for VTIs.
-		 */
+         * (because it has a join column as a parameter) and
+         * it cannot be instantiated multiple times.
+         * RESOLVE - Actually, the above would work if all of
+         * the tables outer to innerTable were 1 row tables, but
+         * we don't have that info yet, and it should probably
+         * be hidden in inner table somewhere.
+         * NOTE: A derived table that is correlated with an outer
+         * query block is not materializable, but it can be
+         * "instantiated" multiple times because that only has
+         * meaning for VTIs.
+         */
 
         if (outerCost != null && outerCost.getJoinType() == JoinNode.FULLOUTERJOIN)
             return false;
@@ -81,10 +82,10 @@ public class NestedLoopJoinStrategy extends BaseJoinStrategy{
 
     @Override
     public double nonBasePredicateSelectivity(Optimizable innerTable,OptimizablePredicateList predList){
-		/*
-		** For nested loop, all predicates are base predicates, so there
-		** is no extra selectivity.
-		*/
+        /*
+        ** For nested loop, all predicates are base predicates, so there
+        ** is no extra selectivity.
+        */
         return 1.0;
     }
 
@@ -163,13 +164,13 @@ public class NestedLoopJoinStrategy extends BaseJoinStrategy{
             }
         }
 
-		/* If we're going to generate a list of IN-values for index probing
-		 * at execution time then we push TableScanResultSet arguments plus
-		 * four additional arguments: 1) the list of IN-list values, and 2)
-		 * a boolean indicating whether or not the IN-list values are already
-		 * sorted, 3) the in-list column position in the index or primary key,
-		 * 4) array of types of the in-list columns
-		 */
+        /* If we're going to generate a list of IN-values for index probing
+         * at execution time then we push TableScanResultSet arguments plus
+         * four additional arguments: 1) the list of IN-list values, and 2)
+         * a boolean indicating whether or not the IN-list values are already
+         * sorted, 3) the in-list column position in the index or primary key,
+         * 4) array of types of the in-list columns
+         */
         if(genInListVals){
             numArgs=39;
         }else{
@@ -187,10 +188,10 @@ public class NestedLoopJoinStrategy extends BaseJoinStrategy{
             ((PredicateList)storeRestrictionList).generateInListValues(acb,mb);
 
         if(SanityManager.DEBUG){
-			/* If we're not generating IN-list values with which to probe
-			 * the table then storeRestrictionList should not have any
-			 * IN-list probing predicates.  Make sure that's the case.
-			 */
+            /* If we're not generating IN-list values with which to probe
+             * the table then storeRestrictionList should not have any
+             * IN-list probing predicates.  Make sure that's the case.
+             */
             if(!genInListVals){
                 Predicate pred;
                 for(int i=storeRestrictionList.size()-1;i>=0;i--){
@@ -229,15 +230,16 @@ public class NestedLoopJoinStrategy extends BaseJoinStrategy{
     @Override
     public void divideUpPredicateLists(
             Optimizable innerTable,
+            JBitSet joinedTableSet,
             OptimizablePredicateList originalRestrictionList,
             OptimizablePredicateList storeRestrictionList,
             OptimizablePredicateList nonStoreRestrictionList,
             OptimizablePredicateList requalificationRestrictionList,
             DataDictionary dd) throws StandardException{
-		/*
-		** All predicates are store predicates.  No requalification is
-		** necessary for non-covering index scans.
-		*/
+        /*
+        ** All predicates are store predicates.  No requalification is
+        ** necessary for non-covering index scans.
+        */
         originalRestrictionList.setPredicatesAndProperties(storeRestrictionList);
     }
 
@@ -257,7 +259,7 @@ public class NestedLoopJoinStrategy extends BaseJoinStrategy{
                              ConglomerateDescriptor cd,
                              CostEstimate outerCost,
                              Optimizer optimizer,
-                             CostEstimate innerCost) throws StandardException{
+                             CostEstimate innerCost) throws StandardException {
 
         SpliceLogUtils.trace(LOG,"rightResultSetCostEstimate outerCost=%s, innerFullKeyCost=%s",outerCost,innerCost);
         if(outerCost.isUninitialized() ||(outerCost.localCost()==0d && outerCost.getEstimatedRowCount()==1.0)){
@@ -271,8 +273,6 @@ public class NestedLoopJoinStrategy extends BaseJoinStrategy{
                 outerCost.setRowOrdering(ro); //force a cloning
             return;
         }
-        boolean usesSpark =
-         (innerTable.isAboveSparkThreshold(outerCost) || innerTable.isAboveSparkThreshold(innerCost));
 
         //set the base costs for the join
         innerCost.setBase(innerCost.cloneMe());
@@ -285,7 +285,7 @@ public class NestedLoopJoinStrategy extends BaseJoinStrategy{
         double remoteCostPerPartition = SelectivityUtil.getTotalPerPartitionRemoteCost(innerCost, outerCost, totalRowCount);
         innerCost.setRemoteCost(remoteCostPerPartition);
         innerCost.setRemoteCostPerPartition(remoteCostPerPartition);
-        double joinCost = nestedLoopJoinStrategyLocalCost(innerCost, outerCost, totalRowCount, usesSpark);
+        double joinCost = nestedLoopJoinStrategyLocalCost(innerCost, outerCost, totalRowCount, optimizer.isForSpark());
         innerCost.setLocalCost(joinCost);
         innerCost.setLocalCostPerPartition(joinCost);
         innerCost.setSingleScanRowCount(innerCost.getEstimatedRowCount());

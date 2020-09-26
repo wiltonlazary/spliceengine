@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -25,15 +25,14 @@ import com.splicemachine.db.iapi.sql.execute.ConstantAction;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.store.access.StaticCompiledOpenConglomInfo;
 import com.splicemachine.db.iapi.types.DataTypeDescriptor;
-import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.iapi.types.RowLocation;
+import com.splicemachine.db.iapi.util.ByteArray;
 import com.splicemachine.db.impl.sql.compile.TableName;
 import com.splicemachine.db.impl.sql.execute.*;
 import com.splicemachine.derby.impl.sql.execute.actions.*;
 import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.log4j.Logger;
 
-import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
@@ -80,6 +79,7 @@ public abstract class SpliceGenericConstantActionFactory extends GenericConstant
                                                        ColumnInfo[] columnInfos,
                                                        ConstantAction[] constantActions,
                                                        Properties properties,
+                                                       int createBehavior,
                                                        char lockGranularity,
                                                        boolean onCommitDeleteRows,
                                                        boolean onRollbackDeleteRows,
@@ -103,7 +103,7 @@ public abstract class SpliceGenericConstantActionFactory extends GenericConstant
         SpliceLogUtils.trace(LOG, "getCreateTableConstantAction for {%s.%s} with columnInfo %s and constraintActions",
             schemaName, tableName, Arrays.toString(columnInfos),Arrays.toString(constantActions));
         return new SpliceCreateTableOperation(schemaName,tableName,tableType,columnInfos,
-            constantActions,properties,lockGranularity,
+            constantActions,properties,createBehavior,lockGranularity,
             onCommitDeleteRows,onRollbackDeleteRows,withDataQueryString, isExternal,
                 delimited,escaped,lines,storedAs,location, compression, mergeSchema,presplit,isLogicalKey,splitKeyPath,
                 columnDelimiter,characterDelimiter,timestampFormat,dateFormat,timeFormat);
@@ -111,37 +111,41 @@ public abstract class SpliceGenericConstantActionFactory extends GenericConstant
 
 
     @Override
-    public ConstantAction getCreateIndexConstantAction(boolean      forCreateTable,
-                                                       boolean		unique,
-                                                       boolean		uniqueWithDuplicateNulls,
-                                                       String		indexType,
-                                                       String		schemaName,
-                                                       String		indexName,
-                                                       String		tableName,
-                                                       UUID			tableId,
-                                                       String[]		columnNames,
-                                                       boolean[]    isAscending,
-                                                       boolean		isConstraint,
-                                                       UUID			conglomerateUUID,
-                                                       boolean		excludeNulls,
-                                                       boolean 		excludeDefaults,
-                                                       boolean      preSplit,
-                                                       boolean      isLogicalKey,
-                                                       boolean      sampling,
-                                                       double       sampleFraction,
-                                                       String       splitKeyPath,
-                                                       String       hfilePath,
-                                                       String       columnDelimiter,
-                                                       String       characterDelimiter,
-                                                       String       timestampFormat,
-                                                       String       dateFormat,
-                                                       String       timeFormat,
-                                                       Properties	properties){
+    public ConstantAction getCreateIndexConstantAction(boolean              forCreateTable,
+                                                       boolean              unique,
+                                                       boolean              uniqueWithDuplicateNulls,
+                                                       String               indexType,
+                                                       String               schemaName,
+                                                       String               indexName,
+                                                       String               tableName,
+                                                       UUID                 tableId,
+                                                       String[]             columnNames,
+                                                       DataTypeDescriptor[] indexColumnTypes,
+                                                       boolean[]            isAscending,
+                                                       boolean              isConstraint,
+                                                       UUID                 conglomerateUUID,
+                                                       boolean              excludeNulls,
+                                                       boolean              excludeDefaults,
+                                                       boolean              preSplit,
+                                                       boolean              isLogicalKey,
+                                                       boolean              sampling,
+                                                       double               sampleFraction,
+                                                       String               splitKeyPath,
+                                                       String               hfilePath,
+                                                       String               columnDelimiter,
+                                                       String               characterDelimiter,
+                                                       String               timestampFormat,
+                                                       String               dateFormat,
+                                                       String               timeFormat,
+                                                       String[]             exprTexts,
+                                                       ByteArray[]          exprBytecode,
+                                                       String[]             generatedClassNames,
+                                                       Properties           properties){
         SpliceLogUtils.trace(LOG,"getCreateIndexConstantAction for index {%s.%s} on {%s.%s} with columnNames %s",schemaName,indexName,schemaName,tableName,Arrays.toString(columnNames));
         return new CreateIndexConstantOperation(forCreateTable,unique,uniqueWithDuplicateNulls,indexType, schemaName,
-                indexName,tableName,tableId,columnNames,isAscending,isConstraint, conglomerateUUID, excludeNulls,
+                indexName,tableName,tableId,columnNames,indexColumnTypes,isAscending,isConstraint, conglomerateUUID, excludeNulls,
                 excludeDefaults,preSplit,isLogicalKey,sampling,sampleFraction,splitKeyPath,hfilePath,columnDelimiter,characterDelimiter,
-                timestampFormat, dateFormat,timeFormat,properties);
+                timestampFormat, dateFormat,timeFormat,exprTexts,exprBytecode,generatedClassNames,properties);
     }
 
     @Override
@@ -455,22 +459,28 @@ public abstract class SpliceGenericConstantActionFactory extends GenericConstant
 
     @Override
     public ConstantAction getCreateTriggerConstantAction(
-            String triggerSchemaName,String triggerName,TriggerEventDML eventMask,
-            boolean isBefore,boolean isRow,boolean isEnabled,
-            TableDescriptor triggerTable,UUID whenSPSId,String whenText,
-            UUID actionSPSId,String actionText,UUID spsCompSchemaId,
-            Timestamp creationTimestamp,int[] referencedCols,
+            String triggerSchemaName,
+            String triggerName,
+            TriggerEventDML eventMask,
+            boolean isBefore,
+            boolean isRow,
+            boolean isEnabled,
+            TableDescriptor triggerTable,
+            String whenText,
+            List<String> actionTextList,
+            UUID spsCompSchemaId,
+            int[] referencedCols,
             int[] referencedColsInTriggerAction,
             String originalWhenText,
-            String originalActionText,
+            List<String> originalActionTextList,
             boolean referencingOld,boolean referencingNew,
             String oldReferencingName,String newReferencingName){
         SpliceLogUtils.trace(LOG,"getCreateTriggerConstantAction for trigger {%s.%s}",triggerSchemaName,triggerName);
         return new CreateTriggerConstantOperation(triggerSchemaName,triggerName,
-                eventMask,isBefore,isRow,isEnabled,triggerTable,whenSPSId,
-                whenText,actionSPSId,actionText,spsCompSchemaId,creationTimestamp,
+                eventMask,isBefore,isRow,isEnabled,triggerTable,
+                whenText,actionTextList,spsCompSchemaId,
                 referencedCols,referencedColsInTriggerAction,
-                originalWhenText, originalActionText,
+                originalWhenText, originalActionTextList,
                 referencingOld,referencingNew,oldReferencingName,newReferencingName);
     }
 

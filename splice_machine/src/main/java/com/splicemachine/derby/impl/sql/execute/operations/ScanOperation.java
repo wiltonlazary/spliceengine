@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,7 +14,7 @@
 
 package com.splicemachine.derby.impl.sql.execute.operations;
 
-import org.spark_project.guava.base.Strings;
+import splice.com.google.common.base.Strings;
 import com.splicemachine.db.catalog.types.ReferencedColumnsDescriptorImpl;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.io.FormatableBitSet;
@@ -69,6 +69,7 @@ public abstract class ScanOperation extends SpliceBaseOperation{
     int partitionRefItem;
     protected int[] partitionColumnMap;
     protected ExecRow defaultRow;
+    public static final int SCAN_CACHE_SIZE = 1000;
 
     public ScanOperation(){
         super();
@@ -123,6 +124,7 @@ public abstract class ScanOperation extends SpliceBaseOperation{
         );
     }
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9844")
     public int[] getColumnOrdering() throws StandardException{
         if(columnOrdering==null){
             columnOrdering=scanInformation.getColumnOrdering();
@@ -230,7 +232,7 @@ public abstract class ScanOperation extends SpliceBaseOperation{
 //        else if (this.getEstimatedRowCount()<100) {
 //            s = s.cacheRows(100).batchCells(-1);
 //        } else {
-            s.cacheRows(1000).batchCells(-1);
+            s.cacheRows(SCAN_CACHE_SIZE).batchCells(-1);
 //        }
         deSiify(s);
         return s;
@@ -299,6 +301,7 @@ public abstract class ScanOperation extends SpliceBaseOperation{
     }
 
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9844")
     public int[] getKeyDecodingMap() throws StandardException{
         if(keyDecodingMap==null) {
             keyDecodingMap = getKeyDecodingMap(
@@ -309,6 +312,7 @@ public abstract class ScanOperation extends SpliceBaseOperation{
         return keyDecodingMap;
     }
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9844")
     public int[] getRowDecodingMap() throws StandardException {
         if(rowDecodingMap==null) {
             rowDecodingMap = getRowDecodingMap(
@@ -429,6 +433,7 @@ public abstract class ScanOperation extends SpliceBaseOperation{
         return rowIdKey;
     }
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9844")
     public int[] getPartitionColumnMap() {
         return partitionColumnMap;
     }

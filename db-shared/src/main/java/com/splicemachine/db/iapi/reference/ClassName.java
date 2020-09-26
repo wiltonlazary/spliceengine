@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -73,6 +73,7 @@ public interface ClassName
 
 	String BaseActivation = "com.splicemachine.db.impl.sql.execute.BaseActivation";
 	String BaseExpressionActivation = "com.splicemachine.db.impl.sql.execute.BaseExpressionActivation";
+	String BaseExecutableIndexExpression = "com.splicemachine.db.impl.sql.execute.BaseExecutableIndexExpression";
 
 	String CursorActivation = "com.splicemachine.db.impl.sql.execute.CursorActivation";
 
@@ -125,6 +126,7 @@ public interface ClassName
 	String MaxMinAggregator = "com.splicemachine.db.impl.sql.execute.MaxMinAggregator";
 	String SumAggregator = "com.splicemachine.db.impl.sql.execute.SumAggregator";
 	String CountAggregator = "com.splicemachine.db.impl.sql.execute.CountAggregator";
+	String StringAggregator = "com.splicemachine.db.impl.sql.execute.StringAggregator";
 	String AvgAggregator = "com.splicemachine.db.impl.sql.execute.AvgAggregator";
 	String UserDefinedAggregator = "com.splicemachine.db.impl.sql.execute.UserDefinedAggregator";
     String RowNumberFunction = "com.splicemachine.db.impl.sql.execute.RowNumberFunction";
@@ -137,17 +139,19 @@ public interface ClassName
     String WindowSumAggregator = "com.splicemachine.derby.impl.sql.execute.operations.window.function.SumAggregator";
     String WindowAvgAggregator = "com.splicemachine.derby.impl.sql.execute.operations.window.function.AvgAggregator";
     String WindowCountAggregator = "com.splicemachine.derby.impl.sql.execute.operations.window.function.CountAggregator";
+    String WindowStringAggregator = "com.splicemachine.derby.impl.sql.execute.operations.window.function.StringAggregator";
 
 	String ExecutionFactory = "com.splicemachine.db.iapi.sql.execute.ExecutionFactory";
 	String LanguageFactory ="com.splicemachine.db.iapi.sql.LanguageFactory";
 	String ParameterValueSetFactory ="com.splicemachine.db.iapi.sql.ParameterValueSetFactory";
 
-	String TriggerNewTransitionRows = "com.splicemachine.db.catalog.TriggerNewTransitionRows";
-//	String TriggerOldTransitionRows = "com.splicemachine.db.catalog.TriggerOldTransitionRows";
+	String TriggerNewTransitionRows = "com.splicemachine.derby.catalog.TriggerNewTransitionRows";
+	String TriggerOldTransitionRows = "com.splicemachine.derby.catalog.TriggerOldTransitionRows";
 	String VTICosting = "com.splicemachine.db.vti.VTICosting";
 
 	String Authorizer = "com.splicemachine.db.iapi.sql.conn.Authorizer";
     String UDTBase = "com.splicemachine.db.shared.common.udt.UDTBase";
     String SelfReferenceResultSet = "com.splicemachine.derby.impl.sql.execute.operations.SelfReferenceOperation";
 	String RecursiveUnionResultSet = "com.splicemachine.derby.impl.sql.execute.operations.RecursiveUnionOperation";
+	String RowIdUtil = "com.splicemachine.db.iapi.util.RowIdUtil";
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -28,8 +28,6 @@ import java.util.List;
 public class SIFilterPacked extends FilterBase implements HasPredicateFilter{
     public TxnFilter filterState=null;
 
-    private transient HCell wrapper = new HCell();
-
     public SIFilterPacked(){ }
 
     public SIFilterPacked(TxnFilter filterState){
@@ -45,8 +43,7 @@ public class SIFilterPacked extends FilterBase implements HasPredicateFilter{
     public Filter.ReturnCode filterKeyValue(Cell keyValue){
         try{
             initFilterStateIfNeeded();
-            wrapper.set(keyValue);
-            DataFilter.ReturnCode code=filterState.filterCell(wrapper);
+            DataFilter.ReturnCode code=filterState.filterCell(new HCell(keyValue));
             switch(code){
                 case NEXT_ROW:
                     return Filter.ReturnCode.NEXT_ROW;

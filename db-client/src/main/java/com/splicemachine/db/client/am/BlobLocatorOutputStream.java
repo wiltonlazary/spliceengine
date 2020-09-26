@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -54,7 +54,7 @@ public class BlobLocatorOutputStream extends java.io.OutputStream {
      *        to start writing; the first position is 1
      * @throws com.splicemachine.db.client.am.SqlException
      */
-    public BlobLocatorOutputStream(Connection connection, Blob blob, long pos)
+    public BlobLocatorOutputStream(ClientConnection connection, Blob blob, long pos)
         throws SqlException
     {
         if (SanityManager.DEBUG) {
@@ -134,7 +134,7 @@ public class BlobLocatorOutputStream extends java.io.OutputStream {
     /**
      * Connection used to read Blob from server.
      */
-    private final Connection connection;
+    private final ClientConnection connection;
 
     /**
      * The Blob to be accessed.

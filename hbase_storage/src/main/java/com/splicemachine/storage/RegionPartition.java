@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -15,11 +15,11 @@
 package com.splicemachine.storage;
 
 import org.apache.hadoop.hbase.exceptions.ConnectionClosingException;
-import org.spark_project.guava.base.Function;
+import splice.com.google.common.base.Function;
 import com.splicemachine.si.impl.HRegionTooBusy;
 
 import org.apache.hadoop.hbase.DroppedSnapshotException;
-import org.spark_project.guava.collect.Iterators;
+import splice.com.google.common.collect.Iterators;
 import com.splicemachine.kvpair.KVPair;
 import com.splicemachine.metrics.MetricFactory;
 import com.splicemachine.metrics.Metrics;
@@ -63,7 +63,7 @@ public class RegionPartition implements Partition{
 
     @Override
     public String getTableName(){
-        return region.getTableDesc().getTableName().getQualifierAsString();
+        return region.getTableDescriptor().getTableName().getQualifierAsString();
     }
 
     @Override
@@ -158,7 +158,7 @@ public class RegionPartition implements Partition{
     @Override
     public DataResult getFkCounter(byte[] key,DataResult previous) throws IOException{
         Get g=new Get(key);
-        g.addColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.SNAPSHOT_ISOLATION_FK_COUNTER_COLUMN_BYTES);
+        g.addColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.FK_COUNTER_COLUMN_BYTES);
 
         try{
             Result r=region.get(g);
@@ -500,7 +500,7 @@ public class RegionPartition implements Partition{
      */
     @Override
     public void flush() throws IOException{
-        HBasePlatformUtils.flush(region);
+        region.flushcache(false,false, null);
     }
 
     public HRegion unwrapDelegate(){

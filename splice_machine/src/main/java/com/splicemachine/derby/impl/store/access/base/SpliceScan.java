@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -140,7 +140,7 @@ public class SpliceScan implements ScanManager, LazyScan{
             boolean sameStartStop=isSameStartStop(startKeyValue,startSearchOperator,stopKeyValue,stopSearchOperator);
             scan=Scans.setupScan(startKeyValue,startSearchOperator,stopKeyValue,stopSearchOperator,qualifier,
                     sortOrder,scanColumnList,trans.getActiveStateTxn(),sameStartStop,
-                    ((SpliceConglomerate)this.spliceConglomerate.getConglomerate()).format_ids,
+                    currentRow,
                     ((SpliceConglomerate)this.spliceConglomerate.getConglomerate()).columnOrdering,
                     ((SpliceConglomerate)this.spliceConglomerate.getConglomerate()).columnOrdering,
                     trans.getDataValueFactory(),"1.0",false);

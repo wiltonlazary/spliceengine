@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -47,18 +47,15 @@ import com.splicemachine.db.iapi.types.DataValueFactoryImpl.Format;
 import com.splicemachine.db.iapi.util.StringUtil;
 import com.splicemachine.db.iapi.util.UTF8Util;
 import com.yahoo.sketches.theta.UpdateSketch;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.log4j.Logger;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeArrayWriter;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
-import org.apache.spark.unsafe.types.UTF8String;
 import org.joda.time.DateTime;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.text.CollationKey;
 import java.text.RuleBasedCollator;
@@ -291,11 +288,11 @@ public class SQLChar
     public  char[]  getRawDataAndZeroIt()
     {
         if ( rawData == null ) {
-        	if (value != null) {
-        		return value.toCharArray(); // Needs to be hidden
-        	}
+            if (value != null) {
+                return value.toCharArray(); // Needs to be hidden
+            }
 
-        	return null; }
+            return null; }
 
         int length = rawData.length;
         char[] retval = new char[ length ];
@@ -318,7 +315,7 @@ public class SQLChar
         if ( rawData == null ) { return; }
 
         Arrays.fill( rawData, (char) 0 );
-		isNull = evaluateNull();
+        isNull = evaluateNull();
     }
 
     /**************************************************************************
@@ -379,6 +376,16 @@ public class SQLChar
             throw StandardException.newException(
                     SQLState.LANG_FORMAT_EXCEPTION, "byte");
         }
+    }
+
+    @Override
+    public byte[] getBytes() throws StandardException {
+        if (isNull())
+            return null;
+        String string = getString();
+        if (string != null)
+            return string.getBytes(StandardCharsets.UTF_8);
+        return null;
     }
 
     /**
@@ -747,10 +754,10 @@ public class SQLChar
      */
     protected void throwStreamingIOException(IOException ioe)
             throws StandardException {
-		throw StandardException.
-			newException(SQLState.LANG_STREAMING_COLUMN_I_O_EXCEPTION,
-						 ioe, getTypeName());
-	}
+        throw StandardException.
+            newException(SQLState.LANG_STREAMING_COLUMN_I_O_EXCEPTION,
+                         ioe, getTypeName());
+    }
 
     public String getTypeName()
     {
@@ -835,6 +842,7 @@ public class SQLChar
      *
      * @exception StandardException     Thrown on error
      */
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9406")
     public char[] getCharArray() throws StandardException
     {
         if (isNull())
@@ -851,8 +859,8 @@ public class SQLChar
             // copy of the char array that the
             // String wrapper uses.
             getString();
-			char[] data = value.toCharArray();
-			setRaw(data, data.length);
+            char[] data = value.toCharArray();
+            setRaw(data, data.length);
             cKey = null;
             return rawData;
         }
@@ -875,9 +883,9 @@ public class SQLChar
     /**
      * see if the String value is null.
      * @see Storable#isNull
-	 */
-	private boolean evaluateNull()
-	{
+     */
+    private boolean evaluateNull()
+    {
         return ((value == null) && (rawLength == -1) && (stream == null) && (_clobValue == null));
     }
 
@@ -1137,7 +1145,7 @@ public class SQLChar
             rawData = new char[utfLen];
         }
         arg_passer[0]        = rawData;
-		int length = in.readDerbyUTF(arg_passer, utfLen);
+        int length = in.readDerbyUTF(arg_passer, utfLen);
         setRaw(arg_passer[0], length);
     }
     char[][] arg_passer = new char[1][];
@@ -1157,7 +1165,7 @@ public class SQLChar
             rawData = new char[charLen];
         }
         arg_passer[0] = rawData;
-		int length = in.readDerbyUTF(arg_passer, 0);
+        int length = in.readDerbyUTF(arg_passer, 0);
         setRaw(arg_passer[0], length);
     }
 
@@ -1168,7 +1176,7 @@ public class SQLChar
         value  = null;
         stream = null;
         cKey = null;
-		isNull = evaluateNull();
+        isNull = evaluateNull();
     }
 
     public void readExternal(ObjectInput in) throws IOException {
@@ -1188,7 +1196,7 @@ public class SQLChar
         else {
             readExternal(in, utflen, 0);
         }
-		isNull = evaluateNull();
+        isNull = evaluateNull();
     }
 
     /**
@@ -1243,7 +1251,7 @@ public class SQLChar
         int count = 0;
         int strlen = 0;
 
-		readingLoop:
+        readingLoop:
         while (((strlen < knownStrLen) || (knownStrLen == 0)) &&
                 ((count < utflen) || (utflen == 0)))
         {
@@ -1379,7 +1387,7 @@ public class SQLChar
         }
 
 
-		setRaw(str, strlen);
+        setRaw(str, strlen);
     }
 
     /**
@@ -1438,6 +1446,7 @@ public class SQLChar
     /**
         @exception StandardException thrown on error
      */
+    @SuppressFBWarnings(value="RV_NEGATING_RESULT_OF_COMPARETO", justification="Using compare method from dominant type")
     public int compare(DataValueDescriptor other) throws StandardException
     {
         /* Use compare method from dominant type, negating result
@@ -1539,7 +1548,7 @@ public class SQLChar
         throws SQLException, StandardException
     {
         ps.setString(position, getString());
-		isNull = evaluateNull();
+        isNull = evaluateNull();
     }
 
 
@@ -1773,7 +1782,7 @@ public class SQLChar
     public final void setValue(InputStream theStream, int valueLength)
     {
         setStream(theStream);
-		isNull = evaluateNull();
+        isNull = evaluateNull();
     }
 
     /**
@@ -1801,8 +1810,8 @@ public class SQLChar
         else {
             super.setObjectForCast(
                 theValue, instanceOfResultType, resultTypeClassName);
-			isNull = evaluateNull();
-		}
+            isNull = evaluateNull();
+        }
     }
 
     protected void setFrom(DataValueDescriptor theValue)
@@ -1881,7 +1890,7 @@ public class SQLChar
             sourceValue.getChars(0, sourceWidth, ca, 0);
             SQLChar.appendBlanks(ca, sourceWidth, desiredWidth - sourceWidth);
 
-			setRaw(rawData, desiredWidth);
+            setRaw(rawData, desiredWidth);
 
             return;
         }
@@ -2493,7 +2502,7 @@ public class SQLChar
      *              0 is returned if searchFrom does not contain this.value.
      * @exception StandardException     Thrown on error
      */
-    public NumberDataValue locate(  StringDataValue searchFrom,
+    public NumberDataValue locate(  ConcatableDataValue searchFrom,
                                     NumberDataValue start,
                                     NumberDataValue result)
                                     throws StandardException
@@ -2514,7 +2523,7 @@ public class SQLChar
             startVal = start.getInt();
         }
 
-        if( searchFrom.isNull() )
+        if( searchFrom.isNull() || this.isNull())
         {
             result.setToNull();
             return result;
@@ -2559,7 +2568,8 @@ public class SQLChar
                 NumberDataValue start,
                 NumberDataValue length,
                 ConcatableDataValue result,
-                int maxLen)
+                int maxLen,
+                boolean isFixedLength)
         throws StandardException
     {
         int startInt;
@@ -2568,7 +2578,10 @@ public class SQLChar
 
         if (result == null)
         {
-            result = getNewVarchar();
+            if (isFixedLength)
+                result = new SQLChar();
+            else
+                result = getNewVarchar();
         }
 
         stringResult = (StringDataValue) result;
@@ -2578,7 +2591,7 @@ public class SQLChar
          * We will return null, which is the only sensible thing to do.
          * (If user did not specify a length then length is not a user null.)
          */
-        if (this.isNull() || start.isNull() ||
+        if (this.isNull() || start == null || start.isNull() ||
                 (length != null && length.isNull()))
         {
             stringResult.setToNull();
@@ -2606,57 +2619,24 @@ public class SQLChar
                     SQLState.LANG_SUBSTR_START_OR_LEN_OUT_OF_RANGE);
         }
 
-        // Return null if length is non-positive
-        if (lengthInt < 0)
-        {
-            stringResult.setToNull();
-            return stringResult;
-        }
-
-        /* If startInt < 0 then we count from the right of the string */
-        if (startInt < 0)
-        {
-            // Return '' if window is to left of string.
-            if (startInt + getLength() < 0 &&
-                (startInt + getLength() + lengthInt <= 0))
-            {
-                stringResult.setValue("");
-                return stringResult;
-            }
-
-            // Convert startInt to positive to get substring from right
-            startInt += getLength();
-
-            while (startInt < 0)
-            {
-                startInt++;
-                lengthInt--;
-            }
-        }
-        else if (startInt > 0)
-        {
-            /* java substring() is 0 based */
-            startInt--;
-        }
-
-        /* Oracle docs don't say what happens if the window is to the
-         * left of the string.  Return "" if the window
-         * is to the left or right.
-         */
-        if (lengthInt == 0 ||
-            lengthInt <= 0 - startInt ||
-            startInt > getLength())
+        if (lengthInt == 0)
         {
             stringResult.setValue("");
             return stringResult;
         }
 
-        if (lengthInt >= getLength() - startInt)
-        {
+        /* java substring() is 0 based */
+        startInt--;
+
+        if (startInt >= getLength()) {
+            stringResult.setValue("");
+            if (isFixedLength)
+                stringResult.setWidth(lengthInt, -1, false);
+        } else if (lengthInt > getLength() - startInt) {
             stringResult.setValue(getString().substring(startInt));
-        }
-        else
-        {
+            if (isFixedLength)
+                stringResult.setWidth(lengthInt, -1, false);
+        } else {
             stringResult.setValue(
                 getString().substring(startInt, startInt + lengthInt));
         }
@@ -2717,35 +2697,35 @@ public class SQLChar
     }
 
     public ConcatableDataValue replace(
-		StringDataValue fromStr,
-		StringDataValue toStr,
-		ConcatableDataValue result)
-	    throws StandardException
-	{
-	    StringDataValue stringResult;
+        StringDataValue fromStr,
+        StringDataValue toStr,
+        ConcatableDataValue result)
+        throws StandardException
+    {
+        StringDataValue stringResult;
 
-	    if (result == null)
-	    {
-	        result = getNewVarchar();
-	    }
-
-	    stringResult = (StringDataValue) result;
-
-	    // The result is null if the receiver (this) is null
-	    // or either operand is null.
-
-	    if (this.isNull() ||
-	        fromStr.isNull() || fromStr.getString() == null ||
-	        toStr.isNull() || toStr.getString() == null)
+        if (result == null)
         {
-	        stringResult.setToNull();
-	        return stringResult;
+            result = getNewVarchar();
         }
 
-	    stringResult.setValue(getString().replace(fromStr.getString(), toStr.toString()));
+        stringResult = (StringDataValue) result;
 
-	    return stringResult;
-	}
+        // The result is null if the receiver (this) is null
+        // or either operand is null.
+
+        if (this.isNull() ||
+            fromStr.isNull() || fromStr.getString() == null ||
+            toStr.isNull() || toStr.getString() == null)
+        {
+            stringResult.setToNull();
+            return stringResult;
+        }
+
+        stringResult.setValue(getString().replace(fromStr.getString(), toStr.toString()));
+
+        return stringResult;
+    }
 
     /**
      * This function public for testing purposes.
@@ -3341,9 +3321,9 @@ public class SQLChar
     /** @exception StandardException        Thrown on error */
     private Locale getLocale() throws StandardException
     {
-		LocaleFinder finder = getLocaleFinder();
-		if(finder==null) return Locale.getDefault();
-		else return finder.getCurrentLocale();
+        LocaleFinder finder = getLocaleFinder();
+        if(finder==null) return Locale.getDefault();
+        else return finder.getCurrentLocale();
     }
 
     protected RuleBasedCollator getCollatorForCollation()
@@ -3397,6 +3377,7 @@ public class SQLChar
              other.localeFinder
              );
     }
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "DB-9406")
     public void    copyState
         (
          String otherValue,
@@ -3476,86 +3457,12 @@ public class SQLChar
     }
 
     public Format getFormat() {
-    	return Format.CHAR;
+        return Format.CHAR;
     }
 
     public int getSqlCharSize() { return sqlCharSize; }
     public void setSqlCharSize(int size) { sqlCharSize = size; }
 
-    /**
-     *
-     * Write into the Project Tungsten Format (UnsafeRow).
-     *
-     * @see UnsafeRowWriter#write(int, UTF8String)
-     *
-     * @param unsafeRowWriter
-     * @param ordinal
-     */
-    @Override
-    public void write(UnsafeRowWriter unsafeRowWriter, int ordinal) {
-        if (isNull())
-            unsafeRowWriter.setNullAt(ordinal);
-        else {
-            unsafeRowWriter.write(ordinal, UTF8String.fromString(value));
-        }
-    }
-
-    /**
-     *
-     * Write Array of SQLChars
-     *
-     * @param unsafeArrayWriter
-     * @param ordinal
-     * @throws StandardException
-     */
-    @Override
-    public void writeArray(UnsafeArrayWriter unsafeArrayWriter, int ordinal) throws StandardException {
-        if (isNull())
-            unsafeArrayWriter.setNull(ordinal);
-        else {
-            unsafeArrayWriter.write(ordinal, UTF8String.fromString(value));
-        }
-    }
-
-    /**
-     *
-     * Read the data from the array into this element
-     *
-     * @param unsafeArrayData
-     * @param ordinal
-     * @throws StandardException
-     */
-    @Override
-    public void read(UnsafeArrayData unsafeArrayData, int ordinal) throws StandardException {
-        if (unsafeArrayData.isNullAt(ordinal))
-            setToNull();
-        else {
-            isNull = false;
-            value = unsafeArrayData.getUTF8String(ordinal).toString();
-        }
-    }
-
-    /**
-     *
-     * Read into the Project Tungsten Format (UnsafeRow).
-     *
-     * @see UnsafeRow#getUTF8String(int)
-     *
-     * @param unsafeRow
-     * @param ordinal
-     * @throws StandardException
-     */
-    @Override
-    public void read(UnsafeRow unsafeRow, int ordinal) throws StandardException {
-        if (unsafeRow.isNullAt(ordinal))
-            setToNull();
-        else {
-            isNull = false;
-            value = unsafeRow.getUTF8String(ordinal).toString();
-        }
-    }
-
-    @Override
     public void read(Row row, int ordinal) throws StandardException {
         if (row.isNullAt(ordinal))
             setToNull();

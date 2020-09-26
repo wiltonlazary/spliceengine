@@ -25,37 +25,26 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
 package com.splicemachine.db.iapi.types;
 
-import com.splicemachine.db.iapi.services.io.ArrayInputStream;
 import com.splicemachine.db.iapi.error.StandardException;
+import com.splicemachine.db.iapi.services.io.ArrayInputStream;
+import com.splicemachine.db.iapi.services.io.Storable;
+import com.splicemachine.db.iapi.types.DataValueFactoryImpl.Format;
 import com.yahoo.sketches.theta.UpdateSketch;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeArrayWriter;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.types.StructField;
 import org.joda.time.DateTime;
-import com.splicemachine.db.iapi.services.io.Storable;
-import java.io.InputStream;
+
 import java.io.IOException;
-import java.sql.Blob;
-import java.sql.Clob;
-import java.sql.Date;
-import java.sql.ResultSet;
-import java.sql.PreparedStatement;
-import java.sql.RowId;
-import java.sql.Time;
-import java.sql.Timestamp;
-import java.sql.SQLException;
+import java.io.InputStream;
+import java.sql.*;
 import java.util.Calendar;
 import java.util.Comparator;
-import com.splicemachine.db.iapi.types.DataValueFactoryImpl.Format;
 
 /**
  * The DataValueDescriptor interface provides methods to get the data from
@@ -817,6 +806,36 @@ public interface DataValueDescriptor extends Storable, Orderable, Comparator<Dat
 						throws StandardException;
 
 	/**
+	 * The SQL language scalar MIN function.  This method is called from the language
+	 * module.
+	 *
+	 * @param list		The list of the arguments. Function will return the minimum argument or null if there is any.
+	 * @param returnValue		The return value is the correct datatype for this function.
+	 * The return value of this method is the type of the 1st parameter.
+	 *
+	 * @return	A DataValueDescriptor which will be the minimum argument or null
+	 *
+	 * @exception StandardException		Thrown on error
+	 */
+	DataValueDescriptor min(DataValueDescriptor[] list, DataValueDescriptor returnValue)
+			throws StandardException;
+
+	/**
+	 * The SQL language scalar MAX function.  This method is called from the language
+	 * module.
+	 *
+	 * @param list		The list of the arguments. Function will return the maximum argument or null if there is any.
+	 * @param returnValue		The return value is the correct datatype for this function.
+	 * The return value of this method is the type of the 1st parameter.
+	 *
+	 * @return	A DataValueDescriptor which will be the maximum argument or null
+	 *
+	 * @exception StandardException		Thrown on error
+	 */
+	DataValueDescriptor max(DataValueDescriptor[] list, DataValueDescriptor returnValue)
+			throws StandardException;
+
+	/**
 	 *
 	 * Supports setting array elements.
 	 *
@@ -1017,44 +1036,6 @@ public interface DataValueDescriptor extends Storable, Orderable, Comparator<Dat
      * @return true if lazy
      */    
     Format getFormat();
-
-	 /**
-	 *
-	 * This allows one to write a DataValueDescriptor to a
-	 * Project Tungsten format (UnsafeRow).
-	 *
-	 * @param unsafeRowWriter
-	 * @param ordinal
-	 */
-	void write(UnsafeRowWriter unsafeRowWriter, int ordinal) throws StandardException;
-
-	/**
-	 *
-	 * This allows one to write a DataValueDescriptor to a
-	 * Project Tungsten format (UnsafeRow).
-	 *
-	 * @param unsafeRowWriter
-	 * @param ordinal
-	 */
-	void writeArray(UnsafeArrayWriter unsafeArrayWriter, int ordinal) throws StandardException;
-
-	/**
-	  * This allows one to read a DataValueDescriptor from a
-	  * Project Tungsten format (UnsafeRow).
-	 *
-	 * @param unsafeRow
-	 * @param ordinal
-	 */
-	void read(UnsafeRow unsafeRow, int ordinal) throws StandardException;
-
-	/**
-	 * This allows one to read a DataValueDescriptor from a
-	 * Project Tungsten format (UnsafeRow).
-	 *
-	 * @param unsafeRow
-	 * @param ordinal
-	 */
-	void read(UnsafeArrayData unsafeArrayData, int ordinal) throws StandardException;
 
 	/**
 	 * This allows one to read a DataValueDescriptor from a

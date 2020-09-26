@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -24,12 +24,13 @@ import org.apache.hadoop.hive.ql.metadata.DefaultStorageHandler;
 import org.apache.hadoop.hive.ql.metadata.HiveStoragePredicateHandler;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
+import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.Deserializer;
-import org.apache.hadoop.hive.serde2.SerDe;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputFormat;
 import org.apache.log4j.Logger;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 import com.splicemachine.mrio.MRConstants;
 import com.splicemachine.mrio.api.core.SMSQLUtil;
@@ -50,6 +51,7 @@ public class SMStorageHandler extends DefaultStorageHandler
     private static Connection parentConn = null;
     private static Logger Log = Logger.getLogger(SMStorageHandler.class.getName());
 
+    @SuppressFBWarnings(value="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD", justification="DB-9846")
     public void configureTableJobProperties(TableDesc tableDesc,
                                             Map<String, String> jobProperties, boolean isInputJob) throws Exception {
         Properties tableProperties = tableDesc.getProperties();
@@ -79,6 +81,7 @@ public class SMStorageHandler extends DefaultStorageHandler
         jobProperties.put(MRConstants.SPLICE_JDBC_STR, connStr);
     }
 
+    @SuppressFBWarnings(value={"OBL_UNSATISFIED_OBLIGATION","ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD","ODR_OPEN_DATABASE_RESOURCE"}, justification="DB-9846")
     public String startWriteJobParentTxn(String connStr, String tableName) {
 
         if (sqlUtil == null)
@@ -108,6 +111,7 @@ public class SMStorageHandler extends DefaultStorageHandler
     }
 
     @Override
+    @SuppressFBWarnings(value="DM_EXIT", justification="DB-9846")
     public void configureInputJobProperties(
             TableDesc tableDesc,
             Map<String, String> jobProperties) {
@@ -122,6 +126,7 @@ public class SMStorageHandler extends DefaultStorageHandler
     }
 
     @Override
+    @SuppressFBWarnings(value="DM_EXIT", justification="DB-9846")
     public void configureOutputJobProperties(
             TableDesc tableDesc,
             Map<String, String> jobProperties) {
@@ -154,6 +159,7 @@ public class SMStorageHandler extends DefaultStorageHandler
     }
 
     @Override
+    @SuppressFBWarnings(value={"RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE","ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD"}, justification="DB-9846")
     public void preCreateTable(Table tbl) throws MetaException {
 
         boolean isExternal = MetaStoreUtils.isExternalTable(tbl);
@@ -210,7 +216,7 @@ public class SMStorageHandler extends DefaultStorageHandler
     }
 
     @Override
-    public Class<? extends SerDe> getSerDeClass() {
+    public Class<? extends AbstractSerDe> getSerDeClass() {
         return SMSerDe.class;
     }
 

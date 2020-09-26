@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -21,6 +21,7 @@ import com.splicemachine.db.iapi.types.RowLocation;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.ProjectRestrictOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.ScanOperation;
+import com.splicemachine.derby.impl.sql.execute.operations.SpliceBaseOperation;
 import com.splicemachine.derby.stream.iapi.OperationContext;
 import scala.Tuple2;
 
@@ -38,7 +39,7 @@ import java.io.Serializable;
  */
 public class TableScanTupleMapFunction<Op extends SpliceOperation> extends SpliceFunction<Op, Tuple2<RowLocation,ExecRow>,ExecRow> implements Serializable {
     protected boolean initialized;
-    protected ScanOperation op;
+    protected SpliceBaseOperation op;
 
     public TableScanTupleMapFunction() {
         super();
@@ -62,7 +63,7 @@ public class TableScanTupleMapFunction<Op extends SpliceOperation> extends Splic
     public ExecRow call(Tuple2<RowLocation,ExecRow> from) throws Exception {
         if (!initialized) {
             initialized = true;
-            op = (ScanOperation) getOperation();
+            op = (SpliceBaseOperation) getOperation();
         }
         if (op!=null) {
             op.setCurrentRow(from._2());

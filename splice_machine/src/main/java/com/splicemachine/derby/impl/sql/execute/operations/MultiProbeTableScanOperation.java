@@ -1,6 +1,6 @@
 
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -124,7 +124,8 @@ public class MultiProbeTableScanOperation extends TableScanOperation  {
                                         String location,
                                         int partitionByRefItem,
                                         GeneratedMethod defaultRowFunc,
-                                        int defaultValueMapItem
+                                        int defaultValueMapItem,
+                                        GeneratedMethod pastTxFunctor
                                         )
             throws StandardException
     {
@@ -165,7 +166,8 @@ public class MultiProbeTableScanOperation extends TableScanOperation  {
                 location,
                 partitionByRefItem,
                 defaultRowFunc,
-                defaultValueMapItem);
+                defaultValueMapItem,
+                pastTxFunctor);
 
         this.inlistPosition = inlistPosition;
 
@@ -220,11 +222,12 @@ public class MultiProbeTableScanOperation extends TableScanOperation  {
             throw new IllegalStateException("Operation is not open");
 
         try {
-            TxnView txn = getCurrentTransaction();
+            TxnView txn = getTransaction();
             DataValueDescriptor[] probeValues = ((MultiProbeDerbyScanInformation)scanInformation).getProbeValues();
             List<DataScan> scans = scanInformation.getScans(getCurrentTransaction(), null, activation, getKeyDecodingMap());
             DataSet<ExecRow> dataSet = dsp.getEmpty();
             OperationContext<MultiProbeTableScanOperation> operationContext = dsp.<MultiProbeTableScanOperation>createOperationContext(this);
+            dsp.prependSpliceExplainString(this.explainPlan);
             int i = 0;
             List<ScanSetBuilder<ExecRow>> datasets = new ArrayList<>(scans.size());
             for (DataScan scan : scans) {

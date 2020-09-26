@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -15,7 +15,7 @@
 package com.splicemachine.derby.stream.control;
 
 import com.splicemachine.derby.impl.sql.execute.operations.JoinOperation;
-import org.spark_project.guava.base.Function;
+import splice.com.google.common.base.Function;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
@@ -30,8 +30,8 @@ import com.splicemachine.derby.stream.output.direct.DirectPipelineWriter;
 import com.splicemachine.derby.stream.output.direct.DirectTableWriterBuilder;
 import com.splicemachine.kvpair.KVPair;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.spark_project.guava.base.Predicate;
-import org.spark_project.guava.collect.*;
+import splice.com.google.common.base.Predicate;
+import splice.com.google.common.collect.*;
 import scala.Tuple2;
 import javax.annotation.Nullable;
 import java.util.*;
@@ -44,9 +44,9 @@ import static com.splicemachine.derby.stream.control.ControlUtils.multimapFromIt
 /**
  *
  *
- * @see org.spark_project.guava.collect.Multimap
- * @see org.spark_project.guava.collect.Multimaps
- * @see org.spark_project.guava.collect.Iterables
+ * @see splice.com.google.common.collect.Multimap
+ * @see splice.com.google.common.collect.Multimaps
+ * @see splice.com.google.common.collect.Iterables
  *
  */
 public class ControlPairDataSet<K,V> implements PairDataSet<K,V> {
@@ -310,7 +310,7 @@ public class ControlPairDataSet<K,V> implements PairDataSet<K,V> {
             public DataSetWriter build() throws StandardException{
                 assert txn!=null: "Txn is null";
                 DirectPipelineWriter writer = new DirectPipelineWriter(destConglomerate,
-                        txn, token, opCtx,skipIndex);
+                        txn, token, opCtx,skipIndex, tableVersion);
 
                 return new DirectDataSetWriter<>((ControlPairDataSet<K,KVPair>)ControlPairDataSet.this,writer);
             }

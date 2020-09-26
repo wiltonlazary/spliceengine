@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -56,7 +56,7 @@ public class SpliceSequence extends AbstractSequence{
             currValue.returnLatestVersion();
             currValue.setTimeRange(0l,Long.MAX_VALUE);
             DataResult result=sysColumnTable.get(currValue,null);
-            if(result==null || result.size()<=0)
+            if(result==null || result.isEmpty())
                 return startingValue;
             DataCell dataCell=result.latestCell(SIConstants.DEFAULT_FAMILY_BYTES,autoIncrementValueQualifier);
             return Encoding.decodeLong(dataCell.valueArray(),dataCell.valueOffset(),false);

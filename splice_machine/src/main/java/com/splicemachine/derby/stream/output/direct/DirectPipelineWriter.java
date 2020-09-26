@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -46,15 +46,17 @@ public class DirectPipelineWriter implements TableWriter<KVPair>,AutoCloseable{
     private TxnView txn;
     private final OperationContext opCtx;
     private final boolean skipIndex;
+    protected String tableVersion;
 
     private RecordingCallBuffer<KVPair> writeBuffer;
 
-    public DirectPipelineWriter(long destConglomerate, TxnView txn, byte[] token, OperationContext opCtx, boolean skipIndex){
+    public DirectPipelineWriter(long destConglomerate, TxnView txn, byte[] token, OperationContext opCtx, boolean skipIndex, String tableVersion){
         this.destConglomerate=destConglomerate;
         this.txn=txn;
         this.token=token;
         this.opCtx=opCtx;
         this.skipIndex=skipIndex;
+        this.tableVersion = tableVersion;
     }
 
     @Override

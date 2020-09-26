@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -18,8 +18,9 @@ import java.io.Closeable;
 import java.io.IOException;
 
 /**
- * @author Scott Fines
- *         Date: 7/9/14
+ * Generic iterator interface that is normally used to iterate over scan results of
+ * {@link org.apache.hadoop.hbase.regionserver.RegionScanner}
+ * @param <T> Type of returned results.
  */
 public interface Source<T> extends Closeable {
 

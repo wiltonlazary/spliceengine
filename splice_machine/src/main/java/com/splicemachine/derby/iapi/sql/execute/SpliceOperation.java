@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -18,6 +18,7 @@ import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.io.FormatableBitSet;
 import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.execute.*;
+import com.splicemachine.db.iapi.types.DataTypeDescriptor;
 import com.splicemachine.db.iapi.types.RowLocation;
 import com.splicemachine.derby.impl.sql.execute.operations.TriggerHandler;
 import com.splicemachine.derby.impl.sql.execute.operations.iapi.OperationInformation;
@@ -26,6 +27,7 @@ import com.splicemachine.derby.stream.iapi.DataSet;
 import com.splicemachine.derby.stream.iapi.DataSetProcessor;
 import com.splicemachine.derby.stream.iapi.OperationContext;
 import com.splicemachine.si.api.txn.TxnView;
+import org.apache.spark.sql.types.StructType;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -396,4 +398,19 @@ public interface SpliceOperation extends StandardCloseable, NoPutResultSet, Conv
     ScanInformation<ExecRow> getScanInformation();
 
     void setRecursiveUnionReference(NoPutResultSet recursiveUnionReference);
+
+    boolean isOlapServer();
+
+    void handleSparkExplain(DataSet<ExecRow> dataSet,
+                            DataSet<ExecRow> childDataSet,
+                            DataSetProcessor dsp);
+
+    void handleSparkExplain(DataSet<ExecRow> dataSet,
+                            DataSet<ExecRow> leftDataSet,
+                            DataSet<ExecRow> rightDataSet,
+                            DataSetProcessor dsp);
+
+    DataTypeDescriptor[] getResultColumnDataTypes();
+
+    StructType schema() throws StandardException;
 }

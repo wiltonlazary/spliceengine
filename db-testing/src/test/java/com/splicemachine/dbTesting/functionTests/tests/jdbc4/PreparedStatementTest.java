@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -421,7 +421,7 @@ public class PreparedStatementTest extends BaseJDBCTestCase {
        available on the EmbeddedServer. So instead the workaround adopted
        is 
 
-       a) store a Clob or Blob in Database. 
+       a) store a Clob or Blob in Database.
        b) Retrieve it from the database.
        c) store it back using setClob or setBlob
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,8 +14,10 @@
 
 package com.splicemachine.timestamp.api;
 
-public interface Callback {
-	void error(Exception e);
+import com.splicemachine.timestamp.impl.TimestampMessage;
 
-	void complete(long timestamp);
+public interface Callback {
+    void error(Exception e);
+
+    void complete(TimestampMessage.TimestampResponse response);
 }

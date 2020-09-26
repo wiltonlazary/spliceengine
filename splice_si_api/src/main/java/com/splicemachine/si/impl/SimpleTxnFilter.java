@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -20,6 +20,7 @@ import com.splicemachine.si.api.filter.TxnFilter;
 import com.splicemachine.si.api.readresolve.ReadResolver;
 import com.splicemachine.si.api.txn.TxnSupplier;
 import com.splicemachine.si.api.txn.TxnView;
+import com.splicemachine.si.constants.SIConstants;
 import com.splicemachine.si.impl.driver.SIDriver;
 import com.splicemachine.si.impl.store.ActiveTxnCacheSupplier;
 import com.splicemachine.si.impl.store.IgnoreTxnSupplier;
@@ -48,6 +49,7 @@ public class SimpleTxnFilter implements TxnFilter{
     private Long tombstonedTxnRow = null;
     private Long antiTombstonedTxnRow = null;
     private final ByteSlice rowKey=new ByteSlice();
+    private boolean isReplica;
 
     /*
      * The most common case for databases is insert-only--that is, that there
@@ -89,13 +91,19 @@ public class SimpleTxnFilter implements TxnFilter{
                            TxnSupplier baseSupplier,
                            boolean ignoreNewerTransactions) {
         assert readResolver!=null;
-        this.transactionStore = new ActiveTxnCacheSupplier(baseSupplier, 100); //TODO -sf- configure
         this.myTxn=myTxn;
         this.readResolver=readResolver;
         this.ignoreNewerTransactions = ignoreNewerTransactions;
         SIDriver driver = SIDriver.driver();
-        if (driver != null) {
+        if (driver == null) {
+            // only happens during testing
+            this.transactionStore = new ActiveTxnCacheSupplier(baseSupplier, 128, 2048);
+        } else {
             ignoreTxnSupplier = driver.getIgnoreTxnSupplier();
+            isReplica = driver.lifecycleManager().getReplicationRole().equals(SIConstants.REPLICATION_ROLE_REPLICA);
+            int maxSize = driver.getConfiguration().getActiveTransactionMaxCacheSize();
+            int initialSize = driver.getConfiguration().getActiveTransactionInitialCacheSize();
+            this.transactionStore = new ActiveTxnCacheSupplier(baseSupplier, initialSize, maxSize);
         }
     }
 
@@ -124,13 +132,15 @@ public class SimpleTxnFilter implements TxnFilter{
     @Override
     public DataFilter.ReturnCode filterCell(DataCell keyValue) throws IOException{
         CellType type=keyValue.dataType();
-        if(type==CellType.COMMIT_TIMESTAMP){
-            ensureTransactionIsCached(keyValue);
-            return DataFilter.ReturnCode.SKIP;
-        }
-        if(type==CellType.FOREIGN_KEY_COUNTER){
-            /* Transactional reads always ignore this column, no exceptions. */
-            return DataFilter.ReturnCode.SKIP;
+        switch (type) {
+            case COMMIT_TIMESTAMP:
+                ensureTransactionIsCached(keyValue);
+                return DataFilter.ReturnCode.SKIP;
+            case FOREIGN_KEY_COUNTER:
+            case FIRST_WRITE_TOKEN:
+            case DELETE_RIGHT_AFTER_FIRST_WRITE_TOKEN:
+                /* Transactional reads always ignore these columns, no exceptions. */
+                return DataFilter.ReturnCode.SKIP;
         }
 
         readResolve(keyValue);
@@ -247,6 +257,14 @@ public class SimpleTxnFilter implements TxnFilter{
             return false;
 
         TxnView toCompare=fetchTransaction(txnId);
+
+        if (isReplica && toCompare != null) {
+            long committedTs = toCompare.getCommitTimestamp();
+            if (committedTs == -1 || myTxn.getBeginTimestamp() < committedTs){
+                return false;
+            }
+        }
+
         // If the database is restored from a backup, it may contain data that were written by a transaction which
         // is not present in SPLICE_TXN table, because SPLICE_TXN table is copied before the transaction begins.
         // However, the table written by the txn was copied

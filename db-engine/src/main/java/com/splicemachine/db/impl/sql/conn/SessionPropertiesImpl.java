@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.db.impl.sql.conn;
@@ -42,16 +42,16 @@ public class SessionPropertiesImpl implements SessionProperties {
 
     public void setProperty(PROPERTYNAME property, Object value) {
         // the legal values have been checked at SetSessionpropertyNode.init(), so no need to check again
-        String valString = (String)value;
+        String valString = String.valueOf(value);
         if (valString == null || valString.equals("null")) {
             properties[property.getId()] = null;
             return;
         }
 
         switch (property) {
-            case USESPARK:
-                boolean useSparkVal = Boolean.valueOf(valString);
-                properties[USESPARK.getId()] = useSparkVal;
+            case USEOLAP:
+                boolean useOlapVal = Boolean.valueOf(valString);
+                properties[USEOLAP.getId()] = useOlapVal;
                 break;
             case DEFAULTSELECTIVITYFACTOR:
                 double defaultSelectivityFactor = Double.parseDouble(valString);
@@ -67,6 +67,38 @@ public class SessionPropertiesImpl implements SessionProperties {
             case RECURSIVEQUERYITERATIONLIMIT:
                 int recursiveQueryIterationLimit = Integer.parseInt(valString);
                 properties[RECURSIVEQUERYITERATIONLIMIT.getId()] = recursiveQueryIterationLimit;
+                break;
+            case OLAPPARALLELPARTITIONS:
+                int parallelPartitions = Integer.parseInt(valString);
+                properties[OLAPPARALLELPARTITIONS.getId()] = parallelPartitions;
+                break;
+            case OLAPSHUFFLEPARTITIONS:
+                int shufflePartitions = Integer.parseInt(valString);
+                properties[OLAPSHUFFLEPARTITIONS.getId()] = shufflePartitions;
+                break;
+            case SNAPSHOT_TIMESTAMP:
+                long timestamp = Long.parseLong(valString);
+                properties[SNAPSHOT_TIMESTAMP.getId()] = timestamp;
+                break;
+            case DISABLE_TC_PUSHED_DOWN_INTO_VIEWS:
+                boolean disabled = Boolean.valueOf(valString);
+                properties[DISABLE_TC_PUSHED_DOWN_INTO_VIEWS.getId()] = disabled;
+                break;
+            case SPARK_RESULT_STREAMING_BATCHES:
+                int sparkResultStreamingBatches = Integer.parseInt(valString);
+                properties[SPARK_RESULT_STREAMING_BATCHES.getId()] = sparkResultStreamingBatches;
+                break;
+            case SPARK_RESULT_STREAMING_BATCH_SIZE:
+                int sparkResultStreamingBatchSize = Integer.parseInt(valString);
+                properties[SPARK_RESULT_STREAMING_BATCH_SIZE.getId()] = sparkResultStreamingBatchSize;
+                break;
+            case TABLELIMITFOREXHAUSTIVESEARCH:
+                int tableLimitForExhaustiveSearch = Integer.parseInt(valString);
+                properties[TABLELIMITFOREXHAUSTIVESEARCH.getId()] = tableLimitForExhaustiveSearch;
+                break;
+            case DISABLE_NLJ_PREDICATE_PUSH_DOWN:
+                boolean disablePushDown = Boolean.valueOf(valString);
+                properties[DISABLE_NLJ_PREDICATE_PUSH_DOWN.getId()] = disablePushDown;
                 break;
             default:
                 break;

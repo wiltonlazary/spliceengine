@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -168,7 +168,7 @@ public class TimestampTypeCompiler extends BaseTypeCompiler
                 throw StandardException.newException(SQLState.LANG_DATE_TIME_ADDITION_PROHIBITED,
                                                      TypeId.getBuiltInTypeId(Types.TIMESTAMP).toParsableString(leftType));
             }
-            returnType = DataTypeDescriptor.INTEGER_NOT_NULL;
+            returnType = DataTypeDescriptor.INTEGER;
         }
         return returnType;
     }

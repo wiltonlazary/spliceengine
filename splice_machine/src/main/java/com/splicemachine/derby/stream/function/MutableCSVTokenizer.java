@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -35,8 +35,13 @@ public class MutableCSVTokenizer extends QuoteTrackingTokenizer {
     private String line;
     private final List<String> columns =new ArrayList<>();
     private final BooleanList quotedColumns = new BooleanList();
-    public MutableCSVTokenizer(Reader reader, CsvPreference preferences) {
-        super(reader, preferences);
+    public MutableCSVTokenizer(Reader reader, CsvPreference preferences, boolean oneLineRecord) {
+        super(reader, preferences, oneLineRecord);
+    }
+
+    public MutableCSVTokenizer(Reader reader, CsvPreference preferences, boolean oneLineRecord, long scanThreshold,
+                               List<Integer> valueSizeHint) {
+        super(reader, preferences, oneLineRecord, scanThreshold, valueSizeHint);
     }
 
     /**
@@ -103,5 +108,10 @@ public class MutableCSVTokenizer extends QuoteTrackingTokenizer {
         return columns;
     }
 
+    @Override
+    public void clearRow() {
+        super.clearRow();
+        setLine(null);
+    }
 }
 

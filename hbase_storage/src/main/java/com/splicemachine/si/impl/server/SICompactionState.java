@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,7 +14,8 @@
 
 package com.splicemachine.si.impl.server;
 
-import org.spark_project.guava.util.concurrent.Futures;
+import com.splicemachine.hbase.TransactionsWatcher;
+import splice.com.google.common.util.concurrent.Futures;
 import com.splicemachine.hbase.CellUtils;
 import com.splicemachine.primitives.Bytes;
 import com.splicemachine.si.api.txn.TransactionMissing;
@@ -31,11 +32,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.SortedSet;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -53,11 +50,9 @@ public class SICompactionState {
     private final CompactionContext context;
     private final ExecutorService executorService;
     private ConcurrentHashMap<Long, Future<TxnView>> futuresCache;
-    private SortedSet<Cell> dataToReturn;
 
     public SICompactionState(TxnSupplier transactionStore, int activeTransactionCacheSize, CompactionContext context, ExecutorService executorService) {
-        this.transactionStore = new ActiveTxnCacheSupplier(transactionStore,activeTransactionCacheSize,true);
-        this.dataToReturn  =new TreeSet<>(KeyValue.COMPARATOR);
+        this.transactionStore = new ActiveTxnCacheSupplier(transactionStore,activeTransactionCacheSize,activeTransactionCacheSize,true);
         this.context = context;
         this.futuresCache = new ConcurrentHashMap<>(1<<19, 0.75f, 64);
         this.executorService = executorService;
@@ -66,12 +61,13 @@ public class SICompactionState {
     /**
      * Given a list of key-values, populate the results list with possibly mutated values.
      *
-     * @param rawList - the input of key values to process
-     * @param results - the output key values
+     * @param rawList the input of key values to process
+     * @param results the output key values
+     * @return the size of all cells in the `row` parameter.
      */
-    public void mutate(List<Cell> rawList, List<TxnView> txns, List<Cell> results, boolean purgeDeletedRows) throws IOException {
-        SICompactionStateMutate impl = new SICompactionStateMutate(purgeDeletedRows);
-        impl.mutate(rawList, txns, results);
+    public long mutate(List<Cell> rawList, List<TxnView> txns, List<Cell> results, PurgeConfig purgeConfig) throws IOException {
+        SICompactionStateMutate impl = new SICompactionStateMutate(purgeConfig);
+        return impl.mutate(rawList, txns, results);
     }
 
     private void ensureTransactionCached(long timestamp,Cell element) {

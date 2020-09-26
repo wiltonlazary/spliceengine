@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -35,22 +35,25 @@ import com.splicemachine.db.impl.sql.execute.BaseActivation;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperationContext;
 import com.splicemachine.derby.impl.load.ImportUtils;
+import com.splicemachine.derby.impl.sql.execute.TriggerRowHolderImpl;
 import com.splicemachine.derby.impl.sql.execute.actions.InsertConstantOperation;
 import com.splicemachine.derby.impl.sql.execute.sequence.SequenceKey;
 import com.splicemachine.derby.impl.sql.execute.sequence.SpliceSequence;
 import com.splicemachine.derby.stream.iapi.DataSet;
 import com.splicemachine.derby.stream.iapi.DataSetProcessor;
-import com.splicemachine.derby.stream.iapi.OperationContext;
 import com.splicemachine.derby.stream.output.DataSetWriter;
 import com.splicemachine.derby.stream.output.InsertDataSetWriterBuilder;
 import com.splicemachine.derby.stream.output.WriteReadUtils;
 import com.splicemachine.derby.stream.output.insert.InsertPipelineWriter;
 import com.splicemachine.pipeline.ErrorState;
 import com.splicemachine.pipeline.Exceptions;
+import com.splicemachine.primitives.Bytes;
 import com.splicemachine.si.api.server.ClusterHealth;
+import com.splicemachine.si.api.txn.Txn;
 import com.splicemachine.si.api.txn.TxnView;
 import com.splicemachine.si.impl.driver.SIDriver;
 import com.splicemachine.storage.Partition;
+import com.splicemachine.system.CsvOptions;
 import com.splicemachine.utils.IntArrays;
 import com.splicemachine.utils.Pair;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -59,10 +62,7 @@ import org.apache.log4j.Logger;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 
 
 /**
@@ -100,6 +100,7 @@ public class InsertOperation extends DMLWriteOperation implements HasIncrement{
     protected boolean skipSampling;
     protected String indexName;
     protected double sampleFraction;
+
     @Override
     public String getName(){
         return NAME;
@@ -233,12 +234,12 @@ public class InsertOperation extends DMLWriteOperation implements HasIncrement{
         long nextIdentityColumnValue;
         assert activation!=null && spliceSequences!=null:"activation or sequences are null";
         nextIdentityColumnValue=((BaseActivation)activation).ignoreSequence()?-1:spliceSequences[columnPosition-1].getNext();
-        this.getActivation().getLanguageConnectionContext().setIdentityValue(nextIncrement);
         if(rowTemplate==null)
             rowTemplate=getExecRowDefinition();
         DataValueDescriptor dvd=rowTemplate.cloneColumn(columnPosition);
         dvd.setValue(nextIdentityColumnValue);
         synchronized (this) {
+            this.getActivation().getLanguageConnectionContext().setIdentityValue(nextIncrement);
             if (increment > 0) {
                 if (nextIdentityColumnValue > nextIncrement)
                     nextIncrement = nextIdentityColumnValue;
@@ -374,17 +375,28 @@ public class InsertOperation extends DMLWriteOperation implements HasIncrement{
         
         ExecRow execRow=getExecRowDefinition();
         int[] execRowTypeFormatIds=WriteReadUtils.getExecRowTypeFormatIds(execRow);
+
+        operationContext.pushScope();
         if(insertMode.equals(InsertNode.InsertMode.UPSERT) && pkCols==null)
             throw ErrorState.UPSERT_NO_PRIMARY_KEYS.newException(""+heapConglom+"");
-        TxnView txn=getCurrentTransaction();
+
+        if (dsp.isSparkExplain()) {
+            dsp.prependSpliceExplainString(this.explainPlan);
+            return set;
+        }
+        TxnView txn=getTransactionForWrite(dsp);
 
         ClusterHealth.ClusterHealthWatcher healthWatcher = null;
         if (skipWAL) {
             healthWatcher = SIDriver.driver().clusterHealth().registerWatcher();
         }
 
-        operationContext.pushScope();
         try{
+            // initTriggerRowHolders can't be called in the TriggerHandler constructor
+            // because it has to be called after getCurrentTransaction() elevates the
+            // transaction to writable.
+            if (triggerHandler != null)
+                triggerHandler.initTriggerRowHolders(isOlapServer(), txn, SpliceClient.token, 0);
             if(statusDirectory!=null)
                 dsp.setSchedulerPool("import");
             if (storedAs!=null) {
@@ -397,9 +409,9 @@ public class InsertOperation extends DMLWriteOperation implements HasIncrement{
                 else if (storedAs.toLowerCase().equals("o"))
                     return set.writeORCFile(IntArrays.count(execRowTypeFormatIds.length),partitionBy,location, compression, operationContext);
                 else if (storedAs.toLowerCase().equals("t"))
-                    return set.writeTextFile(this,location,delimited,lines,IntArrays.count(execRowTypeFormatIds.length), operationContext);
+                    return set.writeTextFile(location, new CsvOptions(delimited, escaped, lines), operationContext);
                 else
-                    new RuntimeException("storedAs type not supported -> " + storedAs);
+                    throw new RuntimeException("storedAs type not supported -> " + storedAs);
             }
             InsertDataSetWriterBuilder writerBuilder = null;
             if (bulkImportDirectory!=null && bulkImportDirectory.compareToIgnoreCase("NULL") !=0) {
@@ -418,7 +430,6 @@ public class InsertOperation extends DMLWriteOperation implements HasIncrement{
 
             DataSetWriter writer = writerBuilder
                     .autoIncrementRowLocationArray(autoIncrementRowLocationArray)
-                    .execRowDefinition(getExecRowDefinition())
                     .execRowTypeFormatIds(execRowTypeFormatIds)
                     .sequences(spliceSequences)
                     .isUpsert(insertMode.equals(InsertNode.InsertMode.UPSERT))
@@ -427,16 +438,24 @@ public class InsertOperation extends DMLWriteOperation implements HasIncrement{
                     .tableVersion(tableVersion)
                     .updateCounts(expectedUpdateCounts)
                     .destConglomerate(heapConglom)
+                    .tempConglomerateID(getTriggerConglomID())
                     .operationContext(operationContext)
                     .txn(txn)
                     .token(SpliceClient.token)
+                    .execRowDefinition(getExecRowDefinition())
                     .build();
             return writer.write();
 
-        }finally{
+        }
+        catch (Exception e) {
+            exceptionHit = true;
+            throw Exceptions.parseException(e);
+        }
+        finally{
             if (skipWAL) {
                 flushAndCheckErrors(healthWatcher);
             }
+            finalizeNestedTransaction();
             operationContext.popScope();
         }
     }

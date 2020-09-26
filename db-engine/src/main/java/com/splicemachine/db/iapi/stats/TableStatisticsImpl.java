@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.db.iapi.stats;
@@ -300,7 +300,16 @@ public class TableStatisticsImpl implements TableStatistics {
         if (totalPartition > 0)
             return totalPartition;
         if (isMergedStats)
-            totalPartition = (partitionStatistics.isEmpty()) ? 0:(int)(partitionStatistics.get(0).getPartitionStatistics().getNumberOfPartitions());
+            if (partitionStatistics.isEmpty()) {
+                totalPartition = 0;
+            }else {
+                if (partitionStatistics.get(0).getPartitionStatistics() != null) {
+                    totalPartition = (int) (partitionStatistics.get(0).getPartitionStatistics().getNumberOfPartitions());
+                }
+                else {
+                    totalPartition = 0;
+                }
+            }
         else
             totalPartition = partitionStatistics.size();
         return totalPartition;

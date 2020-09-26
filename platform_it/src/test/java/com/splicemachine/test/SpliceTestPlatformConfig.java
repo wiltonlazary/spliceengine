@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,20 +14,31 @@
 
 package com.splicemachine.test;
 
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableList;
-import com.splicemachine.access.HConfiguration;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static com.google.common.collect.Lists.transform;
+
+import java.util.List;
+
+import com.amazonaws.SdkClientException;
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.auth.EnvironmentVariableCredentialsProvider;
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.splicemachine.access.configuration.OlapConfigurations;
-import com.splicemachine.access.configuration.SQLConfiguration;
 import com.splicemachine.compactions.SpliceDefaultCompactionPolicy;
 import com.splicemachine.compactions.SpliceDefaultCompactor;
 import com.splicemachine.derby.hbase.SpliceIndexEndpoint;
 import com.splicemachine.derby.hbase.SpliceIndexObserver;
+import org.apache.commons.collections.ListUtils;
+import org.apache.hadoop.hbase.security.access.AccessController;
+import org.apache.hadoop.hbase.security.token.TokenProvider;
+import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableList;
 import com.splicemachine.hbase.*;
 import com.splicemachine.si.data.hbase.coprocessor.*;
 import com.splicemachine.utils.BlockingProbeEndpoint;
-import org.apache.commons.collections.ListUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hbase.HConstants;
@@ -37,27 +48,18 @@ import org.apache.hadoop.hbase.regionserver.DefaultStoreEngine;
 import org.apache.hadoop.hbase.regionserver.RpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionPolicy;
 import org.apache.hadoop.hbase.regionserver.compactions.Compactor;
-import org.apache.hadoop.hbase.security.access.AccessController;
-import org.apache.hadoop.hbase.security.token.TokenProvider;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.List;
 import java.util.stream.Collectors;
-
-import static com.google.common.collect.Lists.transform;
-import static java.util.concurrent.TimeUnit.MINUTES;
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.splicemachine.access.HConfiguration;
 import com.splicemachine.access.configuration.SQLConfiguration;
-import com.splicemachine.derby.hbase.SpliceIndexObserver;
 import com.splicemachine.si.data.hbase.coprocessor.SIObserver;
 import com.splicemachine.si.data.hbase.coprocessor.TxnLifecycleEndpoint;
-import com.splicemachine.utils.BlockingProbeEndpoint;
-import com.splicemachine.hbase.SpliceReplicationService;
+import com.splicemachine.si.data.hbase.coprocessor.SpliceRSRpcServices;
 /**
  * HBase configuration for SpliceTestPlatform and SpliceTestClusterParticipant.
  */
@@ -66,7 +68,6 @@ class SpliceTestPlatformConfig {
     private static final List<Class<?>> REGION_SERVER_COPROCESSORS = ImmutableList.<Class<?>>of(
             RegionServerLifecycleObserver.class,
             BlockingProbeEndpoint.class,
-            SpliceReplicationService.class,
             SpliceRSRpcServices.class
     );
 
@@ -99,6 +100,33 @@ class SpliceTestPlatformConfig {
             SpliceHFileCleaner.class,
             TimeToLiveHFileCleaner.class);
 
+    public static void configureS3(Configuration config)
+    {
+        // AWS Credentials for test
+        splice.aws.com.amazonaws.auth.AWSCredentialsProvider credentialproviders[] = {
+                new splice.aws.com.amazonaws.auth.EnvironmentVariableCredentialsProvider(), // first try env AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+                new splice.aws.com.amazonaws.auth.profile.ProfileCredentialsProvider()              // second try from $HOME/.aws/credentials (aws cli store)
+        };
+        for( splice.aws.com.amazonaws.auth.AWSCredentialsProvider provider : credentialproviders )
+        {
+            try {
+                // can throw SdkClientException if env is not set or can't parse .aws/credentials
+                // or IllegalArgumentException if .aws/credentials is not there
+                splice.aws.com.amazonaws.auth.AWSCredentials cred = provider.getCredentials();
+                config.set("presto.s3.access-key", cred.getAWSAccessKeyId());
+                config.set("presto.s3.secret-key", cred.getAWSSecretKey());
+                config.set("fs.s3a.access.key", cred.getAWSAccessKeyId());
+                config.set("fs.s3a.secret.key", cred.getAWSSecretKey());
+                config.set("fs.s3a.awsAccessKeyId", cred.getAWSAccessKeyId());
+                config.set("fs.s3a.awsSecretAccessKey", cred.getAWSSecretKey());
+                break;
+            } catch( Exception e )
+            {
+                continue;
+            }
+        }
+        config.set("fs.s3a.impl", com.splicemachine.fs.s3.PrestoS3FileSystem.class.getCanonicalName() );
+    }
     /*
      * Create an HBase config object suitable for use in our test platform.
      */
@@ -215,11 +243,12 @@ class SpliceTestPlatformConfig {
         //
         // Threads, timeouts
         //
-        config.setClass("hbase.region.server.rpc.scheduler.factory.class", SpliceRpcSchedulerFactory.class, RpcSchedulerFactory.class);
+        //config.setClass("hbase.region.server.rpc.scheduler.factory.class", SpliceRpcSchedulerFactory.class, RpcSchedulerFactory.class);
         config.setLong("hbase.rpc.timeout", MINUTES.toMillis(5));
         config.setInt("hbase.client.max.perserver.tasks",50);
         config.setInt("hbase.client.ipc.pool.size",10);
-        config.setInt("hbase.rowlock.wait.duration",0);
+        config.setInt("hbase.client.retries.number", 35);
+        config.setInt("hbase.rowlock.wait.duration",10);
 
         config.setLong("hbase.client.scanner.timeout.period", MINUTES.toMillis(2)); // hbase.regionserver.lease.period is deprecated
         config.setLong("hbase.client.operation.timeout", MINUTES.toMillis(2));
@@ -228,12 +257,16 @@ class SpliceTestPlatformConfig {
         config.setInt("hbase.hconnection.threads.max", 128);
         config.setInt("hbase.hconnection.threads.core", 8);
         config.setLong("hbase.hconnection.threads.keepalivetime", 300);
-        config.setLong("hbase.regionserver.msginterval", 1000);
+        config.setLong("hbase.regionserver.msginterval", 15000);
         config.setLong("hbase.regionserver.optionalcacheflushinterval", 0); // disable automatic flush, meaningless since our timestamps are arbitrary
         config.setLong("hbase.master.event.waiting.time", 20);
         config.setLong("hbase.master.lease.thread.wakefrequency", SECONDS.toMillis(3));
 //        config.setBoolean("hbase.master.loadbalance.bytable",true);
-        config.setInt("hbase.balancer.period",5000);
+        config.setInt("hbase.hfile.compaction.discharger.interval", 20*1000);
+        // The hbase balancer uses a lot of memory and network resources.
+        // Effectively disable this on standalone to avoid OOM and network hiccups.
+        config.setInt("hbase.balancer.period",300000000); // 5000 minutes
+        config.setInt("hbase.balancer.statusPeriod",300000000); // 5000 minutes
 
         config.setLong("hbase.server.thread.wakefrequency", SECONDS.toMillis(1));
         config.setLong("hbase.client.pause", 100);
@@ -269,26 +302,24 @@ class SpliceTestPlatformConfig {
         config.setBoolean(CacheConfig.CACHE_BLOOM_BLOCKS_ON_WRITE_KEY, true); // hfile.block.bloom.cacheonwrite
         config.set("hbase.master.hfilecleaner.plugins", getHFileCleanerAsString());
         config.setInt("hbase.mapreduce.bulkload.max.hfiles.perRegion.perFamily", 1024);
+        config.set("hbase.procedure.store.wal.use.hsync", "false");
+        config.set("hbase.unsafe.stream.capability.enforce", "false");
         //
         // Misc
         //
+        config.set("hbase.regionserver.enable.table.latencies", "false"); // disable table latencies, memory intensive
         config.set("hbase.cluster.distributed", "true");  // don't start zookeeper for us
         config.set("hbase.master.distributed.log.splitting", "false"); // TODO: explain why we are setting this
 
-        //
-        // AWS Credentials for test...
-        //
+        configureS3( config );
 
-        //config.set("presto.s3.access-key","");
-        //config.set("presto.s3.secret-key","");
-        config.set("fs.s3a.impl",com.splicemachine.fs.s3.PrestoS3FileSystem.class.getCanonicalName());
         config.set("hive.exec.orc.split.strategy","BI");
         config.setInt("io.file.buffer.size",65536);
 
         //
         // Splice
         //
-
+        
         config.setLong("splice.ddl.drainingWait.maximum", SECONDS.toMillis(15)); // wait 15 seconds before bailing on bad ddl statements
         config.setLong("splice.ddl.maxWaitSeconds",120000);
         config.setInt("splice.olap_server.memory", 4096);
@@ -297,6 +328,9 @@ class SpliceTestPlatformConfig {
         config.setBoolean("splice.authentication.impersonation.enabled", true);
         config.set("splice.authentication.ldap.mapGroupAttr", "jy=splice,dgf=splice");
         config.setInt("splice.txn.completedTxns.cacheSize", 4096);
+        //config.set("splice.replication.monitor.quorum", "srv091:2181");
+        //config.set("splice.replication.healthcheck.script", "/Users/jyuan/replication/scripts/healthCheck.sh");
+
         // below two parameters are needed to test ranger authorization on standalone system
         // config.set("splice.authorization.scheme", "RANGER");
         // config.set("splice.metadataRestrictionEnabled", "RANGER");
@@ -306,6 +340,11 @@ class SpliceTestPlatformConfig {
         // future of splice OLAP query execution.
         config.setLong("splice.optimizer.broadcastDatasetCostThreshold", -1);
 
+        // Fix SessionPropertyIT.TestTableLimitForExhaustiveSearchSessionProperty
+        // by setting a min query planner timeout of 5 ms.  Otherwise, with small
+        // tables, we may timeout too quickly when the system is a little busy
+        // and get an unexpected join plan.
+        config.setLong("splice.optimizer.minPlanTimeout", 5L);
 
         if (derbyPort > SQLConfiguration.DEFAULT_NETWORK_BIND_PORT) {
             // we are a member, let's ignore transactions for testing
@@ -315,6 +354,16 @@ class SpliceTestPlatformConfig {
         // Snapshots
         //
         config.setBoolean("hbase.snapshot.enabled", true);
+
+
+        //
+        // Replication
+        //
+        config.setBoolean("replication.source.eof.autorecovery", true);
+        //config.set("hbase.replication.source.service", "com.splicemachine.replication.SpliceReplication");
+        //config.set("hbase.replication.sink.service", "com.splicemachine.replication.SpliceReplication");
+        config.setBoolean("replication.source.eof.autorecovery", true);
+        config.setBoolean("splice.replication.enabled", true);
 
         HConfiguration.reloadConfiguration(config);
         return HConfiguration.unwrapDelegate();

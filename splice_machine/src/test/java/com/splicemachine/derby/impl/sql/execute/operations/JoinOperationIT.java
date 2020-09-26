@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -23,7 +23,7 @@ import com.splicemachine.test_tools.TableCreator;
 import org.junit.*;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 import java.sql.ResultSet;
 import java.util.Collection;
@@ -99,6 +99,16 @@ public class JoinOperationIT extends SpliceUnitTest {
                 .withCreate("create table b1 (i int)")
                 .withInsert("insert into b1 values(?)")
                 .withRows(rows(row(3), row(4), row(1), row(2))).create();
+
+        new TableCreator(connection)
+                .withCreate("CREATE TABLE SUB1(i varchar(100), j varchar(100))")
+                .create();
+        new TableCreator(connection)
+                .withCreate("CREATE TABLE SUB2(i varchar(100), j varchar(100))")
+                .create();
+        new TableCreator(connection)
+                .withCreate("CREATE TABLE SUB3(i varchar(100), j varchar(100))")
+                .create();
     }
 
     @Test
@@ -215,5 +225,33 @@ public class JoinOperationIT extends SpliceUnitTest {
                 "select * from foo2 where col1 in (select col2 from foo --splice-properties joinStrategy=%s, useSpark=%s\n)", this.joinStrategy, this.useSparkString));
         assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
 
+    }
+
+    @Test
+    public void testJoinSubstringBinary() throws Exception {
+        String sql = String.format("SELECT DISTINCT\n" +
+                "SUB1.i\n" +
+                "FROM SUB1 --splice-properties useSpark=%s, joinStrategy=%s\n" +
+                "INNER JOIN SUB2\n" +
+                "ON SUB2.i = SUBSTR(SUB1.i, 6)\n" +
+                "LEFT JOIN SUB3\n" +
+                "ON SUB3.i = SUBSTR(SUB3.i, 6)", this.useSparkString, this.joinStrategy);
+
+        String expected = "";
+        ResultSet rs = methodWatcher.executeQuery(sql);
+        assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+    }
+
+    @Test
+    public void testSemiJoin() throws Exception {
+        String sql = String.format("select * from  --splice-properties joinOrder=fixed\n" +
+                "FOO join (select * from FOO2) dt --splice-properties useSpark=%s, joinStrategy=%s\n" +
+                "on FOO.col1=dt.col1 where dt.col1=1", this.useSparkString, this.joinStrategy);
+
+        String expected = "COL1 |COL2 |COL1 |COL2 |\n" +
+                "------------------------\n" +
+                "  1  |  1  |  1  |  5  |";
+        ResultSet rs = methodWatcher.executeQuery(sql);
+        assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
     }
 }

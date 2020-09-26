@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -24,10 +24,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.log4j.Logger;
-import org.spark_project.guava.util.concurrent.ListenableFuture;
-import org.spark_project.guava.util.concurrent.ListeningExecutorService;
-import org.spark_project.guava.util.concurrent.MoreExecutors;
-import org.spark_project.guava.util.concurrent.ThreadFactoryBuilder;
+import splice.com.google.common.util.concurrent.ListenableFuture;
+import splice.com.google.common.util.concurrent.ListeningExecutorService;
+import splice.com.google.common.util.concurrent.MoreExecutors;
+import splice.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import com.splicemachine.access.api.SConfiguration;
 import com.splicemachine.access.api.ServerStoppedException;

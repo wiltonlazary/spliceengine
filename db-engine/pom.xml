@@ -26,14 +26,14 @@
   ~
   ~ Splice Machine, Inc. has modified the Apache Derby code in this file.
   ~
-  ~ All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+  ~ All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
   ~ and are licensed to you under the GNU Affero General Public License.
   -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <artifactId>spliceengine-parent</artifactId>
         <groupId>com.splicemachine</groupId>
-        <version>3.1.0.1943-SNAPSHOT</version>
+        <version>3.1.0.1977-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
     <artifactId>db-engine</artifactId>
@@ -54,12 +54,12 @@
         </dependency>
         <dependency>
             <groupId>com.splicemachine</groupId>
-            <artifactId>db-shared</artifactId>
-            <version>${project.version}</version>
+            <artifactId>utilities</artifactId>
         </dependency>
         <dependency>
             <groupId>com.splicemachine</groupId>
-            <artifactId>utilities</artifactId>
+            <artifactId>db-shared</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>joda-time</groupId>
@@ -89,16 +89,8 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <!-- org.spark_project.guava -->
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-network-common_${scala.binary.version}</artifactId>
-            <version>${spark.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
-            <version>${spark.version}</version>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>annotations</artifactId>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -106,6 +98,10 @@
             <artifactId>db-tools-testing</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>annotations</artifactId>
         </dependency>
     </dependencies>
     <build>

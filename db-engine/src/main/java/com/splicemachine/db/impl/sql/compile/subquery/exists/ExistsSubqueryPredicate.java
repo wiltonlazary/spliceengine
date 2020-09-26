@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -41,7 +41,7 @@ import java.util.List;
 /**
  * This predicate determines if we attempt to flatten a given exists SubqueryNode or not.
  */
-class ExistsSubqueryPredicate implements org.spark_project.guava.base.Predicate<SubqueryNode> {
+class ExistsSubqueryPredicate implements splice.com.google.common.base.Predicate<SubqueryNode> {
 
     private static Logger LOG = Logger.getLogger(ExistsSubqueryPredicate.class);
 

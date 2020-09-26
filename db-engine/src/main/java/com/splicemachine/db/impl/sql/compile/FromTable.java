@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -45,6 +45,7 @@ import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.iapi.types.SQLChar;
 import com.splicemachine.db.iapi.util.JBitSet;
 import com.splicemachine.db.iapi.util.StringUtil;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 import java.util.*;
 
@@ -63,8 +64,8 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
     int tableNumber;
     /* (Query block) level is 0-based. */
     /* RESOLVE - View resolution will have to update the level within
-	 * the view tree.
-	 */
+     * the view tree.
+     */
     int level;
     // hashKeyColumns are 0-based column #s within the row returned by the store for hash scans
     int[] hashKeyColumns;
@@ -78,7 +79,7 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
 
     protected String userSpecifiedJoinStrategy;
 
-    protected CompilerContext.DataSetProcessorType dataSetProcessorType = CompilerContext.DataSetProcessorType.DEFAULT_CONTROL;
+    protected DataSetProcessorType dataSetProcessorType = DataSetProcessorType.DEFAULT_CONTROL;
 
     protected CostEstimate bestCostEstimate;
 
@@ -123,6 +124,14 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
      * SSQ join related variables
      */
     public boolean fromSSQ;
+
+    /* variable tracking the info of a FromTable node flattened from a HalfJoinNode.
+     * if outerJoinLevel = 0, the table is free to join with other tables in the FromList, if outerJoinLevel > 0, it can only
+     * join with its left table indicated in the dependencyMap */
+    protected int outerJoinLevel;
+    PredicateList postJoinPredicates;
+
+    protected boolean hasJoinPredicatePushedDownFromOuter = false;
     /**
      * Initializer for a table in a FROM list.
      *
@@ -135,6 +144,7 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         this.tableProperties=(Properties)tableProperties;
         tableNumber=-1;
         bestPlanMap=null;
+        outerJoinLevel = 0;
     }
 
     /**
@@ -144,9 +154,9 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         return correlationName;
     }
 
-	/*
-	 *  Optimizable interface
-	 */
+    /*
+     *  Optimizable interface
+     */
 
     @Override
     public CostEstimate optimizeIt(Optimizer optimizer,
@@ -167,21 +177,22 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
 
         CostEstimate singleScanCost=estimateCost(predList, null, outerCost, optimizer, rowOrdering);
 
-		/* Make sure there is a cost estimate to set */
+        /* Make sure there is a cost estimate to set */
         getCostEstimate(optimizer);
 
         setCostEstimate(singleScanCost);
 
-		/* Optimize any subqueries that need to get optimized and
-		 * are not optimized any where else.  (Like those
-		 * in a RowResultSetNode.)
-		 */
-        optimizeSubqueries(getDataDictionary(),costEstimate.rowCount());
+        /* Optimize any subqueries that need to get optimized and
+         * are not optimized any where else.  (Like those
+         * in a RowResultSetNode.)
+         */
+        optimizeSubqueries(getDataDictionary(),costEstimate.rowCount(), optimizer.isForSpark());
 
-		/*
-		** Get the cost of this result set in the context of the whole plan.
-		*/
-        getCurrentAccessPath().getJoinStrategy().estimateCost(this,predList,null,outerCost,optimizer,getCostEstimate());
+        /*
+        ** Get the cost of this result set in the context of the whole plan.
+        */
+        getCurrentAccessPath().getJoinStrategy().estimateCost(
+                this, predList,null, outerCost, optimizer, getCostEstimate());
 
         optimizer.considerCost(this,predList,getCostEstimate(),outerCost);
 
@@ -196,16 +207,16 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         boolean found=false;
         AccessPath ap=getCurrentAccessPath();
 
-		/*
-		** Most Optimizables have no ordering, so tell the rowOrdering that
-		** this Optimizable is unordered, if appropriate.
-		*/
+        /*
+        ** Most Optimizables have no ordering, so tell the rowOrdering that
+        ** this Optimizable is unordered, if appropriate.
+        */
         if(userSpecifiedJoinStrategy!=null){
-			/*
-			** User specified a join strategy, so we should look at only one
-			** strategy.  If there is a current strategy, we have already
-			** looked at the strategy, so go back to null.
-			*/
+            /*
+            ** User specified a join strategy, so we should look at only one
+            ** strategy.  If there is a current strategy, we have already
+            ** looked at the strategy, so go back to null.
+            */
             if(ap.getJoinStrategy()!=null){
                 ap.setJoinStrategy(null);
 
@@ -224,7 +235,7 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
             }
         }else if(joinStrategyNumber<numStrat){
             ap.setHintedJoinStrategy(false);
-			/* Step through the join strategies. */
+            /* Step through the join strategies. */
             ap.setJoinStrategy(optimizer.getJoinStrategy(joinStrategyNumber));
 
             joinStrategyNumber++;
@@ -236,11 +247,9 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         }
         ap.setMissingHashKeyOK(false);
 
-		/*
-		** Tell the RowOrdering about columns that are equal to constant
-		** expressions.
-		*/
-        tellRowOrderingAboutConstantColumns(rowOrdering,predList);
+        // Tell the RowOrdering about columns that are equal to constant
+        // expressions.
+        tellRowOrderingAboutConstantColumns(rowOrdering, predList);
 
         return found;
     }
@@ -336,12 +345,23 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
 
     @Override
     public void pullOptPredicates(OptimizablePredicateList optimizablePredicates) throws StandardException{
-		/* For most types of Optimizable, do nothing */
+        /* For most types of Optimizable, do nothing */
+    }
+
+    @Override
+    public void pullOptPostJoinPredicates(OptimizablePredicateList optimizablePredicates) throws StandardException{
+		if (postJoinPredicates != null) {
+            for(int i=postJoinPredicates.size()-1;i>=0;i--){
+                OptimizablePredicate optPred= postJoinPredicates.getOptPredicate(i);
+                optimizablePredicates.addOptPredicate(optPred);
+                postJoinPredicates.removeOptPredicate(i);
+            }
+        }
     }
 
     @Override
     public Optimizable modifyAccessPath(JBitSet outerTables) throws StandardException{
-		/* For most types of Optimizable, do nothing */
+        /* For most types of Optimizable, do nothing */
         return this;
     }
 
@@ -365,13 +385,13 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         if(tableProperties==null){
             return;
         }
-		/* Check here for:
-		 *		invalid properties key
-		 *		invalid joinStrategy
-		 *		invalid value for hashInitialCapacity
-		 *		invalid value for hashLoadFactor
-		 *		invalid value for hashMaxCapacity
-		 */
+        /* Check here for:
+         *        invalid properties key
+         *        invalid joinStrategy
+         *        invalid value for hashInitialCapacity
+         *        invalid value for hashLoadFactor
+         *        invalid value for hashMaxCapacity
+         */
         Enumeration e=tableProperties.keys();
         while(e.hasMoreElements()){
             String key=(String)e.nextElement();
@@ -380,9 +400,20 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
             switch(key){
                 case "joinStrategy":
                     userSpecifiedJoinStrategy=StringUtil.SQLToUpperCase(value);
+                    if (userSpecifiedJoinStrategy.equals("CROSS")) {
+                        dataSetProcessorType = dataSetProcessorType.combine(DataSetProcessorType.FORCED_SPARK);
+                    }
                     break;
+                case "broadcastCrossRight": {
+                    // no op since parseBoolean never throw
+                    break;
+                }
                 case "useSpark":
-                    dataSetProcessorType = Boolean.parseBoolean(StringUtil.SQLToUpperCase(value))? CompilerContext.DataSetProcessorType.FORCED_SPARK:CompilerContext.DataSetProcessorType.FORCED_CONTROL;
+                case "useOLAP":
+                    dataSetProcessorType = dataSetProcessorType.combine(
+                            Boolean.parseBoolean(StringUtil.SQLToUpperCase(value))?
+                                    DataSetProcessorType.QUERY_HINTED_SPARK:
+                                    DataSetProcessorType.QUERY_HINTED_CONTROL);
                     break;
                 default:
                     // No other "legal" values at this time
@@ -472,6 +503,29 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
     }
 
     @Override
+    public boolean bestPathPicksSortMergeJoin(int planType) {
+        AccessPath bestPath = null;
+        switch(planType){
+            case Optimizer.NORMAL_PLAN:
+                bestPath=getBestAccessPath();
+                break;
+            case Optimizer.SORT_AVOIDANCE_PLAN:
+                bestPath=getBestSortAvoidancePath();
+                break;
+            default:
+                if(SanityManager.DEBUG){
+                    SanityManager.THROWASSERT( "Invalid plan type "+planType);
+                }
+        }
+        if (bestPath != null &&
+                bestPath.getJoinStrategy() != null &&
+                bestPath.getJoinStrategy().getJoinStrategyType().equals(JoinStrategy.JoinStrategyType.MERGE_SORT))
+            return true;
+
+        return false;
+    }
+
+    @Override
     public void rememberAsBest(int planType,Optimizer optimizer) throws StandardException{
         AccessPath bestPath=null;
 
@@ -510,10 +564,10 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
             if(!(prn.getChildResult() instanceof Optimizable))
                 updateBestPlanMap(ADD_PLAN,optimizer);
         }
-		 
-		/* also store the name of the access path; i.e index name/constraint
-		 * name if we're using an index to access the base table.
-		 */
+
+        /* also store the name of the access path; i.e index name/constraint
+         * name if we're using an index to access the base table.
+         */
 
         if(isBaseTable()){
             DataDictionary dd=getDataDictionary();
@@ -534,11 +588,11 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
 
         considerSortAvoidancePath=false;
 
-		/*
-		** If there are costs associated with the best and sort access
-		** paths, set them to their maximum values, so that any legitimate
-		** access path will look cheaper.
-		*/
+        /*
+        ** If there are costs associated with the best and sort access
+        ** paths, set them to their maximum values, so that any legitimate
+        ** access path will look cheaper.
+        */
         CostEstimate ce=getBestAccessPath().getCostEstimate();
 
         if(ce!=null)
@@ -661,6 +715,7 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         return false;
     }
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP",justification = "Intentional")
     @Override
     public int[] hashKeyColumns(){
         if(SanityManager.DEBUG){
@@ -671,6 +726,7 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         return hashKeyColumns;
     }
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2",justification = "Intentional")
     @Override
     public void setHashKeyColumns(int[] columnNumbers){
         hashKeyColumns=columnNumbers;
@@ -707,12 +763,12 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
 
     @Override
     public boolean isOneRowScan() throws StandardException{
-		/* We simply return isOneRowResultSet() for all
-		 * subclasses except for EXISTS FBT where
-		 * the semantics differ between 1 row per probe
-		 * and whether or not there can be more than 1
-		 * rows that qualify on a scan.
-		 */
+        /* We simply return isOneRowResultSet() for all
+         * subclasses except for EXISTS FBT where
+         * the semantics differ between 1 row per probe
+         * and whether or not there can be more than 1
+         * rows that qualify on a scan.
+         */
         return isOneRowResultSet();
     }
 
@@ -730,6 +786,14 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         if(trulyTheBestAccessPath==null){
             trulyTheBestAccessPath=optimizer.newAccessPath();
         }
+    }
+
+    @Override
+    public void resetAccessPaths() {
+        currentAccessPath = null;
+        bestAccessPath = null;
+        bestSortAvoidancePath = null;
+        trulyTheBestAccessPath = null;
     }
 
     @Override
@@ -849,9 +913,9 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         TableName exposedName;
         TableName toCompare;
 
-		/* If allTableName is non-null, then we must check to see if it matches
-		 * our exposed name.
-		 */
+        /* If allTableName is non-null, then we must check to see if it matches
+         * our exposed name.
+         */
 
         if(correlationName==null)
             toCompare=tableName;
@@ -866,10 +930,10 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
             return null;
         }
 
-		/* Cache exposed name for this table.
-		 * The exposed name becomes the qualifier for each column
-		 * in the expanded list.
-		 */
+        /* Cache exposed name for this table.
+         * The exposed name becomes the qualifier for each column
+         * in the expanded list.
+         */
         if(correlationName==null){
             exposedName=tableName;
         }else{
@@ -878,10 +942,10 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
 
         rcList=(ResultColumnList)getNodeFactory().getNode( C_NodeTypes.RESULT_COLUMN_LIST, getContextManager());
 
-		/* Build a new result column list based off of resultColumns.
-		 * NOTE: This method will capture any column renaming due to 
-		 * a derived column list.
-		 */
+        /* Build a new result column list based off of resultColumns.
+         * NOTE: This method will capture any column renaming due to
+         * a derived column list.
+         */
         int inputSize=inputRcl.size();
         for(int index=0;index<inputSize;index++){
             // Build a ResultColumn/ColumnReference pair for the column //
@@ -937,7 +1001,7 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
      * @param tableNumber The table # for this table.
      */
     public void setTableNumber(int tableNumber){
-		/* This should only be called if the tableNumber has not been set yet */
+        /* This should only be called if the tableNumber has not been set yet */
         assert this.tableNumber==-1: "tableNumber is not expected to be already set";
         this.tableNumber=tableNumber;
     }
@@ -987,9 +1051,9 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
     @Override
     void decrementLevel(int decrement){
         assert level==0 || level>=decrement: "level ("+level+") expects to be >= decrement ("+decrement+")";
-		/* NOTE: level doesn't get propagated
-		 * to nodes generated after binding.
-		 */
+        /* NOTE: level doesn't get propagated
+         * to nodes generated after binding.
+         */
         if(level>0){
             level-=decrement;
         }
@@ -1115,13 +1179,15 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
      * @param gbl          The group by list, if any
      * @param havingClause The HAVING clause, if any
      * @return FromList        The fromList from the underlying SelectNode.
+     * @param numTables     maximum number of tables in the query
      * @throws StandardException Thrown on error
      */
     public FromList flatten(ResultColumnList rcl,
                             PredicateList outerPList,
                             SubqueryList sql,
                             GroupByList gbl,
-                            ValueNode havingClause)  throws StandardException{
+                            ValueNode havingClause,
+                            int numTables)  throws StandardException{
         if(SanityManager.DEBUG){
             SanityManager.THROWASSERT( "flatten() not expected to be called for "+this);
         }
@@ -1135,7 +1201,7 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
      *
      * @throws StandardException Thrown on error
      */
-    void optimizeSubqueries(DataDictionary dd,double rowCount) throws StandardException{ }
+    void optimizeSubqueries(DataDictionary dd,double rowCount, Boolean forSpark) throws StandardException{ }
 
     /**
      * Tell the given RowOrdering about any columns that are constant
@@ -1172,11 +1238,14 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         return null;
     }
 
-    public CompilerContext.DataSetProcessorType getDataSetProcessorType() {
+    public void setRowIdColumn(ResultColumn rc) {
+    }
+
+    public DataSetProcessorType getDataSetProcessorType() {
         return dataSetProcessorType;
     }
 
-    public void setDataSetProcessorType(CompilerContext.DataSetProcessorType dataSetProcessorType) {
+    public void setDataSetProcessorType(DataSetProcessorType dataSetProcessorType) {
         this.dataSetProcessorType = dataSetProcessorType;
     }
 
@@ -1206,6 +1275,21 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         this.matchRowId = matchRowId;
     }
 
+    /**
+     * Return whether the current table should be joined as the right of an inclusion join or exclusion join or regular inner join
+     * @return 1: exclusion join
+     *         -1: inclusion join
+     *         0: regular inner join
+     */
+    public byte getSemiJoinType() {
+        if (isNotExists)
+            return 1;
+        else if (!matchRowId && existsTable)
+            return -1;
+        else
+            return 0;
+    }
+
     @Override
     public boolean getFromSSQ() {
         return fromSSQ;
@@ -1216,10 +1300,7 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
     }
 
     public void setDependencyMap(JBitSet set) {
-        if (existsTable || fromSSQ)
-            dependencyMap = set;
-        else
-            dependencyMap = null;
+        dependencyMap = set;
     }
 
     /* tableNumber is 0-based */
@@ -1319,17 +1400,6 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         return 2;
     }
 
-    public boolean isAboveSparkThreshold(CostEstimate costEstimate) {
-        long sparkRowThreshold = getLanguageConnectionContext().getOptimizerFactory().
-                                 getDetermineSparkRowThreshold();
-        return (costEstimate.getScannedBaseTableRows() > sparkRowThreshold ||
-                costEstimate.getEstimatedRowCount() > sparkRowThreshold);
-    }
-
-    public boolean isAboveSparkThreshold(AccessPath accessPath) {
-        return isAboveSparkThreshold(accessPath.getCostEstimate());
-    }
-
     public void setAccumulatedCost(CostEstimate cost) {
         if (accumulatedCost == null)
             accumulatedCost = cost.cloneMe();
@@ -1350,4 +1420,41 @@ public abstract class FromTable extends ResultSetNode implements Optimizable{
         return accumulatedCostForSortAvoidancePlan;
     }
 
+    public int getOuterJoinLevel() {
+        return outerJoinLevel;
+    }
+
+    public void setOuterJoinLevel(int level) {
+        outerJoinLevel = level;
+    }
+
+    /**
+     * Clear the bits from the dependency map when join nodes are flattened
+     *
+     * @param locations vector of bit numbers to be cleared
+     */
+    public void clearDependency(List<Integer> locations){
+        if(this.dependencyMap!=null){
+            for(Integer location : locations)
+                this.dependencyMap.clear(location);
+        }
+    }
+
+    public PredicateList getPostJoinPredicates() {
+        return postJoinPredicates;
+    }
+
+    public void setPostJoinPredicates(PredicateList pList) {
+        postJoinPredicates = pList;
+    }
+
+    @Override
+    public boolean hasJoinPredicatePushedDownFromOuter() {
+        return hasJoinPredicatePushedDownFromOuter;
+    }
+
+    @Override
+    public void setHasJoinPredicatePushedDownFromOuter(boolean value) {
+        hasJoinPredicatePushedDownFromOuter = value;
+    }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,9 +14,9 @@
 
 package com.splicemachine.storage;
 
-import org.spark_project.guava.base.Function;
-import org.spark_project.guava.collect.Iterables;
-import org.spark_project.guava.collect.Iterators;
+import splice.com.google.common.base.Function;
+import splice.com.google.common.collect.Iterables;
+import splice.com.google.common.collect.Iterators;
 import com.splicemachine.si.constants.SIConstants;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Result;
@@ -53,16 +53,16 @@ public class HResult implements DataResult{
     @Override
     public DataCell commitTimestamp(){
         if(result==null) return null;
-        Cell columnLatestCell=result.getColumnLatestCell(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.SNAPSHOT_ISOLATION_COMMIT_TIMESTAMP_COLUMN_BYTES);
+        Cell columnLatestCell=result.getColumnLatestCell(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.COMMIT_TIMESTAMP_COLUMN_BYTES);
         if(columnLatestCell==null) return null;
         wrapper.set(columnLatestCell);
         return wrapper;
     }
 
     @Override
-    public DataCell tombstone(){
+    public DataCell tombstoneOrAntiTombstone(){
         if(result==null) return null;
-        Cell columnLatestCell=result.getColumnLatestCell(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.SNAPSHOT_ISOLATION_TOMBSTONE_COLUMN_BYTES);
+        Cell columnLatestCell=result.getColumnLatestCell(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.TOMBSTONE_COLUMN_BYTES);
         if(columnLatestCell==null) return null;
         wrapper.set(columnLatestCell);
         return wrapper;
@@ -80,16 +80,40 @@ public class HResult implements DataResult{
     @Override
     public DataCell fkCounter(){
         if(result==null) return null;
-        Cell columnLatestCell=result.getColumnLatestCell(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.SNAPSHOT_ISOLATION_FK_COUNTER_COLUMN_BYTES);
+        Cell columnLatestCell=result.getColumnLatestCell(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.FK_COUNTER_COLUMN_BYTES);
         if(columnLatestCell==null) return null;
         wrapper.set(columnLatestCell);
         return wrapper;
     }
 
     @Override
+    public DataCell firstOccurrenceToken() {
+        if(result==null) return null;
+        Cell columnLatestCell=result.getColumnLatestCell(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.FIRST_OCCURRENCE_TOKEN_COLUMN_BYTES);
+        if(columnLatestCell==null) return null;
+        wrapper.set(columnLatestCell);
+        return wrapper;
+    }
+
+    @Override
+    public DataCell firstWriteToken() {
+        DataCell cell = firstOccurrenceToken();
+        if (cell == null)
+            return null;
+        if (cell.dataType() == CellType.FIRST_WRITE_TOKEN)
+            return cell;
+        return null;
+    }
+
+    @Override
     public int size(){
         if(result==null) return 0;
         return result.size();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return result == null || result.isEmpty();
     }
 
     @Override

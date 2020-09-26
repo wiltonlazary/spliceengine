@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -15,8 +15,8 @@
 package com.splicemachine.storage;
 
 import com.splicemachine.access.util.ByteComparisons;
-import org.spark_project.guava.base.Predicate;
-import org.spark_project.guava.collect.Iterables;
+import splice.com.google.common.base.Predicate;
+import splice.com.google.common.collect.Iterables;
 
 import java.util.*;
 
@@ -47,7 +47,7 @@ public class MResult implements DataResult{
     }
 
     @Override
-    public DataCell tombstone(){
+    public DataCell tombstoneOrAntiTombstone(){
         if(dataCells==null) return null;
         for(DataCell mc:dataCells){
             if(mc.dataType()==CellType.TOMBSTONE||mc.dataType()==CellType.ANTI_TOMBSTONE) return mc;
@@ -74,8 +74,33 @@ public class MResult implements DataResult{
     }
 
     @Override
+    public DataCell firstOccurrenceToken() {
+        if(dataCells==null) return null;
+        for(DataCell mc:dataCells){
+            if(mc.dataType() == CellType.FIRST_WRITE_TOKEN || mc.dataType() == CellType.DELETE_RIGHT_AFTER_FIRST_WRITE_TOKEN)
+                return mc;
+        }
+        return null;
+    }
+
+    @Override
+    public DataCell firstWriteToken() {
+        if(dataCells==null) return null;
+        for(DataCell mc:dataCells){
+            if(mc.dataType() == CellType.FIRST_WRITE_TOKEN)
+                return mc;
+        }
+        return null;
+    }
+
+    @Override
     public int size(){
         return dataCells==null? 0: dataCells.size();
+    }
+
+    @Override
+    public boolean isEmpty(){
+        return dataCells == null || dataCells.isEmpty();
     }
 
     @Override
@@ -105,13 +130,13 @@ public class MResult implements DataResult{
 
     @Override
     public byte[] key(){
-        if(dataCells==null||dataCells.size()<=0) return null;
+        if(isEmpty()) return null;
         return dataCells.get(0).key();
     }
 
     @Override
     public Map<byte[], byte[]> familyCellMap(byte[] userColumnFamily){
-        if(dataCells==null||dataCells.size()<=0) return Collections.emptyMap();
+        if(isEmpty()) return Collections.emptyMap();
         Map<byte[],byte[]> familyCellMap = new TreeMap<>(ByteComparisons.comparator());
         for(DataCell dc:dataCells){
             familyCellMap.put(dc.family(),dc.qualifier());

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -34,7 +34,9 @@ public class RowOperationFunction extends SpliceFunction<RowOperation,ExecRow,Ex
     @Override
     public ExecRow call(ExecRow o) throws Exception {
         RowOperation rowOp = operationContext.getOperation();
-        return rowOp.getRow();
+        ExecRow valueRow = rowOp.getRow();
+        rowOp.setCurrentRow(valueRow);
+        return valueRow;
     }
 
 }

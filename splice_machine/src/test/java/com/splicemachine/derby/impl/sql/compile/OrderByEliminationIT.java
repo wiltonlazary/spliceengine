@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -373,7 +373,7 @@ public class OrderByEliminationIT extends SpliceUnitTest {
         /* Q1 -- PK */
         String sqlText = "select * from (select a1,b1 from t1 where a1=1 order by b1 {limit 10}) dt1 " +
                 "union all select * from (select a2, b2 from t2 where a2=1 order by b2 {limit 10}) dt2";
-        String expected = "1 | 2 |\n" +
+        String expected = "A1 |B1 |\n" +
                 "--------\n" +
                 " 1 | 1 |\n" +
                 " 1 | 1 |\n" +
@@ -390,7 +390,7 @@ public class OrderByEliminationIT extends SpliceUnitTest {
         /* Q2 -- index */
         sqlText = "select * from (select b1, c1, d1 from t1 --splice-properties index=idx_t1\n where b1=2 and c1=3 order by d1 {limit 10}) dt1 " +
                 "union all select * from (select b2, c2, d2 from t2 --splice-properties index=idx_t2\n where b2=2 and c2=3 order by b2 {limit 10}) dt2";
-        expected = "1 | 2 | 3 |\n" +
+        expected = "B1 |C1 |D1 |\n" +
                 "------------\n" +
                 " 2 | 3 |30 |\n" +
                 " 2 | 3 |30 |\n" +
@@ -431,5 +431,41 @@ public class OrderByEliminationIT extends SpliceUnitTest {
         Assert.assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
         rs.close();
         rowContainsQuery(4, "explain "+sqlText, "OrderBy", methodWatcher);
+    }
+
+    @Test
+    public void testOrderByEliminationInteractionWithFlattenedOuterJoin() throws Exception {
+        /* Q1 */
+        String sqlText = "select c1, c2 from t1 left join t2 on c1=c2 and c1=5 order by c1 desc";
+        String expected = "C1 | C2  |\n" +
+                "----------\n" +
+                " 3 |NULL |\n" +
+                " 3 |NULL |\n" +
+                " 3 |NULL |\n" +
+                " 1 |NULL |\n" +
+                " 1 |NULL |";
+
+        ResultSet rs = methodWatcher.executeQuery(sqlText);
+        Assert.assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+        rs.close();
+        rowContainsQuery(3, "explain "+sqlText, "OrderBy", methodWatcher);
+    }
+
+    @Test
+    public void testOrderByEliminationInteractionWithFlattenedOuterJoin2() throws Exception {
+        /* Q1 */
+        String sqlText = "select a1, b1, c1, a2 from t1 left join t2 on a1=a2 and a1=5 order by b1";
+        String expected = "A1 |B1 |C1 | A2  |\n" +
+                "------------------\n" +
+                " 1 | 1 | 1 |NULL |\n" +
+                " 1 | 2 | 3 |NULL |\n" +
+                " 2 | 2 | 3 |NULL |\n" +
+                " 3 | 2 | 3 |NULL |\n" +
+                " 1 | 3 | 1 |NULL |";
+
+        ResultSet rs = methodWatcher.executeQuery(sqlText);
+        Assert.assertEquals(expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+        rs.close();
+        rowContainsQuery(3, "explain "+sqlText, "OrderBy", methodWatcher);
     }
 }

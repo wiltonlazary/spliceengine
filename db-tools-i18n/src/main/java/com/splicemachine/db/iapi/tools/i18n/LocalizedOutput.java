@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.db.iapi.tools.i18n;
@@ -34,11 +34,12 @@ import java.io.PrintWriter;
 import java.io.OutputStreamWriter;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 
 public class LocalizedOutput extends PrintWriter {
 	private OutputStream out;
 	public LocalizedOutput(OutputStream o){
-		super(new OutputStreamWriter(o), true);
+		super(new OutputStreamWriter(o, StandardCharsets.UTF_8), true);
 		out = o;
 	}
 	LocalizedOutput(OutputStream o, String enc) throws UnsupportedEncodingException {
@@ -52,5 +53,8 @@ public class LocalizedOutput extends PrintWriter {
 		if (!isStandardOutput()) {
 			super.close();
 		}
+	}
+	public OutputStream getOutputStream() {
+		return out;
 	}
 }

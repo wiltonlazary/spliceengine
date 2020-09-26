@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -36,6 +36,7 @@ import com.splicemachine.db.iapi.services.sanity.SanityManager;
 import com.splicemachine.db.iapi.sql.ResultColumnDescriptor;
 import com.splicemachine.db.iapi.sql.ResultDescription;
 import com.splicemachine.db.iapi.sql.compile.C_NodeTypes;
+import com.splicemachine.db.iapi.sql.compile.DataSetProcessorType;
 import com.splicemachine.db.iapi.sql.compile.Visitor;
 import com.splicemachine.db.iapi.sql.conn.Authorizer;
 import com.splicemachine.db.iapi.sql.dictionary.DataDictionary;
@@ -112,11 +113,11 @@ public abstract class DMLStatementNode extends StatementNode {
     public QueryTreeNode bindResultSetsWithTables(DataDictionary dataDictionary)
             throws StandardException {
         /* Okay to bindly bind the tables, since ResultSets without tables
-		 * know to handle the call.
-		 */
+         * know to handle the call.
+         */
         bindTables(dataDictionary);
 
-		/* Bind the expressions in the underlying ResultSets with tables */
+        /* Bind the expressions in the underlying ResultSets with tables */
         bindExpressionsWithTables();
 
         return this;
@@ -166,9 +167,63 @@ public abstract class DMLStatementNode extends StatementNode {
         // prune tree based on unsat condition
         accept(new TreePruningVisitor());
 
-        resultSet = resultSet.optimize(getDataDictionary(), null, 1.0d);
+
+
+        // We should try to cost control first, and fallback to spark if necessary
+        DataSetProcessorType connectionType = getLanguageConnectionContext().getDataSetProcessorType();
+        getCompilerContext().setDataSetProcessorType(connectionType);
+
+        if (shouldRunControl(resultSet)) {
+            resultSet = resultSet.optimize(getDataDictionary(), null, 1.0d, false);
+        }
+
+        if (shouldRunSpark(resultSet)) {
+            CollectNodesVisitor cnv = new CollectNodesVisitor(FromTable.class);
+            resultSet.accept(cnv);
+            for (Object obj : cnv.getList()) {
+                FromTable ft = (FromTable) obj;
+                ft.resetAccessPaths();
+                if (ft instanceof JoinNode)
+                    ((JoinNode)ft).resetOptimized();
+            }
+            resultSet = resultSet.optimize(getDataDictionary(), null, 1.0d, true);
+        }
+
         resultSet = resultSet.modifyAccessPaths();
 
+    }
+
+    private boolean shouldRunControl(ResultSetNode resultSet) throws StandardException {
+        DataSetProcessorType type = getCompilerContext().getDataSetProcessorType();
+        if (type.isForced()) {
+            return (!type.isSpark());
+        }
+        CollectNodesVisitor cnv = new CollectNodesVisitor(FromTable.class);
+        resultSet.accept(cnv);
+        for (Object obj : cnv.getList()) {
+            FromTable ft = (FromTable) obj;
+            ft.verifyProperties(getDataDictionary());
+            type = type.combine(ft.getDataSetProcessorType());
+        }
+        getCompilerContext().setDataSetProcessorType(type);
+        return !type.isSpark();
+    }
+
+    private boolean shouldRunSpark(ResultSetNode resultSet) throws StandardException {
+        DataSetProcessorType type = getCompilerContext().getDataSetProcessorType();
+        if (!type.isSpark() && (type.isHinted() || type.isForced())) {
+            return false;
+        }
+        CollectNodesVisitor cnv = new CollectNodesVisitor(FromTable.class);
+        resultSet.accept(cnv);
+        for (Object obj : cnv.getList()) {
+            if (obj instanceof FromBaseTable) {
+                ((FromBaseTable) obj).determineSpark();
+            }
+            type = type.combine(((FromTable) obj).getDataSetProcessorType());
+        }
+        getCompilerContext().setDataSetProcessorType(type);
+        return type.isSpark();
     }
 
     /**
@@ -193,7 +248,7 @@ public abstract class DMLStatementNode extends StatementNode {
      * A read statement is atomic (DMLMod overrides us) if there are no work units, and no SELECT nodes, or if its
      * SELECT nodes are all arguments to a function.  This is admittedly
      * a bit simplistic, what if someone has: <pre>
-     * 	VALUES myfunc(SELECT max(c.commitFunc()) FROM T)
+     *     VALUES myfunc(SELECT max(c.commitFunc()) FROM T)
      * </pre>
      * but we aren't going too far out of our way to catch every possible wierd case.  We basically want to be
      * permissive w/o allowing someone to partially commit a write.
@@ -202,13 +257,13 @@ public abstract class DMLStatementNode extends StatementNode {
      * @throws StandardException on error
      */
     public boolean isAtomic() throws StandardException {
-		/*
-		** If we have a FromBaseTable then we have
-		** a SELECT, so we want to consider ourselves
-		** atomic.  Don't drill below StaticMethodCallNodes
-		** to allow a SELECT in an argument to a method
-		** call that can be atomic.
-		*/
+        /*
+        ** If we have a FromBaseTable then we have
+        ** a SELECT, so we want to consider ourselves
+        ** atomic.  Don't drill below StaticMethodCallNodes
+        ** to allow a SELECT in an argument to a method
+        ** call that can be atomic.
+        */
         HasNodeVisitor visitor = new HasNodeVisitor(FromBaseTable.class, StaticMethodCallNode.class);
 
         this.accept(visitor, null);
@@ -237,13 +292,13 @@ public abstract class DMLStatementNode extends StatementNode {
      */
 
     protected void bindTables(DataDictionary dataDictionary) throws StandardException {
-		/* Bind the tables in the resultSet
-		 * (DMLStatementNode is above all ResultSetNodes, so table numbering
-		 * will begin at 0.)
-		 * In case of referential action on delete , the table numbers can be
-		 * > 0 because the nodes are create for dependent tables also in the
-		 * the same context.
-		 */
+        /* Bind the tables in the resultSet
+         * (DMLStatementNode is above all ResultSetNodes, so table numbering
+         * will begin at 0.)
+         * In case of referential action on delete , the table numbers can be
+         * > 0 because the nodes are create for dependent tables also in the
+         * the same context.
+         */
 
         resultSet = resultSet.bindNonVTITables(
                 dataDictionary,
@@ -264,12 +319,12 @@ public abstract class DMLStatementNode extends StatementNode {
                 getNodeFactory().doJoinOrderOptimization(),
                 getContextManager());
 
-		/* Bind the expressions under the resultSet */
-		if (bindResultSet) {
+        /* Bind the expressions under the resultSet */
+        if (bindResultSet) {
             resultSet.bindExpressions(fromList);
         }
 
-		/* Verify that all underlying ResultSets reclaimed their FromList */
+        /* Verify that all underlying ResultSets reclaimed their FromList */
         if (SanityManager.DEBUG)
             SanityManager.ASSERT(fromList.isEmpty(),
                     "fromList.size() is expected to be 0, not " + fromList.size() +
@@ -288,10 +343,10 @@ public abstract class DMLStatementNode extends StatementNode {
                 getNodeFactory().doJoinOrderOptimization(),
                 getContextManager());
 
-		/* Bind the expressions under the resultSet */
+        /* Bind the expressions under the resultSet */
         resultSet.bindExpressions(fromList);
 
-		/* Verify that all underlying ResultSets reclaimed their FromList */
+        /* Verify that all underlying ResultSets reclaimed their FromList */
         if (SanityManager.DEBUG)
             SanityManager.ASSERT(fromList.isEmpty(),
                     "fromList.size() is expected to be 0, not " + fromList.size() +
@@ -304,10 +359,10 @@ public abstract class DMLStatementNode extends StatementNode {
                 getNodeFactory().doJoinOrderOptimization(),
                 getContextManager());
 
-		/* Bind the expressions under the resultSet */
+        /* Bind the expressions under the resultSet */
         resultSet.bindTargetExpressions(fromList, false);
 
-		/* Verify that all underlying ResultSets reclaimed their FromList */
+        /* Verify that all underlying ResultSets reclaimed their FromList */
         if (SanityManager.DEBUG)
             SanityManager.ASSERT(fromList.size() == 0,
                     "fromList.size() is expected to be 0, not " + fromList.size() +
@@ -324,10 +379,10 @@ public abstract class DMLStatementNode extends StatementNode {
                 getNodeFactory().doJoinOrderOptimization(),
                 getContextManager());
 
-		/* Bind the expressions under the resultSet */
+        /* Bind the expressions under the resultSet */
         resultSet.bindExpressionsWithTables(fromList);
 
-		/* Verify that all underlying ResultSets reclaimed their FromList */
+        /* Verify that all underlying ResultSets reclaimed their FromList */
         if (SanityManager.DEBUG)
             SanityManager.ASSERT(fromList.isEmpty(),
                     "fromList.size() is expected to be 0, not " + fromList.size() +
@@ -348,12 +403,12 @@ public abstract class DMLStatementNode extends StatementNode {
         getCompilerContext().pushCurrentPrivType(getPrivType());
         try {
             /*
-			** Bind the tables before binding the expressions, so we can
-			** use the results of table binding to look up columns.
-			*/
+            ** Bind the tables before binding the expressions, so we can
+            ** use the results of table binding to look up columns.
+            */
             bindTables(dataDictionary);
 
-			/* Bind the expressions */
+            /* Bind the expressions */
             bindExpressions();
         } finally {
             getCompilerContext().popCurrentPrivType();
@@ -369,10 +424,10 @@ public abstract class DMLStatementNode extends StatementNode {
      */
     int activationKind() {
         Vector parameterList = getCompilerContext().getParameterList();
-		/*
-		** We need rows for all types of DML activations.  We need parameters
-		** only for those that have parameters.
-		*/
+        /*
+        ** We need rows for all types of DML activations.  We need parameters
+        ** only for those that have parameters.
+        */
         if (parameterList != null && !parameterList.isEmpty()) {
             return StatementNode.NEED_PARAM_ACTIVATION;
         } else {
@@ -391,9 +446,6 @@ public abstract class DMLStatementNode extends StatementNode {
     void generateParameterValueSet(ActivationClassBuilder acb) throws StandardException {
         Vector parameterList = getCompilerContext().getParameterList();
         int numberOfParameters = (parameterList == null) ? 0 : parameterList.size();
-
-        if (numberOfParameters <= 0)
-            return;
 
         ParameterNode.generateParameterValueSet
                 (acb, numberOfParameters, parameterList);

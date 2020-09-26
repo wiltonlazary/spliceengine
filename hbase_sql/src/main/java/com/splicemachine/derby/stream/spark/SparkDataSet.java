@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -20,6 +20,7 @@ import com.splicemachine.db.iapi.sql.ResultColumnDescriptor;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.iapi.types.SQLLongint;
+import com.splicemachine.db.impl.sql.compile.ExplainNode;
 import com.splicemachine.db.impl.sql.execute.ValueRow;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.impl.SpliceSpark;
@@ -30,8 +31,6 @@ import com.splicemachine.derby.impl.sql.execute.operations.export.ExportFile.COM
 import com.splicemachine.derby.impl.sql.execute.operations.export.ExportOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.framework.SpliceGenericAggregator;
 import com.splicemachine.derby.impl.sql.execute.operations.window.WindowContext;
-import com.splicemachine.derby.stream.control.ControlDataSet;
-import com.splicemachine.derby.stream.control.FutureIterator;
 import com.splicemachine.derby.stream.function.AbstractSpliceFunction;
 import com.splicemachine.derby.stream.function.CountWriteFunction;
 import com.splicemachine.derby.stream.function.ExportFunction;
@@ -44,6 +43,7 @@ import com.splicemachine.derby.stream.function.SpliceFunction2;
 import com.splicemachine.derby.stream.function.SplicePairFunction;
 import com.splicemachine.derby.stream.function.SplicePredicateFunction;
 import com.splicemachine.derby.stream.function.TakeFunction;
+import com.splicemachine.derby.stream.function.ZipperFunction;
 import com.splicemachine.derby.stream.iapi.*;
 import com.splicemachine.derby.stream.output.BulkDeleteDataSetWriterBuilder;
 import com.splicemachine.derby.stream.output.BulkInsertDataSetWriterBuilder;
@@ -53,8 +53,8 @@ import com.splicemachine.derby.stream.output.InsertDataSetWriterBuilder;
 import com.splicemachine.derby.stream.output.UpdateDataSetWriterBuilder;
 import com.splicemachine.derby.stream.output.*;
 import com.splicemachine.derby.stream.utils.ExternalTableUtils;
-import com.splicemachine.si.impl.driver.SIDriver;
 import com.splicemachine.spark.splicemachine.ShuffleUtils;
+import com.splicemachine.system.CsvOptions;
 import com.splicemachine.utils.ByteDataInput;
 import com.splicemachine.utils.Pair;
 import org.apache.commons.codec.binary.Base64;
@@ -83,8 +83,6 @@ import org.apache.spark.storage.StorageLevel;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.*;
-import java.util.concurrent.ExecutorCompletionService;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.zip.GZIPOutputStream;
 
@@ -364,8 +362,15 @@ public class SparkDataSet<V> implements DataSet<V> {
         DataSet<V> branch = null;
         int i = 0;
         MultiProbeTableScanOperation operation = operationContext.getOperation();
+
+        List<DataSet<V>> dataSets = new ArrayList<>();
+
         for (ScanSetBuilder<ExecRow> builder: scanSetBuilders) {
             DataSet<V> dataSet = (DataSet<V>) builder.buildDataSet(operation);
+            dataSets.add(dataSet);
+        }
+
+        for (DataSet<V> dataSet : dataSets) {
             if (i % 100 == 0) {
                 if (branch != null) {
                     if (toReturn == null)
@@ -462,9 +467,7 @@ public class SparkDataSet<V> implements DataSet<V> {
                     .createDataFrame(
                         rdd.map(
                             new LocatedRowToRowFunction()),
-                        context.getOperation()
-                               .getExecRowDefinition()
-                               .schema());
+                        context.getOperation().schema());
 
             return new NativeSparkDataSet(left, context).intersect(dataSet, name, context, pushScope, scopeDetail);
         }finally {
@@ -528,6 +531,16 @@ public class SparkDataSet<V> implements DataSet<V> {
     @Override
     public ExportDataSetWriterBuilder writeToDisk(){
         return new SparkExportDataSetWriter.Builder(rdd);
+    }
+
+    @Override
+    public KafkaDataSetWriterBuilder writeToKafka() {
+        return new KafkaDataSetWriterBuilder() {
+            @Override
+            public DataSetWriter build() {
+                return new SparkKafkaDataSetWriter<>(rdd, topicName);
+            }
+        };
     }
 
     public static class EOutputFormat extends FileOutputFormat<Void, ExecRow> {
@@ -693,7 +706,7 @@ public class SparkDataSet<V> implements DataSet<V> {
     public DataSet<V> join(OperationContext context, DataSet<V> rightDataSet, JoinType joinType, boolean isBroadcast) throws StandardException {
         Dataset<Row> leftDF = SpliceSpark.getSession().createDataFrame(
                 rdd.map(new LocatedRowToRowFunction()),
-                        context.getOperation().getLeftOperation().getExecRowDefinition().schema());
+                        context.getOperation().getLeftOperation().schema());
         OperationContext<SpliceOperation> leftContext = EngineDriver.driver().processorFactory().distributedProcessor().createOperationContext(context.getOperation().getLeftOperation());
 
         return new NativeSparkDataSet(leftDF, leftContext).join(context, rightDataSet, joinType, isBroadcast);
@@ -701,13 +714,13 @@ public class SparkDataSet<V> implements DataSet<V> {
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
     @Override
-    public DataSet<V> crossJoin(OperationContext context, DataSet<V> rightDataSet) throws StandardException {
+    public DataSet<V> crossJoin(OperationContext context, DataSet<V> rightDataSet, Broadcast type) throws StandardException {
         Dataset<Row> leftDF = SpliceSpark.getSession().createDataFrame(
                 rdd.map(new LocatedRowToRowFunction()),
-                        context.getOperation().getLeftOperation().getExecRowDefinition().schema());
+                        context.getOperation().getLeftOperation().schema());
         OperationContext<SpliceOperation> leftContext = EngineDriver.driver().processorFactory().distributedProcessor().createOperationContext(context.getOperation().getLeftOperation());
 
-        return new NativeSparkDataSet(leftDF, leftContext).crossJoin(context, rightDataSet);
+        return new NativeSparkDataSet(leftDF, leftContext).crossJoin(context, rightDataSet, type);
     }
 
     /**
@@ -724,9 +737,7 @@ public class SparkDataSet<V> implements DataSet<V> {
                 .createDataFrame(
                         ((SparkDataSet)dataSet).rdd
                                 .map(new LocatedRowToRowFunction()),
-                        context.getOperation()
-                                .getExecRowDefinition()
-                                .schema());
+                        context.getOperation().schema());
     }
 
     /**
@@ -746,12 +757,7 @@ public class SparkDataSet<V> implements DataSet<V> {
         return new SparkDataSet(rdd.map(new RowToLocatedRowFunction(context)));
     }
 
-    @Override
-    public DataSet<ExecRow> writeParquetFile(DataSetProcessor dsp,
-                                             int[] partitionBy,
-                                             String location,
-                                             String compression,
-                                             OperationContext context) throws StandardException {
+    public static StructType generateTableSchema(OperationContext context) throws StandardException {
         //Generate Table Schema
         String[] colNames;
         DataValueDescriptor[] dvds;
@@ -774,16 +780,7 @@ public class SparkDataSet<V> implements DataSet<V> {
         for (int i=0 ; i<colNames.length ; i++){
             fields[i] = dvds[i].getStructField(colNames[i]);
         }
-        StructType tableSchema = DataTypes.createStructType(fields);
-
-        // construct a DF using schema of data
-        Dataset<Row> insertDF = SpliceSpark.getSession().createDataFrame(
-                rdd
-                        .map(new SparkSpliceFunctionWrapper<>(new CountWriteFunction(context)))
-                        .map(new LocatedRowToRowFunction()),
-                tableSchema);
-
-        return new NativeSparkDataSet<>(insertDF, context).writeParquetFile(dsp, partitionBy, location, compression, context);
+        return DataTypes.createStructType(fields);
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })
@@ -791,18 +788,15 @@ public class SparkDataSet<V> implements DataSet<V> {
                                           int[] partitionBy,
                                           String location,
                                           String compression,
-                                          OperationContext context) throws StandardException {
+                                          OperationContext context) throws StandardException
+    {
+        compression = SparkDataSet.getAvroCompression(compression);
 
         StructType dataSchema = null;
-        //Generate Table Schema
-        String[] colNames = ((DMLWriteOperation) context.getOperation()).getColumnNames();
-        DataValueDescriptor[] dvds = context.getOperation().getExecRowDefinition().getRowArray();
-        StructField[] fields = new StructField[colNames.length];
-        for (int i=0 ; i<colNames.length ; i++){
-            fields[i] = dvds[i].getStructField(colNames[i]);
-        }
-        StructType tableSchema = DataTypes.createStructType(fields);
+        StructType tableSchema = generateTableSchema(context);
 
+        // what is this? why is this so different from parquet/orc ?
+        // actually very close to NativeSparkDataSet.writeFile
         dataSchema = ExternalTableUtils.getDataSchema(dsp, tableSchema, partitionBy, location, "a");
 
         if (dataSchema == null)
@@ -825,6 +819,9 @@ public class SparkDataSet<V> implements DataSet<V> {
             }
             insertDF = insertDF.repartition(scala.collection.JavaConversions.asScalaBuffer(repartitionCols).toList());
         }
+        if (compression.equals("none")) {
+            compression = "uncompressed";
+        }
         insertDF.write().option(SPARK_COMPRESSION_OPTION,compression).partitionBy(partitionByCols.toArray(new String[partitionByCols.size()]))
                 .mode(SaveMode.Append).format("com.databricks.spark.avro").save(location);
         ValueRow valueRow=new ValueRow(1);
@@ -832,36 +829,63 @@ public class SparkDataSet<V> implements DataSet<V> {
         return new SparkDataSet<>(SpliceSpark.getContext().parallelize(Collections.singletonList(valueRow), 1));
     }
 
-
     @SuppressWarnings({ "unchecked", "rawtypes" })
-    public DataSet<ExecRow> writeORCFile(int[] baseColumnMap, int[] partitionBy, String location,  String compression,
-                                                    OperationContext context) throws StandardException {
-        //Generate Table Schema
-        String[] colNames = ((DMLWriteOperation) context.getOperation()).getColumnNames();
-        DataValueDescriptor[] dvds = context.getOperation().getExecRowDefinition().getRowArray();
-        StructField[] fields = new StructField[colNames.length];
-        for (int i=0 ; i<colNames.length ; i++){
-            fields[i] = dvds[i].getStructField(colNames[i]);
-        }
-        StructType tableSchema = DataTypes.createStructType(fields);
-
+    public NativeSparkDataSet getNativeSparkDataSet( OperationContext context) throws StandardException
+    {
+        StructType tableSchema = generateTableSchema( context );
         Dataset<Row> insertDF = SpliceSpark.getSession().createDataFrame(
                 rdd.map(new SparkSpliceFunctionWrapper<>(new CountWriteFunction(context))).map(new LocatedRowToRowFunction()),
                 tableSchema);
 
-        return new NativeSparkDataSet<>(insertDF, context).writeORCFile(baseColumnMap, partitionBy, location, compression, context);
+        return new NativeSparkDataSet<>(insertDF, context);
+    }
+
+    static String getParquetCompression(String compression )
+    {
+        // parquet in spark supports: lz4, gzip, lzo, snappy, none, zstd.
+        if( compression.equals("zlib") )
+            compression = "gzip";
+        return compression;
+    }
+
+    public static String getAvroCompression(String compression) {
+        // avro supports uncompressed, snappy, deflate, bzip2 and xz
+        if (compression.equals("none"))
+            compression = "uncompressed";
+        else if( compression.equals("zlib"))
+            compression = "deflate";
+        return compression;
+    }
+
+    @Override
+    public DataSet<ExecRow> writeParquetFile(DataSetProcessor dsp,
+                                             int[] partitionBy,
+                                             String location,
+                                             String compression,
+                                             OperationContext context) throws StandardException {
+
+        compression = getParquetCompression( compression );
+        return getNativeSparkDataSet( context )
+                .writeParquetFile(dsp, partitionBy, location, compression, context);
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })
-    public DataSet<ExecRow> writeTextFile(SpliceOperation op, String location, String characterDelimiter, String columnDelimiter,
-                                                int[] baseColumnMap,
+    public DataSet<ExecRow> writeORCFile(int[] baseColumnMap, int[] partitionBy, String location,  String compression,
+                                         OperationContext context) throws StandardException
+    {
+        return getNativeSparkDataSet( context )
+                .writeORCFile(baseColumnMap, partitionBy, location, compression, context);
+    }
+
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public DataSet<ExecRow> writeTextFile(String location, CsvOptions csvOptions,
                                                 OperationContext context) throws StandardException {
 
         Dataset<Row> insertDF = SpliceSpark.getSession().createDataFrame(
                 rdd.map(new SparkSpliceFunctionWrapper<>(new CountWriteFunction(context))).map(new LocatedRowToRowFunction()),
-                context.getOperation().getExecRowDefinition().schema());
+                context.getOperation().schema());
 
-        return new NativeSparkDataSet<>(insertDF, context).writeTextFile(op, location, characterDelimiter, columnDelimiter, baseColumnMap, context);
+        return new NativeSparkDataSet<>(insertDF, context).writeTextFile(location, csvOptions, context);
     }
 
     @Override @SuppressWarnings({ "unchecked", "rawtypes" })
@@ -926,4 +950,15 @@ public class SparkDataSet<V> implements DataSet<V> {
 
     @Override
     public DataSet applyNativeSparkAggregation(int[] groupByColumns, SpliceGenericAggregator[] aggregates, boolean isRollup, OperationContext operationContext) { return null; }
+
+    @Override
+    public boolean isNativeSpark() {
+        return false;
+    }
+
+    public List<String> buildNativeSparkExplain(ExplainNode.SparkExplainKind sparkExplainKind) {
+        List<String> warnMsg = new ArrayList<>();
+        warnMsg.add("Spark EXPLAIN not available.\n");
+        return warnMsg;
+    }
 }

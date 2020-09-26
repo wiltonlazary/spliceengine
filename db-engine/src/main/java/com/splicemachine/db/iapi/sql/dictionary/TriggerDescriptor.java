@@ -25,40 +25,41 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
 package com.splicemachine.db.iapi.sql.dictionary;
 
-import com.splicemachine.db.iapi.services.io.Formatable;
-import com.splicemachine.db.iapi.sql.depend.Dependent;
-import com.splicemachine.db.iapi.sql.depend.Provider;
-import com.splicemachine.db.iapi.error.StandardException;
+import com.splicemachine.db.catalog.Dependable;
+import com.splicemachine.db.catalog.DependableFinder;
 import com.splicemachine.db.catalog.UUID;
-
-import java.sql.Timestamp;
-
+import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.reference.SQLState;
+import com.splicemachine.db.iapi.services.context.ContextService;
+import com.splicemachine.db.iapi.services.io.Formatable;
+import com.splicemachine.db.iapi.services.io.StoredFormatIds;
 import com.splicemachine.db.iapi.services.sanity.SanityManager;
 import com.splicemachine.db.iapi.sql.StatementType;
-import com.splicemachine.db.catalog.DependableFinder;
-import com.splicemachine.db.catalog.Dependable;
-import com.splicemachine.db.iapi.services.io.StoredFormatIds;
-import com.splicemachine.db.iapi.sql.depend.DependencyManager;
-import com.splicemachine.db.iapi.sql.conn.LanguageConnectionContext;
-import com.splicemachine.db.iapi.store.access.TransactionController;
-import com.splicemachine.db.iapi.services.context.ContextService;
-
 import com.splicemachine.db.iapi.sql.compile.CompilerContext;
 import com.splicemachine.db.iapi.sql.compile.Parser;
 import com.splicemachine.db.iapi.sql.compile.Visitable;
+import com.splicemachine.db.iapi.sql.conn.LanguageConnectionContext;
+import com.splicemachine.db.iapi.sql.depend.DependencyManager;
+import com.splicemachine.db.iapi.sql.depend.Dependent;
+import com.splicemachine.db.iapi.sql.depend.Provider;
+import com.splicemachine.db.iapi.store.access.TransactionController;
+import com.splicemachine.db.impl.sql.catalog.ManagedCache;
 import com.splicemachine.db.impl.sql.execute.TriggerEvent;
 import com.splicemachine.db.impl.sql.execute.TriggerEventDML;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
-import java.io.ObjectOutput;
-import java.io.ObjectInput;
 import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A trigger.
@@ -78,7 +79,7 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
     private String name;
     private String oldReferencingName;
     private String newReferencingName;
-    private String triggerDefinition;
+    List<String> triggerDefinitionList;
     private SchemaDescriptor sd;
     private TriggerEventDML triggerDML;
     private boolean isBefore;
@@ -86,10 +87,8 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
     private boolean referencingOld;
     private boolean referencingNew;
     private TableDescriptor td;
-    private UUID actionSPSId;
-    private SPSDescriptor actionSPS;
+    List<UUID> actionSPSIdList;
     private UUID whenSPSId;
-    private SPSDescriptor whenSPS;
     private boolean isEnabled;
     private int[] referencedCols;
     private int[] referencedColsInTriggerAction;
@@ -97,6 +96,8 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
     private UUID triggerSchemaId;
     private UUID triggerTableId;
     private String whenClauseText;
+    int numBaseTableColumns;
+    protected int version;
 
 
     /**
@@ -118,12 +119,12 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
      * @param isEnabled                     is this trigger enabled or disabled
      * @param td                            the table upon which this trigger is defined
      * @param whenSPSId                     the sps id for the when clause (may be null)
-     * @param actionSPSId                   the spsid for the trigger action (may be null)
+     * @param actionSPSIdList               the sps ids for the trigger actions (may be null)
      * @param creationTimestamp             when was this trigger created?
      * @param referencedCols                what columns does this trigger reference (may be null)
      * @param referencedColsInTriggerAction what columns does the trigger
      *                                      action reference through old/new transition variables (may be null)
-     * @param triggerDefinition             The original user text of the trigger action
+     * @param triggerDefinitionList         The original user texts of the trigger actions
      * @param referencingOld                whether or not OLD appears in REFERENCING clause
      * @param referencingNew                whether or not NEW appears in REFERENCING clause
      * @param oldReferencingName            old referencing table name, if any, that appears in REFERCING clause
@@ -131,6 +132,7 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
      * @param whenClauseText                the SQL text of the WHEN clause, or {@code null}
      *                                      if there is no WHEN clause
      */
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "DB-9292")
     public TriggerDescriptor(
             DataDictionary dataDictionary,
             SchemaDescriptor sd,
@@ -142,11 +144,11 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
             boolean isEnabled,
             TableDescriptor td,
             UUID whenSPSId,
-            UUID actionSPSId,
+            List<UUID> actionSPSIdList,
             Timestamp creationTimestamp,
             int[] referencedCols,
             int[] referencedColsInTriggerAction,
-            String triggerDefinition,
+            List<String> triggerDefinitionList,
             boolean referencingOld,
             boolean referencingNew,
             String oldReferencingName,
@@ -160,13 +162,13 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
         this.isBefore = isBefore;
         this.isRow = isRow;
         this.td = td;
-        this.actionSPSId = actionSPSId;
+        this.actionSPSIdList = actionSPSIdList;
         this.whenSPSId = whenSPSId;
         this.isEnabled = isEnabled;
         this.referencedCols = referencedCols;
         this.referencedColsInTriggerAction = referencedColsInTriggerAction;
         this.creationTimestamp = creationTimestamp;
-        this.triggerDefinition = triggerDefinition;
+        this.triggerDefinitionList = triggerDefinitionList;
         this.referencingOld = referencingOld;
         this.referencingNew = referencingNew;
         this.oldReferencingName = oldReferencingName;
@@ -174,6 +176,8 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
         this.triggerSchemaId = sd.getUUID();
         this.triggerTableId = td.getUUID();
         this.whenClauseText = whenClauseText;
+        this.numBaseTableColumns = td.getNumberOfColumns();
+        this.version = 1;
     }
     
     /**
@@ -227,6 +231,7 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
     /**
      * Get the time that this trigger was created.
      */
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9292")
     public Timestamp getCreationTimestamp() {
         return creationTimestamp;
     }
@@ -262,10 +267,17 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
     }
 
     /**
-     * Get the trigger action sps UUID
+     * Get the nth trigger action sps UUID
      */
-    public UUID getActionId() {
-        return actionSPSId;
+    public UUID getActionId(int index) {
+        return actionSPSIdList.get(index);
+    }
+
+    /**
+     * Get the trigger action sps UUID list
+     */
+    public List<UUID> getActionIdList() {
+        return actionSPSIdList;
     }
 
     /**
@@ -280,9 +292,15 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
      * @param lcc The LanguageConnectionContext to use.
      * @return the trigger action sps
      */
-    public SPSDescriptor getActionSPS(LanguageConnectionContext lcc) throws StandardException {
+    public SPSDescriptor getActionSPS(LanguageConnectionContext lcc, int index) throws StandardException {
 
-        return getSPS(lcc, false /* isWhenClause */);
+        return getSPS(lcc, index, null);
+
+    }
+
+    public SPSDescriptor getActionSPS(LanguageConnectionContext lcc, int index, ManagedCache<UUID, SPSDescriptor>localCache) throws StandardException {
+
+        return getSPS(lcc, index, localCache);
 
     }
 
@@ -290,34 +308,43 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
      * Get the SPS for the triggered SQL statement or the WHEN clause.
      *
      * @param lcc the LanguageConnectionContext to use
-     * @param isWhenClause {@code true} if the SPS for the WHEN clause is
-     *   requested, {@code false} if it is the triggered SQL statement
+     * @param index {@code -1} if the SPS for the WHEN clause is
+     *   requested, {@code >=0} if it is one of the triggered SQL statements
      * @return the requested SPS
      * @throws StandardException if an error occurs
      */
     private SPSDescriptor getSPS(LanguageConnectionContext lcc,
-                                 boolean isWhenClause)
+                                 int index, ManagedCache<UUID, SPSDescriptor>localCache)
             throws StandardException
     {
+        boolean isWhenClause = index == -1;
         DataDictionary dd = getDataDictionary();
-        SPSDescriptor sps = isWhenClause ? whenSPS : actionSPS;
-        UUID spsId = isWhenClause ? whenSPSId : actionSPSId;
-        String originalSQL = isWhenClause ? whenClauseText : triggerDefinition;
+        UUID spsId = isWhenClause ? whenSPSId : actionSPSIdList.get(index);
+        String originalSQL = isWhenClause ? whenClauseText : triggerDefinitionList.get(index);
+
+        //bug 4821 - do the sysstatement look up in a nested readonly
+        //transaction rather than in the user transaction. Because of
+        //this, the nested compile transaction which is attempting to
+        //compile the trigger will not run into any locking issues with
+        //the user transaction for sysstatements.
+
+        // KDW -- nested transaction for SPS retrieval not necessary for splice.  I hope.  This would
+        // fail for row trigger that were executing on remote nodes with SpliceTransactionView with which we
+        // cannot begin a new txn.
+        //  lcc.beginNestedTransaction(true);
+        SPSDescriptor sps = null;
+        if (localCache != null)
+            sps = localCache.getIfPresent(spsId);
 
         if (sps == null) {
-            //bug 4821 - do the sysstatement look up in a nested readonly
-            //transaction rather than in the user transaction. Because of
-            //this, the nested compile transaction which is attempting to
-            //compile the trigger will not run into any locking issues with
-            //the user transaction for sysstatements.
-
-            // KDW -- nested transaction for SPS retrieval not necessary for splice.  I hope.  This would
-            // fail for row trigger that were executing on remote nodes with SpliceTransactionView with which we
-            // cannot begin a new txn.
-            //  lcc.beginNestedTransaction(true);
             sps = dd.getSPSDescriptor(spsId);
-            // lcc.commitNestedTransaction();
+            if (localCache != null && sps != null)
+                localCache.put(spsId, sps);
         }
+
+        assert sps != null : "sps should not be null";
+
+        // lcc.commitNestedTransaction();
 
         //We need to regenerate the trigger action sql if
         //1)the trigger is found to be invalid,
@@ -343,29 +370,26 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
             lcc.popCompilerContext(newCC);
             int[] cols;
             cols = dd.examineTriggerNodeAndCols(stmtnode,
-					oldReferencingName,
-					newReferencingName,
-					originalSQL,
-					referencedCols,
-					referencedColsInTriggerAction,
-                                        0,
-					getTableDescriptor(),
-					null,
-                                        false,
-                                        null);
+                    oldReferencingName,
+                    newReferencingName,
+                    referencedCols,
+                    referencedColsInTriggerAction,
+                    getTableDescriptor(),
+                    null,
+                    false);
 
             String newText = dd.getTriggerActionString(stmtnode,
-					oldReferencingName,
-					newReferencingName,
-                                        originalSQL,
-					referencedCols,
-					referencedColsInTriggerAction,
-					0,
-					getTableDescriptor(),
-					null,
-                                        false,
-                                        null,
-                                        cols);
+                    oldReferencingName,
+                    newReferencingName,
+                    originalSQL,
+                    referencedCols,
+                    referencedColsInTriggerAction,
+                    0,
+                    getTableDescriptor(),
+                    null,
+                    false,
+                    null,
+                    cols);
             if (isWhenClause) {
                 // The WHEN clause is not a full SQL statement, just a search
                 // condition, so we need to turn it into a statement in order
@@ -379,6 +403,19 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
         }
 
         return sps;
+    }
+
+    public int getNumBaseTableColumns() {
+        if (numBaseTableColumns != 0)
+            return numBaseTableColumns;
+        else {
+            try {
+                return getTableDescriptor().getNumberOfColumns();
+            }
+            catch (StandardException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     /**
@@ -400,12 +437,12 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
     /**
      * Get the trigger when clause sps
      */
-    public SPSDescriptor getWhenClauseSPS(LanguageConnectionContext lcc) throws StandardException {
+    public SPSDescriptor getWhenClauseSPS(LanguageConnectionContext lcc, ManagedCache<UUID, SPSDescriptor> localCache) throws StandardException {
         if (whenSPSId == null) {
             // This trigger doesn't have a WHEN clause.
             return null;
         }
-        return getSPS(lcc, true /* isWhenClause */);
+        return getSPS(lcc, -1, localCache);
     }
 
     /**
@@ -423,6 +460,7 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
     /**
      * Get the referenced column array for this trigger, used in "alter table drop column", we get the handle and change it
      */
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9292")
     public int[] getReferencedCols() {
         return referencedCols;
     }
@@ -430,6 +468,7 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
     /**
      * Get the referenced column array for the trigger action columns.
      */
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9292")
     public int[] getReferencedColsInTriggerAction() {
         return referencedColsInTriggerAction;
     }
@@ -502,8 +541,16 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
     /**
      * Get the original trigger definition.
      */
-    public String getTriggerDefinition() {
-        return triggerDefinition;
+    public String getTriggerDefinition(int index) {
+        return triggerDefinitionList.get(index);
+    }
+
+    public List<String> getTriggerDefinitionList() {
+        return triggerDefinitionList;
+    }
+
+    public int getTriggerDefinitionSize() {
+        return triggerDefinitionList.size();
     }
 
     /**
@@ -518,6 +565,13 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
      */
     public boolean getReferencingNew() {
         return referencingNew;
+    }
+
+    /**
+     * Get whether or not the trigger has a REFERENCING clause.
+     */
+    public boolean hasReferencingClause() {
+        return getReferencingNew() || getReferencingOld();
     }
 
     /**
@@ -701,17 +755,20 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
         dm.clearDependencies(lcc, this);
 
         // Drop the spses
-        SPSDescriptor spsd = dd.getSPSDescriptor(this.getActionId());
+        for (UUID actionId: this.actionSPSIdList) {
+            SPSDescriptor spsd = dd.getSPSDescriptor(actionId);
 
-        // there shouldn't be any dependencies, but in case there are, lets clear them
-        dm.invalidateFor(spsd, DependencyManager.DROP_TRIGGER, lcc);
-        dm.clearDependencies(lcc, spsd);
-        dd.dropSPSDescriptor(spsd, tc);
-        // Remove all TECs from trigger stack. They will need to be rebuilt.
+            // there shouldn't be any dependencies, but in case there are, lets clear them
+            dm.invalidateFor(spsd, DependencyManager.DROP_TRIGGER, lcc);
+            dm.clearDependencies(lcc, spsd);
+            dd.dropSPSDescriptor(spsd, tc);
+            // Remove all TECs from trigger stack. They will need to be rebuilt.
+        }
+
         lcc.popAllTriggerExecutionContexts();
 
         if (getWhenClauseId() != null) {
-            spsd = dd.getSPSDescriptor(getWhenClauseId());
+            SPSDescriptor spsd = dd.getSPSDescriptor(getWhenClauseId());
             dm.invalidateFor(spsd, DependencyManager.DROP_TRIGGER, lcc);
             dm.clearDependencies(lcc, spsd);
             dd.dropSPSDescriptor(spsd, tc);
@@ -734,6 +791,7 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
      */
     @Override
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+        Object obj;
         id = (UUID) in.readObject();
         name = (String) in.readObject();
         triggerSchemaId = (UUID) in.readObject();
@@ -743,7 +801,11 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
         isRow = in.readBoolean();
         isEnabled = in.readBoolean();
         whenSPSId = (UUID) in.readObject();
-        actionSPSId = (UUID) in.readObject();
+        obj = in.readObject();
+        if (obj instanceof UUID) {
+            actionSPSIdList = new ArrayList<>();
+            actionSPSIdList.add((UUID) obj);
+        }
         int length = in.readInt();
         if (length != 0) {
             referencedCols = new int[length];
@@ -758,7 +820,11 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
                 referencedColsInTriggerAction[i] = in.readInt();
             }
         }
-        triggerDefinition = (String) in.readObject();
+        obj = in.readObject();
+        if (obj instanceof String) {
+            triggerDefinitionList = new ArrayList<>();
+            triggerDefinitionList.add((String) obj);
+        }
         referencingOld = in.readBoolean();
         referencingNew = in.readBoolean();
         oldReferencingName = (String) in.readObject();
@@ -803,7 +869,7 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
         out.writeBoolean(isRow);
         out.writeBoolean(isEnabled);
         out.writeObject(whenSPSId);
-        out.writeObject(actionSPSId);
+        out.writeObject(actionSPSIdList.size() == 1 ? actionSPSIdList.get(0) : null);
         if (referencedCols == null) {
             out.writeInt(0);
         } else {
@@ -820,7 +886,7 @@ public class TriggerDescriptor extends TupleDescriptor implements UniqueSQLObjec
                 out.writeInt(aReferencedColsInTriggerAction);
             }
         }
-        out.writeObject(triggerDefinition);
+        out.writeObject(triggerDefinitionList.size() == 1 ? triggerDefinitionList.get(0) : null);
         out.writeBoolean(referencingOld);
         out.writeBoolean(referencingNew);
         out.writeObject(oldReferencingName);

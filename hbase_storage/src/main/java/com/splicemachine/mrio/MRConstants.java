@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -41,4 +41,5 @@ public class MRConstants {
     final public static String TABLE_WRITER_TYPE = "table.writer.type";
     final public static String REGION_LOCATION = "region.location";
     final public static String COMPACTION_FILES = "compaction.files";
+    final public static String SPLICE_SCAN_INPUT_SPLITS_ID = "splice.scan.input.splits.id";
 }

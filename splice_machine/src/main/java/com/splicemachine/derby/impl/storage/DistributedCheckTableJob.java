@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -39,6 +39,8 @@ public class DistributedCheckTableJob extends DistributedJob implements External
     String tableName;
     String jobGroup;
     List<DDLMessage.TentativeIndex> tentativeIndexList;
+    boolean fix;
+    boolean isSystemTable;
 
     public DistributedCheckTableJob(){
     }
@@ -48,13 +50,17 @@ public class DistributedCheckTableJob extends DistributedJob implements External
                                     String schemaName,
                                     String tableName,
                                     List<DDLMessage.TentativeIndex> tentativeIndexList,
-                                    String jobGroup) {
+                                    boolean fix,
+                                    String jobGroup,
+                                    boolean isSystemTable) {
         this.ah = ah;
         this.txn = txn;
         this.schemaName = schemaName;
         this.tableName = tableName;
         this.tentativeIndexList = tentativeIndexList;
+        this.fix = fix;
         this.jobGroup = jobGroup;
+        this.isSystemTable = isSystemTable;
     }
 
 
@@ -78,7 +84,9 @@ public class DistributedCheckTableJob extends DistributedJob implements External
             in.readFully(message);
             tentativeIndexList.add(DDLMessage.TentativeIndex.parseFrom(message));
         }
+        fix = in.readBoolean();
         jobGroup = in.readUTF();
+        isSystemTable = in.readBoolean();
     }
 
     @Override
@@ -93,7 +101,9 @@ public class DistributedCheckTableJob extends DistributedJob implements External
             out.writeInt(message.length);
             out.write(message);
         }
+        out.writeBoolean(fix);
         out.writeUTF(jobGroup);
+        out.writeBoolean(isSystemTable);
     }
 
     @Override

@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -120,7 +120,7 @@ public class LogicalDatabaseMetaData40
     /** See DatabaseMetaData javadoc */
     public  boolean generatedKeyAlwaysReturned() throws SQLException
     {
-        return ((com.splicemachine.db.client.am.DatabaseMetaData) getRealMetaDataObject()).generatedKeyAlwaysReturned();
+        return ((ClientDatabaseMetaData) getRealMetaDataObject()).generatedKeyAlwaysReturned();
     }
 
 	/**
@@ -131,7 +131,7 @@ public class LogicalDatabaseMetaData40
         ( String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern )
         throws SQLException
 	{
-		return ((com.splicemachine.db.client.am.DatabaseMetaData) getRealMetaDataObject()).getPseudoColumns
+		return ((ClientDatabaseMetaData) getRealMetaDataObject()).getPseudoColumns
             ( catalog, schemaPattern, tableNamePattern, columnNamePattern );
 	}
 

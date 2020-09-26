@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -81,7 +81,7 @@ public class FlatteningUtils {
      */
     public static ValueNode findCorrelatedSubqueryPredicates(ValueNode root,
                                                              List<BinaryRelationalOperatorNode> predToSwitch,
-                                                             org.spark_project.guava.base.Predicate<BinaryRelationalOperatorNode> bronPredicate) {
+                                                             splice.com.google.common.base.Predicate<BinaryRelationalOperatorNode> bronPredicate) {
         if (root instanceof AndNode) {
             AndNode andNode = (AndNode) root;
             ValueNode left = findCorrelatedSubqueryPredicates(andNode.getLeftOperand(), predToSwitch, bronPredicate);

@@ -25,14 +25,13 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
 package com.splicemachine.db.iapi.store.access;
 
 import com.splicemachine.db.iapi.error.StandardException;
-import com.splicemachine.db.iapi.services.context.ContextManager;
 import com.splicemachine.db.iapi.services.io.FormatableBitSet;
 import com.splicemachine.db.iapi.services.io.Storable;
 import com.splicemachine.db.iapi.services.locks.CompatibilitySpace;
@@ -1478,15 +1477,6 @@ public interface TransactionController
 	void destroy();
 
     /**
-     * Get the context manager that the transaction was created with.
-     * <p>
-     *
-	 * @return The context manager that the transaction was created with.
-     *
-     **/
-	ContextManager getContextManager();
-
-    /**
      * Get string id of the transaction.
      * <p>
      * This transaction "name" will be the same id which is returned in
@@ -1662,4 +1652,10 @@ public interface TransactionController
 
 
     boolean isElevated();
+
+    String getCatalogVersion(long conglomerateNumber) throws StandardException;
+
+    void setCatalogVersion(long conglomerteNumber, String version) throws StandardException;
+
+	long getActiveStateTxId();
 }

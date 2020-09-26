@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -71,7 +71,7 @@ public class TableScanPredicateFunction<Op extends SpliceOperation> extends Spli
         try {
             if (!initialized) {
                 initialized = true;
-                op = (ScanOperation) getOperation();
+                op = getOperation() instanceof ScanOperation ? (ScanOperation) getOperation() : null;
                 if (op != null) {
                     this.qualifiers = op.getScanInformation().getScanQualifiers();
                     this.baseColumnMap = op.getOperationInformation().getBaseColumnMap();

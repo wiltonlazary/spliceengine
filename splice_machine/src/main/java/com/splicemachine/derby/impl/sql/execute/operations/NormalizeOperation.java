@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -31,7 +31,7 @@ import com.splicemachine.derby.stream.iapi.DataSetProcessor;
 import com.splicemachine.derby.stream.iapi.OperationContext;
 import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.base.Strings;
+import splice.com.google.common.base.Strings;
 
 import java.io.IOException;
 import java.io.ObjectInput;
@@ -286,7 +286,10 @@ public class NormalizeOperation extends SpliceBaseOperation{
         if (!isOpen)
             throw new IllegalStateException("Operation is not open");
 
+        dsp.incrementOpDepth();
         DataSet<ExecRow> sourceSet=source.getDataSet(dsp);
+        dsp.decrementOpDepth();
+        dsp.prependSpliceExplainString(this.explainPlan);
         OperationContext operationContext=dsp.createOperationContext(this);
         operationContext.pushScope();
         try{

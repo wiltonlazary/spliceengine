@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -387,8 +387,10 @@ public class ValueRow implements ExecRow, Externalizable {
 	public void writeExternal(ObjectOutput out) throws IOException {
 		out.writeInt(hash);
 		out.writeInt(ncols);
-		for (DataValueDescriptor desc: column) {
-			out.writeObject(desc);
+		if (ncols > 0) {
+			for (DataValueDescriptor desc : column) {
+				out.writeObject(desc);
+			}
 		}
 	}
 

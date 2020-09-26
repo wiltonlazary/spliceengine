@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -22,8 +22,9 @@ import com.splicemachine.db.iapi.reference.Property;
 import com.splicemachine.db.iapi.services.context.ContextManager;
 import com.splicemachine.db.iapi.services.context.ContextService;
 import com.splicemachine.db.iapi.services.monitor.Monitor;
-import com.splicemachine.db.iapi.sql.compile.CompilerContext;
+import com.splicemachine.db.iapi.sql.compile.DataSetProcessorType;
 import com.splicemachine.db.iapi.sql.conn.LanguageConnectionContext;
+import com.splicemachine.db.iapi.store.access.TransactionController;
 import com.splicemachine.db.iapi.util.IdUtil;
 import com.splicemachine.db.impl.sql.catalog.ManagedCache;
 import com.splicemachine.db.jdbc.InternalDriver;
@@ -31,7 +32,7 @@ import com.splicemachine.derby.impl.db.SpliceDatabase;
 import com.splicemachine.si.api.txn.TxnView;
 import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.base.Optional;
+import splice.com.google.common.base.Optional;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -39,7 +40,7 @@ import java.util.Properties;
 
 public final class SpliceTransactionResourceImpl implements AutoCloseable{
     private static final Logger LOG=Logger.getLogger(SpliceTransactionResourceImpl.class);
-    public static String CONNECTION_STRING = "jdbc:splice:"+ SQLConfiguration.SPLICE_DB+";create=true";
+    public static final String CONNECTION_STRING = "jdbc:splice:"+ SQLConfiguration.SPLICE_DB+";create=true";
     protected ContextManager cm;
     protected ContextService csf;
     protected String username;
@@ -82,7 +83,12 @@ public final class SpliceTransactionResourceImpl implements AutoCloseable{
         return this.marshallTransaction(txn, null);
     }
 
-    public boolean marshallTransaction(TxnView txn, ManagedCache<String, Optional<String>> propertyCache) throws StandardException, SQLException{
+    public boolean marshallTransaction(TxnView txn, ManagedCache<String, Optional<String>> propertyCache) throws StandardException, SQLException {
+        return this.marshallTransaction(txn, propertyCache, null, null, null);
+    }
+
+    public boolean marshallTransaction(TxnView txn, ManagedCache<String, Optional<String>> propertyCache,
+                                       TransactionController reuseTC, String localUserName, Integer sessionNumber) throws StandardException, SQLException{
         boolean updated = false;
         try {
             if (LOG.isDebugEnabled()) {
@@ -93,12 +99,17 @@ public final class SpliceTransactionResourceImpl implements AutoCloseable{
             csf.setCurrentContextManager(cm);
             updated = true;
 
+            String userName = localUserName != null ? localUserName : username;
             ArrayList<String> grouplist = new ArrayList<>();
-            grouplist.add(username);
+            grouplist.add(userName);
             if (propertyCache != null) {
                 database.getDataDictionary().getDataDictionaryCache().setPropertyCache(propertyCache);
             }
-            lcc=database.generateLanguageConnectionContext(txn, cm, username,grouplist,drdaID, dbname, rdbIntTkn, CompilerContext.DataSetProcessorType.DEFAULT_CONTROL,false, -1, ipAddress);
+
+            lcc=database.generateLanguageConnectionContext(txn, cm, userName,grouplist,drdaID, dbname, rdbIntTkn,
+                                                           DataSetProcessorType.DEFAULT_CONTROL,
+                                                           false, -1, ipAddress,
+                                                            reuseTC);
 
             return true;
         } catch (Throwable t) {
@@ -112,7 +123,7 @@ public final class SpliceTransactionResourceImpl implements AutoCloseable{
 
     public void close(){
         csf.resetCurrentContextManager(cm);
-        csf.removeContext(cm);
+        csf.removeContextManager(cm);
     }
 
     public LanguageConnectionContext getLcc(){

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -15,8 +15,8 @@
 package com.splicemachine.derby.impl.store.access.base;
 
 import com.carrotsearch.hppc.BitSet;
-import org.spark_project.guava.base.Function;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.base.Function;
+import splice.com.google.common.collect.Lists;
 import com.splicemachine.access.api.PartitionFactory;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.io.FormatableBitSet;
@@ -51,7 +51,7 @@ import java.util.List;
 import java.util.Properties;
 
 public abstract class SpliceController implements ConglomerateController{
-    protected static Logger LOG=Logger.getLogger(SpliceController.class);
+    protected static final Logger LOG=Logger.getLogger(SpliceController.class);
     protected OpenSpliceConglomerate openSpliceConglomerate;
     private PartitionFactory partitionFactory;
     protected BaseSpliceTransaction trans;
@@ -168,13 +168,15 @@ public abstract class SpliceController implements ConglomerateController{
         return batchFetch(locations,destRows,validColumns,false);
     }
     @Override
-    public boolean batchFetch(List<RowLocation> locations, List<ExecRow> destRows,FormatableBitSet validColumns,boolean waitForLock) throws StandardException{
-        if (locations.isEmpty())
+    public boolean batchFetch(List<RowLocation> locations, List<ExecRow> destRows, FormatableBitSet validColumns, boolean waitForLock) throws StandardException{
+        if (locations.size() != destRows.size())
             return false;
+        if (locations.isEmpty())
+            return true;
         Partition htable = getTable();
         KeyHashDecoder rowDecoder = null;
         try{
-            DataGet baseGet=opFactory.newDataGet(trans.getTxnInformation(),locations.get(0).getBytes(),null);
+            DataGet baseGet=opFactory.newDataGet(trans.getTxnInformation(), locations.get(0).getBytes(),null);
             baseGet.returnAllVersions();
             DataGet get = createGet(baseGet,destRows.get(0).getRowArray(),validColumns);//loc,destRow,validColumns,trans.getTxnInformation());
             Iterator<DataResult> results = htable.batchGet(get, Lists.transform(locations, ROWLOCATION_TO_BYTES));
@@ -185,18 +187,19 @@ public abstract class SpliceController implements ConglomerateController{
             while (results.hasNext()) {
                 DataResult result = results.next();
                 DataValueDescriptor[] destRow = destRows.get(i).getRowArray();
-                if (serializers ==null) {
+                if (serializers == null) {
                     serializers = VersionedSerializers.forVersion(tableVersion, true).getSerializers(destRow);
-                    rowDecoder=new EntryDataDecoder(cols,null,serializers);
+                    rowDecoder = new EntryDataDecoder(cols,null, serializers);
                 }
-                ExecRow row=new ValueRow(destRow.length);
+                ExecRow row = new ValueRow(destRow.length);
                 row.setRowArray(destRow);
                 row.resetRowArray();
-                DataCell keyValue=result.userData();
-                rowDecoder.set(keyValue.valueArray(),keyValue.valueOffset(),keyValue.valueLength());
+                DataCell keyValue = result.userData();
+                rowDecoder.set(keyValue.valueArray(), keyValue.valueOffset(), keyValue.valueLength());
                 rowDecoder.decode(row);
                 i++;
             }
+            assert i == locations.size();
             return true;
         }catch(Exception e){
             throw Exceptions.parseException(e);

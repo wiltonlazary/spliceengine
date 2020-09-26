@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -1214,6 +1214,32 @@ public class StatisticsAdminIT extends SpliceUnitTest {
 
         rowContainsQuery(new int[]{3}, format("explain select * from %s.t6 where a6=5", SCHEMA4), methodWatcher,
                 new String[]{"scannedRows=1,outputRows=1", "partitions=4,preds=[(A6[0:1] = 6)]"});
+    }
+
+    @Test
+    public void testCollectStatsWithMoreSplits() throws Exception {
+        /* step 1 create and populate the table */
+        methodWatcher4.execute("create table TAB_WITH_MORE_SPLITS(a1 int, b1 char(200), c1 char(200))");
+        methodWatcher4.execute("insert into TAB_WITH_MORE_SPLITS values (1,'a', 'a'), (2,'b','b'), (3,'c','c'), (4,'d','d'), (5,'e','e'), (6,'f','f'), (7,'g','g'),(8,'h','h'), (9,'i','i'), (10,'j','j')");
+        for (int i=0; i<12; i++)
+            methodWatcher4.execute("insert into TAB_WITH_MORE_SPLITS select * from TAB_WITH_MORE_SPLITS");
+
+        methodWatcher4.execute(format("call syscs_util.syscs_flush_table('%s', 'TAB_WITH_MORE_SPLITS')", SCHEMA4));
+
+        /* step 2: run analyze, the result should indicate only one partition despite the fact that we use minimal
+         * of 8 splits per region */
+        ResultSet rs = methodWatcher4.executeQuery("analyze table TAB_WITH_MORE_SPLITS");
+        if (rs.next()) {
+            // get the number of regions/partitions
+            long numOfRegions = rs.getLong(6);
+            assertEquals("Region number does not match, expected: 1, actual: "+numOfRegions, 1, numOfRegions);
+        } else {
+            Assert.fail("Expected to have one row returned!");
+        }
+        rs.close();
+
+        /* step 3: clean up */
+        methodWatcher4.execute("drop table TAB_WITH_MORE_SPLITS");
     }
 
     /* ****************************************************************************************************************/

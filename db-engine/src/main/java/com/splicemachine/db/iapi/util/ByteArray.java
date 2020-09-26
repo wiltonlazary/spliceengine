@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -61,6 +61,9 @@ public final class ByteArray implements Externalizable {
         this(array, 0, array.length);
     }
 
+    // Attention: Don't change the default ctor because the logic of loading an
+    // activation tests whether bytecode array == null or not. If it's null, an
+    // activation is loaded by reflection, otherwise bytecode is read.
     public ByteArray() {
     }
 

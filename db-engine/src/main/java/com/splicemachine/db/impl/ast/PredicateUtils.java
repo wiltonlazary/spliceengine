@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -33,7 +33,7 @@ package com.splicemachine.db.impl.ast;
 
 import com.splicemachine.db.iapi.sql.compile.OptimizablePredicate;
 import com.splicemachine.db.impl.sql.compile.*;
-import org.spark_project.guava.base.Function;
+import splice.com.google.common.base.Function;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,7 +43,7 @@ import java.util.List;
  */
 public class PredicateUtils {
 
-    public static org.spark_project.guava.base.Predicate<Predicate> isEquiJoinPred = new org.spark_project.guava.base.Predicate<Predicate>() {
+    public static final splice.com.google.common.base.Predicate<Predicate> isEquiJoinPred = new splice.com.google.common.base.Predicate<Predicate>() {
         @Override
         public boolean apply(Predicate p) {
             return p != null &&
@@ -55,7 +55,7 @@ public class PredicateUtils {
     /**
      * Return string representation of Derby Predicate
      */
-    public static Function<Predicate, String> predToString = new Function<Predicate, String>() {
+    public static final Function<Predicate, String> predToString = new Function<Predicate, String>() {
         @Override
         public String apply(Predicate predicate) {
             if (predicate == null) {

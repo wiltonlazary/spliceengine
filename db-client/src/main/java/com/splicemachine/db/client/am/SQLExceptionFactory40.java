@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -98,6 +98,8 @@ public class SQLExceptionFactory40 extends SQLExceptionFactory {
             ex = new SQLFeatureNotSupportedException(message, sqlState, 
                     errCode);
         } else if (sqlState.equals(SQLState.LANG_STATEMENT_CANCELLED_OR_TIMED_OUT.substring(0, 5))) {
+            ex = new SQLTimeoutException(message, sqlState, errCode);
+        } else if (sqlState.equals(SQLState.LANG_CANCELLATION_EXCEPTION)) {
             ex = new SQLTimeoutException(message, sqlState, errCode);
         } else {
             ex = new SQLException(message, sqlState, errCode); 

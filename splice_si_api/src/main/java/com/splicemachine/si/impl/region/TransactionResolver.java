@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -24,6 +24,7 @@ import com.splicemachine.si.api.txn.TxnSupplier;
 import com.splicemachine.si.api.txn.TxnView;
 import com.splicemachine.si.api.txn.lifecycle.TxnPartition;
 import com.splicemachine.si.coprocessor.TxnMessage;
+import com.splicemachine.si.impl.driver.SIDriver;
 import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.log4j.Logger;
 import java.io.IOException;
@@ -190,6 +191,11 @@ public class TransactionResolver{
     }
 
     private void resolveTimeOut(TxnPartition txnPartition,TxnMessage.Txn txn) {
+        if (SIDriver.driver() != null) {
+            String role = SIDriver.driver().lifecycleManager().getReplicationRole();
+            if (role != null && role.equals("REPLICA"))
+                return;
+        }
         long txnId = txn.getInfo().getTxnId();
         SpliceLogUtils.trace(LOG,"Moving Txn %d from timed out to outright rolled back",txnId);
         try{

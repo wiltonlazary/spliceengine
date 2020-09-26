@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -15,6 +15,8 @@
 package com.splicemachine.pipeline.testsetup;
 
 import com.splicemachine.access.api.PartitionCreator;
+import com.splicemachine.derby.hbase.SpliceIndexEndpoint;
+import com.splicemachine.derby.hbase.SpliceIndexObserver;
 import com.splicemachine.lifecycle.DatabaseLifecycleManager;
 import com.splicemachine.pipeline.ContextFactoryDriverService;
 import com.splicemachine.pipeline.ManualContextFactoryLoader;
@@ -25,8 +27,6 @@ import com.splicemachine.pipeline.contextfactory.ContextFactoryLoader;
 import com.splicemachine.pipeline.contextfactory.ReferenceCountingFactoryDriver;
 import com.splicemachine.si.testsetup.HBaseSITestEnv;
 import com.splicemachine.derby.hbase.HBasePipelineEnvironment;
-import com.splicemachine.derby.hbase.SpliceIndexEndpoint;
-import com.splicemachine.derby.hbase.SpliceIndexObserver;
 import org.apache.log4j.Level;
 
 import java.io.IOException;
@@ -49,7 +49,7 @@ public class HPipelineTestEnv extends HBaseSITestEnv implements PipelineTestEnv{
         ContextFactoryDriverService.setDriver(ctxFactoryLoader);
         //pass in rsServices = null because we don't need the extra safety for these tests
         this.env = HBasePipelineEnvironment.loadEnvironment(super.getClock(),ctxFactoryLoader);
-        DatabaseLifecycleManager.manager().start(); //start the database
+        DatabaseLifecycleManager.manager().start(null); //start the database
     }
 
     @Override

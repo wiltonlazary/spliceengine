@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -18,8 +18,8 @@ import com.splicemachine.db.iapi.sql.conn.ControlExecutionLimiter;
 import com.splicemachine.db.iapi.sql.conn.StatementContext;
 import com.splicemachine.derby.stream.function.AbstractSpliceFunction;
 import com.splicemachine.derby.stream.iapi.OperationContext;
-import org.spark_project.guava.base.Function;
-import org.spark_project.guava.collect.*;
+import splice.com.google.common.base.Function;
+import splice.com.google.common.collect.*;
 import scala.Tuple2;
 import javax.annotation.Nullable;
 import java.util.Collection;

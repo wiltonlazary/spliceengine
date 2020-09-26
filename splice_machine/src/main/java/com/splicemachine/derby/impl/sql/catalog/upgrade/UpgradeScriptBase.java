@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -54,24 +54,11 @@ public class UpgradeScriptBase implements UpgradeScript {
     protected void upgradeSystemTables() throws StandardException {
     }
 
-    protected void upgradeSystemProcedures() throws StandardException{
-        if(LOG.isInfoEnabled()) LOG.info("Upgrading system procedures");
-        sdd.createOrUpdateAllSystemProcedures(tc);
-    }
-
     protected void upgradeSystemFunctions() throws StandardException {
 
     }
-
-    protected void upgradeSystemStoredStatements() throws StandardException {
-        if(LOG.isInfoEnabled()) LOG.info("Updating system prepared statements");
-        sdd.updateMetadataSPSes(tc);
-    }
-
     public void run() throws StandardException{
     	upgradeSystemTables();
-    	upgradeSystemProcedures();
     	upgradeSystemFunctions();
-    	upgradeSystemStoredStatements();
     }
 }

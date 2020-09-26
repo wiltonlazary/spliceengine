@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -153,8 +153,14 @@ public abstract class AbstractTxnView implements TxnView {
           }
 
           if(otherTxn.descendsFrom(this)){
-              //we are an ancestor, so use READ_COMMITTED/READ_UNCOMMITTED semantics
+              // We are an ancestor, so use READ_COMMITTED semantics,
+              // unless there is an active writeable transaction or rolled back
+              // transaction in the lineage.
               Txn.IsolationLevel level = isolationLevel;
+              if (otherTxn.hasActiveWriteableOrRolledBackTransactionInLineage(this,
+                                level == Txn.IsolationLevel.READ_UNCOMMITTED))
+                  return false;
+
               if(level== Txn.IsolationLevel.SNAPSHOT_ISOLATION)
                   level = Txn.IsolationLevel.READ_COMMITTED;
 
@@ -297,6 +303,25 @@ public abstract class AbstractTxnView implements TxnView {
         return false;
     }
 
+    @Override
+    public boolean hasActiveWriteableOrRolledBackTransactionInLineage(TxnView ancestor, boolean checkForRollbackOnly) {
+        TxnView t = this;
+        while(!t.equals(Txn.ROOT_TRANSACTION)){
+            if(t.equivalent(ancestor)) {
+                return false;
+            }
+            if (t.allowsWrites()) {
+                if (t.getState() == Txn.State.ROLLEDBACK)
+                    return true;
+                if (!checkForRollbackOnly &&
+                    t.getState() == Txn.State.ACTIVE)
+                    return true;
+            }
+            t = t.getParentTxnView();
+        }
+        return false;
+    }
+
     @SuppressFBWarnings("BC_EQUALS_METHOD_SHOULD_WORK_FOR_ALL_OBJECTS")
     @SuppressWarnings("EqualsWhichDoesntCheckParameterClass")
     @Override
@@ -310,6 +335,7 @@ public abstract class AbstractTxnView implements TxnView {
     public boolean equivalent(TxnView o) {
         if (this == o) return true;
         if (o == null) return false;
+        if (o instanceof PastTxn) return false;
         return (txnId & SIConstants.TRANSANCTION_ID_MASK) == (o.getTxnId() & SIConstants.TRANSANCTION_ID_MASK);
     }
 

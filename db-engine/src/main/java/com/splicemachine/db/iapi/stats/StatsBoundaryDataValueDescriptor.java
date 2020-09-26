@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.db.iapi.stats;
@@ -38,11 +38,8 @@ import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.iapi.types.DataValueFactoryImpl;
 import com.yahoo.sketches.quantiles.ItemsSketch;
 import com.yahoo.sketches.theta.UpdateSketch;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeArrayWriter;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.types.StructField;
 import org.joda.time.DateTime;
 
@@ -58,6 +55,7 @@ import java.util.Calendar;
  * Implementation that allows for (,[ bounding to be applied to start and stop keys for statistics.
  *
  */
+@SuppressFBWarnings(value = "SE_NO_SUITABLE_CONSTRUCTOR_FOR_EXTERNALIZATION", justification="intended")
 public class StatsBoundaryDataValueDescriptor implements DataValueDescriptor {
     DataValueDescriptor dvd;
     public StatsBoundaryDataValueDescriptor(DataValueDescriptor dvd) {
@@ -380,6 +378,16 @@ public class StatsBoundaryDataValueDescriptor implements DataValueDescriptor {
     }
 
     @Override
+    public DataValueDescriptor min(DataValueDescriptor[] list, DataValueDescriptor returnValue) throws StandardException {
+        return dvd.min(list,returnValue);
+    }
+
+    @Override
+    public DataValueDescriptor max(DataValueDescriptor[] list, DataValueDescriptor returnValue) throws StandardException {
+        return dvd.max(list,returnValue);
+    }
+
+    @Override
     public BooleanDataValue in(DataValueDescriptor left, DataValueDescriptor[] inList, boolean orderedList) throws StandardException {
         return dvd.in(left,inList,orderedList);
     }
@@ -432,16 +440,6 @@ public class StatsBoundaryDataValueDescriptor implements DataValueDescriptor {
     @Override
     public DataValueFactoryImpl.Format getFormat() {
         return dvd.getFormat();
-    }
-
-    @Override
-    public void write(UnsafeRowWriter unsafeRowWriter, int ordinal) throws StandardException {
-        dvd.write(unsafeRowWriter,ordinal);
-    }
-
-    @Override
-    public void read(UnsafeRow unsafeRow, int ordinal) throws StandardException {
-        dvd.read(unsafeRow,ordinal);
     }
 
     @Override
@@ -517,16 +515,6 @@ public class StatsBoundaryDataValueDescriptor implements DataValueDescriptor {
     @Override
     public DataValueDescriptor setArray(DataValueDescriptor[] theValue, DataValueDescriptor dvd) throws StandardException {
         return dvd.setArray(theValue,dvd);
-    }
-
-    @Override
-    public void writeArray(UnsafeArrayWriter unsafeArrayWriter, int ordinal) throws StandardException {
-        dvd.writeArray(unsafeArrayWriter, ordinal);
-    }
-
-    @Override
-    public void read(UnsafeArrayData unsafeArrayData, int ordinal) throws StandardException {
-        dvd.read(unsafeArrayData, ordinal);
     }
 
     @Override

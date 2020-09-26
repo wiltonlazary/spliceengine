@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -24,11 +24,14 @@ import java.util.Map;
  * @author Scott Fines
  *         Date: 12/17/15
  */
-public class HScan implements DataScan{
+public class HScan implements DataScan {
+    // Sane default to prevent big scans causing memory pressure on the RegionServer
+    private final static int DEFAULT_CACHING = 1000;
     private Scan scan;
 
     public HScan(){
         this.scan = new Scan();
+        this.scan.setCaching(DEFAULT_CACHING);
     }
 
     public HScan(Scan scan){

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,8 +14,8 @@
 package com.splicemachine.db.impl.sql.catalog;
 
 
-import org.spark_project.guava.cache.Cache;
-import org.spark_project.guava.cache.CacheBuilder;
+import splice.com.google.common.cache.Cache;
+import splice.com.google.common.cache.CacheBuilder;
 
 import java.beans.ConstructorProperties;
 import java.io.Externalizable;
@@ -27,7 +27,7 @@ import java.util.Map;
 
 public class ManagedCache<K, V> implements ManagedCacheMBean, GenericManagedCacheIFace<K, V>, Externalizable {
 
-    private org.spark_project.guava.cache.Cache<K,V> managedCache;
+    private splice.com.google.common.cache.Cache<K,V> managedCache;
     private long maxSize = 0;
 
     @ConstructorProperties({"managedCache"})

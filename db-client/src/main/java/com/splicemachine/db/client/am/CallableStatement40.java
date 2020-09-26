@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -61,7 +61,7 @@ public class CallableStatement40 extends com.splicemachine.db.client.am.Callable
      * @throws SqlException
      */
     public CallableStatement40(Agent agent,
-        Connection connection,
+        ClientConnection connection,
         String sql,
         int type, int concurrency, int holdability,
         ClientPooledConnection cpc) throws SqlException {

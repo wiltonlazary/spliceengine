@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -70,7 +70,8 @@ public class StatementTriggerExecutor extends GenericTriggerExecutor {
     @Override
     void fireTrigger(TriggerEvent event,
                      CursorResultSet rs,
-                     int[] colsReadFromTable) throws StandardException {
+                     int[] colsReadFromTable,
+                     boolean deferCleanup) throws StandardException {
         tec.setTrigger(triggerd);
         tec.setCurrentTriggerEvent(event);
         tec.setTriggeringResultSet(rs);
@@ -79,7 +80,7 @@ public class StatementTriggerExecutor extends GenericTriggerExecutor {
             executeWhenClauseAndAction();
         } finally {
             clearSPS();
-            tec.clearTrigger();
+            tec.clearTrigger(deferCleanup);
         }
     }
 }

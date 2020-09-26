@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -56,14 +56,4 @@ public abstract class DistributedFileSystem {
     public abstract boolean createDirectory(String fullPath,boolean errorIfExists) throws IOException;
 
     public abstract void touchFile(String dir, String fileName) throws IOException;
-
-    /**
-     * Append sources to target, deleting sources after the copy.
-     * @param target path to which to write. Expecting exists and is writable.
-     * @param sources paths from which to read.  Expecting exists and are readable.
-     *                These will be deleted.
-     */
-    public void concat(Path target, Path... sources)  throws IOException {
-        throw new UnsupportedOperationException("IMPLEMENT concat");
-    }
 }

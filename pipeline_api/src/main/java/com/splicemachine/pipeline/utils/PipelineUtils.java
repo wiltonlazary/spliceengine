@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -23,8 +23,9 @@ import com.splicemachine.pipeline.client.BulkWrite;
 import com.splicemachine.pipeline.client.BulkWriteResult;
 import com.splicemachine.pipeline.client.WriteResult;
 import com.splicemachine.utils.SpliceLogUtils;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 import java.util.*;
 
@@ -34,6 +35,7 @@ import java.util.*;
  */
 public class PipelineUtils{
     private static final Logger LOG=Logger.getLogger(PipelineUtils.class);
+    @SuppressFBWarnings(value = "MS_PKGPROTECT", justification = "DB-9844")
     public static final int RETRY_BACKOFF[] = {1, 2, 3, 5, 10, 20, 40, 100, 100, 100, 100, 200, 200};
     private static final Random RANDOM = new Random();
     public static final PreFlushHook noOpFlushHook = new PreFlushHook() {

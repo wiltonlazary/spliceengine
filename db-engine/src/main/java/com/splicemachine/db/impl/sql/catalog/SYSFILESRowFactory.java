@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -34,13 +34,7 @@ package com.splicemachine.db.impl.sql.catalog;
 import com.splicemachine.db.iapi.services.sanity.SanityManager;
 import com.splicemachine.db.iapi.error.StandardException;
 
-import com.splicemachine.db.iapi.sql.dictionary.CatalogRowFactory;
-import com.splicemachine.db.iapi.sql.dictionary.DataDescriptorGenerator;
-import com.splicemachine.db.iapi.sql.dictionary.DataDictionary;
-import com.splicemachine.db.iapi.sql.dictionary.SchemaDescriptor;
-import com.splicemachine.db.iapi.sql.dictionary.FileInfoDescriptor;
-import com.splicemachine.db.iapi.sql.dictionary.SystemColumn;
-import com.splicemachine.db.iapi.sql.dictionary.TupleDescriptor;
+import com.splicemachine.db.iapi.sql.dictionary.*;
 import com.splicemachine.db.iapi.types.SQLChar;
 import com.splicemachine.db.iapi.types.SQLLongint;
 import com.splicemachine.db.iapi.types.SQLVarchar;
@@ -75,13 +69,13 @@ public class SYSFILESRowFactory extends CatalogRowFactory {
 
     static final int		SYSFILES_INDEX1_ID = 0;
     static final int		SYSFILES_INDEX2_ID = 1;
-	static final int		SYSFILES_INDEX3_ID = 2;
 
 	private static final int[][] indexColumnPositions = {
 		{NAME_COL_NUM, SCHEMA_ID_COL_NUM},
-		{ID_COL_NUM},
-			{SCHEMA_ID_COL_NUM}
+		{ID_COL_NUM}
 	};
+	// The SYSFILES_INDEX3(SCHEMA_ID_COL_NUM) UUID: "80000000-00d3-e222-be7c-000a0a0b1900"
+	// It was dropped in DB-6376 for supporting more Jars in one schema
 
     private	static	final	boolean[]	uniqueness = null;
 
@@ -89,8 +83,7 @@ public class SYSFILESRowFactory extends CatalogRowFactory {
 		"80000000-00d3-e222-873f-000a0a0b1900",	// catalog UUID
 		"80000000-00d3-e222-9920-000a0a0b1900",	// heap UUID
 		"80000000-00d3-e222-a373-000a0a0b1900",	// SYSSQLFILES_INDEX1
-		"80000000-00d3-e222-be7b-000a0a0b1900",	// SYSSQLFILES_INDEX2
-		"80000000-00d3-e222-be7c-000a0a0b1900",	// SYSSQLFILES_INDEX3
+		"80000000-00d3-e222-be7b-000a0a0b1900"	// SYSSQLFILES_INDEX2
 	};
 
 	/////////////////////////////////////////////////////////////////////////////
@@ -99,8 +92,8 @@ public class SYSFILESRowFactory extends CatalogRowFactory {
 	//
 	/////////////////////////////////////////////////////////////////////////////
 
-    public SYSFILESRowFactory(UUIDFactory uuidf, ExecutionFactory ef, DataValueFactory dvf) {
-		super(uuidf,ef,dvf);
+    public SYSFILESRowFactory(UUIDFactory uuidf, ExecutionFactory ef, DataValueFactory dvf, DataDictionary dd) {
+		super(uuidf,ef,dvf,dd);
 		initInfo(SYSFILES_COLUMN_COUNT, TABLENAME_STRING, 
 				 indexColumnPositions, uniqueness, uuids );
 	}
@@ -119,7 +112,7 @@ public class SYSFILESRowFactory extends CatalogRowFactory {
 	 * @exception   StandardException thrown on failure
 	 */
 
-	public ExecRow makeRow(TupleDescriptor td, TupleDescriptor parent)
+	public ExecRow makeRow(boolean latestVersion, TupleDescriptor td, TupleDescriptor parent)
 					throws StandardException {
 		String					id_S = null;
 		String					schemaId_S = null;
@@ -129,6 +122,9 @@ public class SYSFILESRowFactory extends CatalogRowFactory {
 		ExecRow        			row;
 
 		if (td != null) {
+			if (!(td instanceof FileInfoDescriptor))
+				throw new RuntimeException("Unexpected TupleDescriptor " + td.getClass().getName());
+
 			FileInfoDescriptor descriptor = (FileInfoDescriptor)td;
 			id_S = descriptor.getUUID().toString();
 			schemaId_S = descriptor.getSchemaDescriptor().getUUID().toString();

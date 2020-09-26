@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -57,8 +57,8 @@ import java.util.Arrays;
  */
 public class Snowflake {
 
-    private static final long TIMESTAMP_MASK = 0x1ffffffffffl;  // 41 bits of 1s
-    private static final int TIMESTAMP_SHIFT = 12;
+    public static final long TIMESTAMP_MASK = 0x1ffffffffffl;  // 41 bits of 1s
+    public static final int TIMESTAMP_SHIFT = 12;
 
     private static final short COUNTER_MASK = 0x07ff; // 11 bits of 1s
     private static final int COUNTER_SHIFT = 53;

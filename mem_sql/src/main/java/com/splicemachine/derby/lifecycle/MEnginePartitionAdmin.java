@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -16,6 +16,7 @@ package com.splicemachine.derby.lifecycle;
 
 import com.splicemachine.access.api.PartitionAdmin;
 import com.splicemachine.access.api.PartitionCreator;
+import com.splicemachine.access.api.ReplicationPeerDescription;
 import com.splicemachine.access.api.TableDescriptor;
 import com.splicemachine.primitives.Bytes;
 import com.splicemachine.storage.Partition;
@@ -156,11 +157,28 @@ public class MEnginePartitionAdmin implements PartitionAdmin{
 
     @Override
     public void enableTableReplication(String tableName) throws IOException {
-
+        throw new UnsupportedOperationException("Operation not supported in mem storage engine");
     }
 
     @Override
     public void disableTableReplication(String tableName) throws IOException {
+        throw new UnsupportedOperationException("Operation not supported in mem storage engine");
+    }
 
+    @Override
+    public List<ReplicationPeerDescription> getReplicationPeers() throws IOException {
+        throw new UnsupportedOperationException("Operation not supported in mem storage engine");
+    }
+    @Override
+    public boolean replicationEnabled(String tableName) throws IOException {
+        return false;
+    }
+    @Override
+    public void setCatalogVersion(long conglomerateNumber, String version) throws IOException {
+        throw new UnsupportedOperationException("Operation not supported in mem storage engine");
+    }
+    @Override
+    public String getCatalogVersion(long conglomerateNumber) {
+        throw new UnsupportedOperationException("Operation not supported in mem storage engine");
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,17 +14,14 @@
 
 package com.splicemachine.derby.stream.function.broadcast;
 
-import com.splicemachine.derby.stream.function.IteratorUtils;
-import org.apache.spark.InterruptibleIterator;
-import org.apache.spark.TaskContext;
-import org.spark_project.guava.base.Function;
-import org.spark_project.guava.collect.FluentIterable;
-import org.spark_project.guava.collect.Iterables;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.derby.impl.sql.JoinTable;
+import com.splicemachine.derby.stream.function.IteratorUtils;
 import com.splicemachine.derby.stream.iapi.OperationContext;
+import splice.com.google.common.base.Function;
+import splice.com.google.common.collect.FluentIterable;
+import splice.com.google.common.collect.Iterables;
 import scala.Tuple2;
-import scala.collection.JavaConverters;
 
 import javax.annotation.Nullable;
 import java.util.Iterator;
@@ -37,8 +34,9 @@ public class BroadcastJoinFlatMapFunction extends AbstractBroadcastJoinFlatMapFu
     public BroadcastJoinFlatMapFunction() {
     }
 
-    public BroadcastJoinFlatMapFunction(OperationContext operationContext) {
-        super(operationContext);
+    public BroadcastJoinFlatMapFunction(OperationContext operationContext,
+                                        boolean noCacheBroadcastJoinRight) {
+        super(operationContext, noCacheBroadcastJoinRight);
     }
 
     @Override

@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -88,6 +88,7 @@ class BCMethod implements MethodBuilder {
 	final BCClass		cb;
 	protected final ClassHolder modClass; // the class it is in (modifiable fmt)
 	final String myReturnType;
+	private boolean sparkExplain = false;
 	
 	/**
 	 * The original name of the method, this
@@ -1396,6 +1397,16 @@ class BCMethod implements MethodBuilder {
 
         this.callMethod(op, modClass.getName(), subMethod.getName(),
                 subMethod.myReturnType, parameterCount);
+    }
+
+    @Override
+    public void setSparkExplain(boolean sparkExplain) {
+        this.sparkExplain = sparkExplain;
+    }
+
+    @Override
+    public boolean isSparkExplain() {
+        return sparkExplain;
     }
 }
 

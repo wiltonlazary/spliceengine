@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -124,7 +124,7 @@ public abstract class DatabaseClasses
 		}
 
 		if (classpath != null) {
-			applicationLoader = UpdateLoader.getInstance(classpath, this, true, true);
+			applicationLoader = UpdateLoader.getInstance(classpath, this, true);
 		}
 
 		javaFactory = (JavaFactory) com.splicemachine.db.iapi.services.monitor.Monitor.startSystemModule(Module.JavaFactory);

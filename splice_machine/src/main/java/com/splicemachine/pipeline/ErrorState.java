@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -24,6 +24,7 @@ import com.splicemachine.pipeline.client.WriteFailedException;
 import com.splicemachine.pipeline.constraint.ConstraintContext;
 import com.splicemachine.pipeline.constraint.ForeignKeyViolation;
 import com.splicemachine.pipeline.constraint.UniqueConstraintViolation;
+import com.splicemachine.si.api.data.ReadOnlyModificationException;
 import com.splicemachine.si.api.server.FailedServerException;
 import com.splicemachine.si.api.txn.WriteConflict;
 import com.splicemachine.si.api.txn.lifecycle.CannotCommitException;
@@ -591,6 +592,12 @@ public enum ErrorState{
     LANG_MISSING_PARMS("07000"),
     LANG_SCALAR_SUBQUERY_CARDINALITY_VIOLATION("21000"),
     LANG_STRING_TRUNCATION("22001"),
+    LANG_OPERATION_NOT_SUPPORTED_IN_READ_ONLY_MODE("51045") {
+        @Override
+        public boolean accepts(Throwable t) {
+            return super.accepts(t) || t instanceof ReadOnlyModificationException;
+        }
+    },
     LANG_CONCAT_STRING_OVERFLOW("54006"),
     /*
      * Throw when an attempted insert it outside the range for the given datatype
@@ -635,6 +642,7 @@ public enum ErrorState{
     LANG_INVALID_ESCAPE_SEQUENCE("22025"),
     LANG_INVALID_TRIM_SET("22027"),
     LANG_STRING_TOO_LONG("22028"),
+    LANG_INVALID_TIME_SPAN_OPERATION("2202F"),
     LANG_ESCAPE_IS_NULL("22501"),
     LANG_INVALID_ROW_COUNT_FIRST("2201W"),
     LANG_INVALID_ROW_COUNT_OFFSET("2201X"),
@@ -674,6 +682,8 @@ public enum ErrorState{
 
         @Override
         public StandardException newException(Throwable rootCause){
+            if(!(rootCause instanceof ForeignKeyViolation))
+                return super.newException(rootCause);
             ForeignKeyViolation fkV=(ForeignKeyViolation)rootCause;
             ConstraintContext context=fkV.getContext();
             return StandardException.newException(getSqlState(),context.getMessages());
@@ -1076,6 +1086,10 @@ public enum ErrorState{
     LANG_NO_SUCH_WINDOW("42ZC0"),
     LANG_WINDOW_LIMIT_EXCEEDED("42ZC1"),
     LANG_WINDOW_FUNCTION_CONTEXT_ERROR("42ZC2"),
+
+    LANG_INVALID_SPARK_AND_CONTROL("42ZD1"),
+
+    LANG_ILLEGAL_TIME_TRAVEL("42ZD2"),
 
     //following 3 matches the DB2 sql states
     LANG_DECLARED_GLOBAL_TEMP_TABLE_ONLY_IN_SESSION_SCHEMA("428EK"),
@@ -1616,7 +1630,7 @@ public enum ErrorState{
     AUTH_ENCRYPT_NOT_DB_OWNER("08004.C.5"),
     AUTH_HARD_UPGRADE_NOT_DB_OWNER("08004.C.6"),
     //DERBY-1828: AUTH_x_NOT_DB_OWNER used to be "2850H/I/J.C"),
-    CANNOT_CONNECT_TO_DB_IN_SLAVE_MODE("08004.C.7"),
+    CANNOT_CONNECT_TO_DB_IN_REPLICA_MODE("08004.C.7"),
     AUTH_REPLICATION_NOT_DB_OWNER("08004.C.8"),
     //DERBY-2109: new state/msg(considered sql state 28101.C not appropriate)
     AUTH_SHUTDOWN_MISSING_PERMISSION("08004.C.9"),
@@ -1837,26 +1851,26 @@ public enum ErrorState{
     */
     LOGMODULE_DOES_NOT_SUPPORT_REPLICATION("XRE00"),
     REPLICATION_LOG_CORRUPTED("XRE01"),
-    REPLICATION_MASTER_SLAVE_VERSION_MISMATCH("XRE02"),
+    REPLICATION_PRIMARY_REPLICA_VERSION_MISMATCH("XRE02"),
     REPLICATION_UNEXPECTED_EXCEPTION("XRE03"),
     REPLICATION_CONNECTION_EXCEPTION("XRE04.C.1"),
     REPLICATION_CONNECTION_LOST("XRE04.C.2"),
     REPLICATION_LOG_OUT_OF_SYNCH("XRE05.C"),
-    REPLICATION_MASTER_TIMED_OUT("XRE06"),
-    REPLICATION_NOT_IN_MASTER_MODE("XRE07"),
-    REPLICATION_SLAVE_STARTED_OK("XRE08"),
-    CANNOT_START_SLAVE_ALREADY_BOOTED("XRE09.C"),
+    REPLICATION_PRIMARY_TIMED_OUT("XRE06"),
+    REPLICATION_NOT_IN_PRIMARY_MODE("XRE07"),
+    REPLICATION_REPLICA_STARTED_OK("XRE08"),
+    CANNOT_START_REPLICA_ALREADY_BOOTED("XRE09.C"),
     REPLICATION_CONFLICTING_ATTRIBUTES("XRE10"),
     REPLICATION_DB_NOT_BOOTED("XRE11.C"),
     REPLICATION_UNEXPECTED_MESSAGEID("XRE12"),
     REPLICATION_FAILOVER_SUCCESSFUL("XRE20.D"),
     REPLICATION_FAILOVER_UNSUCCESSFUL("XRE21.C"),
-    REPLICATION_MASTER_ALREADY_BOOTED("XRE22.C"),
+    REPLICATION_PRIMARY_ALREADY_BOOTED("XRE22.C"),
     REPLICATION_UNLOGGED_OPERATIONS_IN_PROGRESS("XRE23"),
-    REPLICATION_NOT_IN_SLAVE_MODE("XRE40"),
-    SLAVE_OPERATION_DENIED_WHILE_CONNECTED("XRE41.C"),
-    REPLICATION_SLAVE_SHUTDOWN_OK("XRE42.C"),
-    REPLICATION_STOPSLAVE_NOT_INITIATED("XRE43"),
+    REPLICATION_NOT_IN_REPLICA_MODE("XRE40"),
+    REPLICA_OPERATION_DENIED_WHILE_CONNECTED("XRE41.C"),
+    REPLICATION_REPLICA_SHUTDOWN_OK("XRE42.C"),
+    REPLICATION_STOPREPLICA_NOT_INITIATED("XRE43"),
 
     /*
      * Splice Specific Error Messages
@@ -1936,7 +1950,7 @@ public enum ErrorState{
             return StandardException.newException(getSqlState(),rootCause.getMessage());
         }
     },
-    SPLICE_CANCELLATION_EXCEPTION("SE008"){
+    SPLICE_CANCELLATION_EXCEPTION("57014"){
         @Override
         public boolean accepts(Throwable t){
             return super.accepts(t)
@@ -1978,6 +1992,8 @@ public enum ErrorState{
 
         @Override
         public StandardException newException(Throwable rootCause){
+            if(!(rootCause instanceof CannotCommitException))
+                return super.newException(rootCause);
             CannotCommitException cce=(CannotCommitException)rootCause;
             return StandardException.newException(getSqlState(),cce.getTxnId());
         }

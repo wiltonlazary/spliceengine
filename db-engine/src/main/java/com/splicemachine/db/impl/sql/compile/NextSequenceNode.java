@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.db.impl.sql.compile;
@@ -39,6 +39,7 @@ import com.splicemachine.db.iapi.sql.compile.CompilerContext;
 import com.splicemachine.db.iapi.services.classfile.VMOpcode;
 import com.splicemachine.db.iapi.sql.dictionary.SequenceDescriptor;
 import com.splicemachine.db.iapi.sql.dictionary.SchemaDescriptor;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 import java.util.Collections;
 import java.util.List;
@@ -47,6 +48,7 @@ import java.sql.Types;
 /**
  * A class that represents a value obtained from a Sequence using 'NEXT VALUE'
  */
+@SuppressFBWarnings(value="HE_INHERITS_EQUALS_USE_HASHCODE", justification="DB-9277")
 public class NextSequenceNode extends ValueNode {
 
     private TableName sequenceName;
@@ -142,10 +144,10 @@ public class NextSequenceNode extends ValueNode {
         String sequenceUUIDstring = sequenceDescriptor.getUUID().toString();
         int dataTypeFormatID = sequenceDescriptor.getDataType().getNull().getTypeFormatId();
         
-		mb.pushThis();
-		mb.push( sequenceUUIDstring );
-		mb.push( dataTypeFormatID );
-		mb.callMethod
+        mb.pushThis();
+        mb.push( sequenceUUIDstring );
+        mb.push( dataTypeFormatID );
+        mb.callMethod
             (
              VMOpcode.INVOKEVIRTUAL,
              ClassName.BaseActivation,
@@ -199,7 +201,17 @@ public class NextSequenceNode extends ValueNode {
         return this == other;
     }
 
-	public List getChildren() {
-		return Collections.EMPTY_LIST;
-	}
+    public List<? extends QueryTreeNode> getChildren() {
+        return Collections.EMPTY_LIST;
+    }
+
+    @Override
+    public QueryTreeNode getChild(int index) {
+        throw new UnsupportedOperationException("Not Implemented");
+    }
+
+    @Override
+    public void setChild(int index, QueryTreeNode newValue) {
+        throw new UnsupportedOperationException("Not Implemented");
+    }
 }

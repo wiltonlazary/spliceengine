@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -29,7 +29,6 @@ public class GetSchemaExternalJob implements Callable<Void> {
     private final DistributedGetSchemaExternalJob request;
     private final OlapStatus jobStatus;
 
-
     public GetSchemaExternalJob(DistributedGetSchemaExternalJob request, OlapStatus jobStatus) {
         this.request = request;
         this.jobStatus = jobStatus;
@@ -49,7 +48,8 @@ public class GetSchemaExternalJob implements Callable<Void> {
         dsp.setSchedulerPool("admin");
         dsp.setJobGroup(request.getJobGroup(), "");
 
-        StructType externalSchema = dsp.getExternalFileSchema(request.getStoredAs(), request.getLocation(), request.mergeSchema());
+        StructType externalSchema = dsp.getExternalFileSchema(request.getStoredAs(), request.getLocation(),
+                request.mergeSchema(), request.getCsvOptions() );
         jobStatus.markCompleted(new GetSchemaExternalResult(externalSchema));
         return null;
     }

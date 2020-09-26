@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -48,8 +48,6 @@ public class MergeJoinOperation extends JoinOperation {
     public int[] rightHashKeys;
     public int[] rightHashKeyToBaseTableMap;
     public int[] rightHashKeySortOrders;
-    // for overriding
-    public boolean wasRightOuterJoin = false;
 
     protected static final String NAME = MergeJoinOperation.class.getSimpleName().replaceAll("Operation","");
 
@@ -75,7 +73,7 @@ public class MergeJoinOperation extends JoinOperation {
                               GeneratedMethod restriction,
                               int resultSetNumber,
                               boolean oneRowRightSide,
-                              boolean notExistsRightSide,
+                              byte semiJoinType,
                               boolean rightFromSSQ,
                               double optimizerEstimatedRowCount,
                               double optimizerEstimatedCost,
@@ -84,7 +82,7 @@ public class MergeJoinOperation extends JoinOperation {
             throws StandardException {
         super(leftResultSet, leftNumCols, rightResultSet, rightNumCols,
                  activation, restriction, resultSetNumber, oneRowRightSide,
-                 notExistsRightSide, rightFromSSQ, optimizerEstimatedRowCount,
+                semiJoinType, rightFromSSQ, optimizerEstimatedRowCount,
                  optimizerEstimatedCost, userSuppliedOptimizerOverrides, sparkExpressionTreeAsString);
         this.leftHashKeyItem = leftHashKeyItem;
         this.rightHashKeyItem = rightHashKeyItem;
@@ -147,21 +145,34 @@ public class MergeJoinOperation extends JoinOperation {
         if (!isOpen)
             throw new IllegalStateException("Operation is not open");
 
+        boolean isSparkExplain = dsp.isSparkExplain();
         OperationContext<JoinOperation> operationContext = dsp.<JoinOperation>createOperationContext(this);
+        dsp.incrementOpDepth();
         DataSet<ExecRow> left = leftResultSet.getDataSet(dsp);
-        
+        dsp.finalizeTempOperationStrings();
+        DataSet<ExecRow> right = null;
+        if (isSparkExplain) {
+            // Need to call getDataSet to fully print the spark explain.
+            right = rightResultSet.getDataSet(dsp);
+            dsp.decrementOpDepth();
+        }
         operationContext.pushScope();
         try {
             left = left.map(new CountJoinedLeftFunction(operationContext));
+            DataSet<ExecRow> joined = null;
             if (isOuterJoin())
-                return left.mapPartitions(new MergeOuterJoinFlatMapFunction(operationContext), true);
+                joined = left.mapPartitions(new MergeOuterJoinFlatMapFunction(operationContext), true);
             else {
-                if (notExistsRightSide)
-                    return left.mapPartitions(new MergeAntiJoinFlatMapFunction(operationContext), true);
+                if (isAntiJoin())
+                    joined = left.mapPartitions(new MergeAntiJoinFlatMapFunction(operationContext), true);
                 else {
-                    return left.mapPartitions(new MergeInnerJoinFlatMapFunction(operationContext), true);
+                    joined = left.mapPartitions(new MergeInnerJoinFlatMapFunction(operationContext), true);
                 }
             }
+            if (isSparkExplain)
+                handleSparkExplain(joined, left, right, dsp);
+
+            return joined;
         } finally {
             operationContext.popScope();
         }

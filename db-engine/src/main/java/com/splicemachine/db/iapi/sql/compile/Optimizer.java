@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -37,6 +37,7 @@ import com.splicemachine.db.iapi.sql.dictionary.DataDictionary;
 import com.splicemachine.db.iapi.sql.dictionary.TableDescriptor;
 import com.splicemachine.db.iapi.store.access.AggregateCostController;
 import com.splicemachine.db.iapi.store.access.SortCostController;
+import com.splicemachine.db.iapi.util.JBitSet;
 import com.splicemachine.db.impl.sql.compile.AggregateNode;
 import com.splicemachine.db.impl.sql.compile.GroupByList;
 import com.splicemachine.db.impl.sql.compile.OrderByList;
@@ -225,8 +226,9 @@ public interface Optimizer{
      * things like adding result sets to translate from index rows to base rows.
      *
      * @throws StandardException Thrown on error
+     * @param outerSet
      */
-    void modifyAccessPaths() throws StandardException;
+    void modifyAccessPaths(JBitSet outerSet) throws StandardException;
 
     /**
      * Get a new CostEstimate object
@@ -402,4 +404,7 @@ public interface Optimizer{
 
     public void setSingleRow(boolean singleRowInRelation);
 
+    public void setForSpark(boolean forSpark);
+
+    public boolean isForSpark();
 }

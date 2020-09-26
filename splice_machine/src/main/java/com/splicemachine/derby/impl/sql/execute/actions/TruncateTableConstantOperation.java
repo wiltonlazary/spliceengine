@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,6 +14,7 @@
 
 package com.splicemachine.derby.impl.sql.execute.actions;
 
+import com.splicemachine.access.api.PartitionAdmin;
 import com.splicemachine.db.impl.services.uuid.BasicUUID;
 import com.splicemachine.db.impl.sql.execute.TriggerEventDML;
 import com.splicemachine.ddl.DDLMessage;
@@ -37,7 +38,9 @@ import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.impl.sql.execute.IndexColumnOrder;
 import com.splicemachine.protobuf.ProtoUtil;
 import com.splicemachine.si.constants.SIConstants;
+import com.splicemachine.si.impl.driver.SIDriver;
 
+import java.io.IOException;
 import java.util.Properties;
 
 /**
@@ -136,15 +139,16 @@ public class TruncateTableConstantOperation extends AlterTableConstantOperation{
 
         //gather information from the existing conglomerate to create new one.
         emptyHeapRow = td.getEmptyExecRow();
+        long oldHeapConglom = td.getHeapConglomerateId();
         ConglomerateController compressHeapCC = tc.openConglomerate(
-                td.getHeapConglomerateId(),
+                oldHeapConglom,
                 false,
                 TransactionController.OPENMODE_FORUPDATE,
                 TransactionController.MODE_TABLE,
                 TransactionController.ISOLATION_SERIALIZABLE);
 
         // Get column ordering for new conglomerate
-        SpliceConglomerate conglomerate = (SpliceConglomerate) ((SpliceTransactionManager)tc).findConglomerate(td.getHeapConglomerateId());
+        SpliceConglomerate conglomerate = (SpliceConglomerate) ((SpliceTransactionManager)tc).findConglomerate(oldHeapConglom);
         int[] columnOrder = conglomerate.getColumnOrdering();
         ColumnOrdering[] columnOrdering = null;
         if (columnOrder != null) {
@@ -204,13 +208,14 @@ public class TruncateTableConstantOperation extends AlterTableConstantOperation{
         }
 
         // truncate  all indexes
+        long[] newIndexCongloms = new long[numIndexes];
         if(numIndexes > 0) {
-            long[] newIndexCongloms = new long[numIndexes];
             for (int index = 0; index < numIndexes; index++) {
                 updateIndex(newHeapConglom, activation, tc, td, index, newIndexCongloms);
             }
         }
 
+        enableReplicationIfNecessary(td, newHeapConglom, newIndexCongloms);
         // If the table has foreign key, create a new foreign key write handler
         for(int i = 0; i < constraintDescriptors.size(); ++i) {
             ConstraintDescriptor conDesc = constraintDescriptors.get(i);
@@ -221,9 +226,11 @@ public class TruncateTableConstantOperation extends AlterTableConstantOperation{
             }
         }
 
+        // Remove statistics
+        dd.deletePartitionStatistics(oldHeapConglom, tc);
+
         // Update the DataDictionary
         // Get the ConglomerateDescriptor for the heap
-        long oldHeapConglom = td.getHeapConglomerateId();
         ConglomerateDescriptor cd = td.getConglomerateDescriptor(oldHeapConglom);
 
         // Update sys.sysconglomerates with new conglomerate #
@@ -233,6 +240,21 @@ public class TruncateTableConstantOperation extends AlterTableConstantOperation{
         // we should invalidate all statements that use the old conglomerates
         dd.getDependencyManager().invalidateFor(td, DependencyManager.TRUNCATE_TABLE, lcc);
 
+    }
+
+    private void enableReplicationIfNecessary(TableDescriptor td, long newHeapConglom, long[] newIndexCongloms) throws StandardException {
+        long conglomId = td.getHeapConglomerateId();
+        try {
+            PartitionAdmin admin = SIDriver.driver().getTableFactory().getAdmin();
+            if (admin.replicationEnabled(Long.toString(conglomId))) {
+                admin.enableTableReplication(Long.toString(newHeapConglom));
+                for (long newIndexConglom : newIndexCongloms) {
+                    admin.enableTableReplication(Long.toString(newIndexConglom));
+                }
+            }
+        } catch (IOException e) {
+            throw StandardException.plainWrapException(e);
+        }
     }
 
     @Override

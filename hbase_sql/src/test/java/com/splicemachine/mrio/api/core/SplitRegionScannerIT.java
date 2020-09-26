@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -31,6 +31,7 @@ import com.splicemachine.storage.ClientPartition;
 import com.splicemachine.storage.Partition;
 import com.splicemachine.storage.SplitRegionScanner;
 
+import com.splicemachine.test.LongerThanTwoMinutes;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.ServerName;
@@ -41,6 +42,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.log4j.Logger;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
@@ -49,6 +51,7 @@ import com.splicemachine.derby.test.framework.SpliceSchemaWatcher;
 import com.splicemachine.derby.test.framework.SpliceTableWatcher;
 import com.splicemachine.derby.test.framework.SpliceWatcher;
 
+@Category(LongerThanTwoMinutes.class)
 public class SplitRegionScannerIT  extends BaseMRIOTest {
     private static final Logger LOG = Logger.getLogger(SplitRegionScannerIT.class);
     private static final String SCHEMA = SplitRegionScannerIT.class.getSimpleName();
@@ -266,8 +269,12 @@ public class SplitRegionScannerIT  extends BaseMRIOTest {
                     clock,subPartition, driver.getConfiguration(), htable.getConfiguration());
             while (srs.next(newCells)) {
                 i++;
-                if (i==ITERATIONS/2)
+                if (i==ITERATIONS/2) {
+                    spliceClassWatcher.executeUpdate(
+                            String.format("call syscs_util.syscs_perform_major_compaction_on_table('%s', '%s')",
+                                    SCHEMA, "E"));
                     driver.getTableFactory().getAdmin().splitTable(tableName);
+                }
                 newCells.clear();
             }
             srs.close();
@@ -309,7 +316,7 @@ public class SplitRegionScannerIT  extends BaseMRIOTest {
     public void simpleMergeWithConcurrentFlushAndSplitTest() throws Exception {
         // Currently fails with:
         // org.apache.hadoop.hbase.DoNotRetryIOException: org.apache.hadoop.hbase.DoNotRetryIOException
-        // at com.splicemachine.hbase.MemstoreAwareObserver.preStoreScannerOpen(MemstoreAwareObserver.java:159)
+        // at com.splicemachine.hbase.MemstoreAwareObserver.preStoreScannerOpen(BaseMemstoreAwareObserver.java:159)
         // at org.apache.hadoop.hbase.regionserver.RegionCoprocessorHost$51.call(RegionCoprocessorHost.java:1291)
 
         String tableName = sqlUtil.getConglomID(spliceTableWatcherJ.toString());

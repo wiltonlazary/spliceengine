@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.db.impl.sql.compile.subquery.ssq;
@@ -47,7 +47,7 @@ import java.util.List;
 /**
  * This predicate determines if we attempt to flatten a given scalar subquery in select clause or not.
  */
-public class ScalarSubqueryPredicate implements org.spark_project.guava.base.Predicate<SubqueryNode> {
+public class ScalarSubqueryPredicate implements splice.com.google.common.base.Predicate<SubqueryNode> {
     private static Logger LOG = Logger.getLogger(ScalarSubqueryPredicate.class);
     private SelectNode outerSelect;
     private JBitSet innerTables;
@@ -107,7 +107,7 @@ public class ScalarSubqueryPredicate implements org.spark_project.guava.base.Pre
 
         /* No external table involved */
         List<SelectNode> externalTables = CollectingVisitorBuilder.<SelectNode>forPredicate(
-                new org.spark_project.guava.base.Predicate<Visitable>() {
+                new splice.com.google.common.base.Predicate<Visitable>() {
             @Override
             public boolean apply(Visitable input) {
                 return (input instanceof FromBaseTable) && ((FromBaseTable) input).getTableDescriptor().getStoredAs() != null;

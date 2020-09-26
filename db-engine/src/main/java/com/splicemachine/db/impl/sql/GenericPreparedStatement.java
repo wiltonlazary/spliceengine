@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -43,8 +43,9 @@ import com.splicemachine.db.iapi.services.monitor.Monitor;
 import com.splicemachine.db.iapi.services.sanity.SanityManager;
 import com.splicemachine.db.iapi.services.uuid.UUIDFactory;
 import com.splicemachine.db.iapi.sql.*;
-import com.splicemachine.db.iapi.sql.compile.CompilerContext;
+import com.splicemachine.db.iapi.sql.compile.DataSetProcessorType;
 import com.splicemachine.db.iapi.sql.conn.LanguageConnectionContext;
+import com.splicemachine.db.iapi.sql.conn.ResubmitDistributedException;
 import com.splicemachine.db.iapi.sql.conn.StatementContext;
 import com.splicemachine.db.iapi.sql.depend.DependencyManager;
 import com.splicemachine.db.iapi.sql.depend.Provider;
@@ -59,6 +60,7 @@ import com.splicemachine.db.iapi.util.ByteArray;
 import com.splicemachine.db.impl.sql.catalog.DataDictionaryCache;
 import com.splicemachine.db.impl.sql.compile.CursorNode;
 import com.splicemachine.db.impl.sql.compile.StatementNode;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 import java.sql.SQLWarning;
 import java.sql.Timestamp;
@@ -76,6 +78,7 @@ import java.util.List;
  * <p/>
  * Stored prepared statements extend this implementation
  */
+@SuppressFBWarnings(value = "IS2_INCONSISTENT_SYNC", justification = "DB-10223")
 public class GenericPreparedStatement implements ExecPreparedStatement {
 
     ///////////////////////////////////////////////
@@ -158,7 +161,7 @@ public class GenericPreparedStatement implements ExecPreparedStatement {
 
     private boolean hasXPlainTableOrProcedure;
 
-    private CompilerContext.DataSetProcessorType datasetProcessorType;
+    private DataSetProcessorType datasetProcessorType;
     //
     // constructors
     //
@@ -275,6 +278,7 @@ public class GenericPreparedStatement implements ExecPreparedStatement {
                                          boolean rollbackParentContext,
                                          long timeoutMillis) throws StandardException {
         parent.getLanguageConnectionContext().setupSubStatementSessionContext(parent);
+        activation.setSubStatement(true);
         return executeStmt(activation, rollbackParentContext, timeoutMillis);
     }
 
@@ -363,8 +367,11 @@ public class GenericPreparedStatement implements ExecPreparedStatement {
                 resultSet.open();
             } catch (StandardException se) {
                 /* Can't handle recompiling SPS action recompile here */
-                if (!se.getMessageId().equals(SQLState.LANG_STATEMENT_NEEDS_RECOMPILE) || spsAction)
+                if (!se.getMessageId().equals(SQLState.LANG_STATEMENT_NEEDS_RECOMPILE) || spsAction) {
+                    if (se instanceof ResubmitDistributedException)
+                        statementContext.cleanupOnError(se);
                     throw se;
+                }
                 statementContext.cleanupOnError(se);
                 continue;
 
@@ -1121,11 +1128,11 @@ public class GenericPreparedStatement implements ExecPreparedStatement {
     }
 
 
-    public CompilerContext.DataSetProcessorType datasetProcessorType() {
+    public DataSetProcessorType datasetProcessorType() {
         return datasetProcessorType;
     }
 
-    public void setDatasetProcessorType(CompilerContext.DataSetProcessorType datasetProcessorType) {
+    public void setDatasetProcessorType(DataSetProcessorType datasetProcessorType) {
         this.datasetProcessorType = datasetProcessorType;
     }
 }

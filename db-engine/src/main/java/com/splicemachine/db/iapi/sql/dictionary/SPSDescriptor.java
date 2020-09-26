@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -46,12 +46,14 @@ import com.splicemachine.db.iapi.sql.Statement;
 import com.splicemachine.db.iapi.sql.StorablePreparedStatement;
 import com.splicemachine.db.iapi.sql.conn.LanguageConnectionContext;
 import com.splicemachine.db.iapi.sql.conn.LanguageConnectionFactory;
+import com.splicemachine.db.iapi.sql.conn.SessionProperties;
 import com.splicemachine.db.iapi.sql.depend.DependencyManager;
 import com.splicemachine.db.iapi.sql.depend.Dependent;
 import com.splicemachine.db.iapi.sql.depend.Provider;
 import com.splicemachine.db.iapi.sql.execute.ExecPreparedStatement;
 import com.splicemachine.db.iapi.store.access.TransactionController;
 import com.splicemachine.db.iapi.types.DataTypeDescriptor;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -150,6 +152,7 @@ public class SPSDescriptor extends TupleDescriptor implements UniqueSQLObjectDes
      * @param type                type
      * @param initiallyCompilable is the statement initially compilable?
      */
+    @SuppressFBWarnings(value = {"EI_EXPOSE_REP2", "IS2_INCONSISTENT_SYNC"}, justification = "DB-9289 - DB-9290")
     public SPSDescriptor(DataDictionary dataDictionary,
                          String name,
                          UUID uuid,
@@ -256,8 +259,8 @@ public class SPSDescriptor extends TupleDescriptor implements UniqueSQLObjectDes
          * lcc.  This is expensive, but pretty atypical since trigger actions aren't likely to be invalidated too often.
          * Also, when possible, we already have the triggerTable. */
         if (type == SPS_TYPE_TRIGGER && triggerTable == null) {
-            // 49 because name consists of (see CreateTriggerConstantAction): TRIGGER<ACTN|WHEN>_<UUID:36>_<UUID:36>
-            String uuidStr = name.substring(49);
+            // name consists of (see CreateTriggerConstantAction): TRIGGER<ACTN|WHEN>_<UUID:36>_<UUID:36>
+            String uuidStr = name.split("_")[2];
             triggerTable = dd.getTableDescriptor(recreateUUID(uuidStr));
             if (SanityManager.DEBUG) {
                 if (triggerTable == null) {
@@ -298,7 +301,9 @@ public class SPSDescriptor extends TupleDescriptor implements UniqueSQLObjectDes
         setCompileTime();
         setParams(preparedStatement.getParameterTypes());
 
-        if (!dd.isReadOnlyUpgrade()) {
+        String role = lcc.getReplicationRole();
+        if (!dd.isReadOnlyUpgrade() && role.compareToIgnoreCase("REPLICA") != 0 &&
+                lcc.getSessionProperties().getProperty(SessionProperties.PROPERTYNAME.SNAPSHOT_TIMESTAMP) == null) {
 
             dd.startWriting(lcc);
 
@@ -385,6 +390,7 @@ public class SPSDescriptor extends TupleDescriptor implements UniqueSQLObjectDes
      *
      * @return the time this class was last compiled
      */
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9289")
     public final synchronized Timestamp getCompileTime() {
         return compileTime;
     }
@@ -446,6 +452,7 @@ public class SPSDescriptor extends TupleDescriptor implements UniqueSQLObjectDes
      *
      * @return the array of data type descriptors
      */
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9289")
     public final synchronized DataTypeDescriptor[] getParams() throws StandardException {
         if (params == null && !lookedUpParams) {
             List tmpDefaults = new ArrayList();
@@ -462,6 +469,7 @@ public class SPSDescriptor extends TupleDescriptor implements UniqueSQLObjectDes
      *
      * @param params the parameter list
      */
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "DB-9289")
     public final synchronized void setParams(DataTypeDescriptor params[]) {
         this.params = params;
     }
@@ -472,6 +480,7 @@ public class SPSDescriptor extends TupleDescriptor implements UniqueSQLObjectDes
      *
      * @return the default parameter values
      */
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "DB-9289")
     public final synchronized Object[] getParameterDefaults() throws StandardException {
         if (paramDefaults == null)
             getParams();
@@ -483,6 +492,7 @@ public class SPSDescriptor extends TupleDescriptor implements UniqueSQLObjectDes
      *
      * @param values the parameter defaults
      */
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2", justification = "DB-9289")
     public final synchronized void setParameterDefaults(Object[] values) {
         this.paramDefaults = values;
     }
@@ -899,7 +909,9 @@ public class SPSDescriptor extends TupleDescriptor implements UniqueSQLObjectDes
 
         DataDictionary dd = getDataDictionary();
 
-        if (dd.isReadOnlyUpgrade())
+        String role = lcc.getReplicationRole();
+        if (dd.isReadOnlyUpgrade() || role.compareToIgnoreCase("REPLICA") == 0 ||
+                lcc.getSessionProperties().getProperty(SessionProperties.PROPERTYNAME.SNAPSHOT_TIMESTAMP) != null)
             return;
 
 

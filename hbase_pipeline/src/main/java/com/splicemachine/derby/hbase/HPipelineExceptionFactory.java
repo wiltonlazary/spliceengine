@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,9 +14,10 @@
 
 package com.splicemachine.derby.hbase;
 
+import org.apache.hadoop.hbase.client.NoServerForRegionException;
 import org.apache.hadoop.hbase.ipc.ServerNotRunningYetException;
 import org.apache.hadoop.net.ConnectTimeoutException;
-import org.spark_project.guava.base.Throwables;
+import splice.com.google.common.base.Throwables;
 import com.splicemachine.access.api.CallTimeoutException;
 import com.splicemachine.access.api.NotServingPartitionException;
 import com.splicemachine.access.api.RegionBusyException;
@@ -115,6 +116,7 @@ public class HPipelineExceptionFactory extends HExceptionFactory implements Pipe
         t=Throwables.getRootCause(t);
         t=processPipelineException(t);
         if(t instanceof NotServingPartitionException
+                || t instanceof NoServerForRegionException
                 || t instanceof WrongPartitionException
                 || t instanceof PipelineTooBusy
                 || t instanceof RegionBusyException
@@ -126,6 +128,9 @@ public class HPipelineExceptionFactory extends HExceptionFactory implements Pipe
                 || t instanceof IndexNotSetUpException) return true;
         return false;
     }
+
+    @Override
+    public boolean isHBase() { return true; }
 
     @Override
     public Exception processErrorResult(WriteResult result){
@@ -150,7 +155,7 @@ public class HPipelineExceptionFactory extends HExceptionFactory implements Pipe
                 case WRONG_REGION:
                     return new HWrongRegion();
                 case REGION_TOO_BUSY:
-                    return new HTooBusy();
+                    return new HTooBusy("Region too busy");
                 case NOT_RUN:
                     //won't happen
                     return new IOException("Unexpected NotRun code for an error");

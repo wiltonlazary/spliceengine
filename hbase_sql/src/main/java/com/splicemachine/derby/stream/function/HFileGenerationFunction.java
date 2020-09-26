@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -30,7 +30,6 @@ import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.impl.sql.execute.ValueRow;
 import com.splicemachine.ddl.DDLMessage;
 import com.splicemachine.derby.impl.sql.execute.LazyDataValueFactory;
-import com.splicemachine.derby.stream.ActivationHolder;
 import com.splicemachine.derby.stream.iapi.OperationContext;
 import com.splicemachine.derby.utils.marshall.*;
 import com.splicemachine.utils.SpliceLogUtils;
@@ -40,8 +39,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.MetaTableAccessor;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.fs.HFileSystem;
 import org.apache.hadoop.hbase.io.compress.Compression;
@@ -50,9 +48,7 @@ import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.io.hfile.HFile;
 import org.apache.hadoop.hbase.io.hfile.HFileContext;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
-import org.apache.hadoop.hbase.regionserver.BloomType;
-import org.apache.hadoop.hbase.regionserver.HStore;
-import org.apache.hadoop.hbase.regionserver.StoreFile;
+import org.apache.hadoop.hbase.regionserver.*;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.log4j.Logger;
@@ -81,7 +77,7 @@ public abstract class HFileGenerationFunction implements MapPartitionsFunction<R
     }
 
     protected OperationType operationType;
-    protected StoreFile.Writer writer;
+    protected StoreFileWriter writer;
     protected long txnId;
 
     private List<String> hFiles = Lists.newArrayList();
@@ -210,7 +206,7 @@ public abstract class HFileGenerationFunction implements MapPartitionsFunction<R
     }
 
 
-    private StoreFile.Writer getNewWriter(Configuration conf, BulkImportPartition partition)
+    private StoreFileWriter getNewWriter(Configuration conf, BulkImportPartition partition)
             throws IOException {
 
         Compression.Algorithm compression = Compression.getCompressionAlgorithmByName(compressionAlgorithm);
@@ -236,10 +232,9 @@ public abstract class HFileGenerationFunction implements MapPartitionsFunction<R
             // Get favored nodes as late as possible. This is the best we can do. If the region gets moved after this
             // point, locality is not guaranteed.
             InetSocketAddress favoredNode = getFavoredNode(partition);
-            StoreFile.WriterBuilder builder =
-                    new StoreFile.WriterBuilder(conf, new CacheConfig(tempConf), new HFileSystem(fs))
+            StoreFileWriter.Builder builder =
+                    new StoreFileWriter.Builder(conf, new CacheConfig(tempConf), new HFileSystem(fs))
                             .withOutputDir(familyPath).withBloomType(bloomType)
-                            .withComparator(KeyValue.COMPARATOR)
                             .withFileContext(hFileContext);
 
             if (favoredNode != null) {
@@ -254,15 +249,15 @@ public abstract class HFileGenerationFunction implements MapPartitionsFunction<R
         }
     }
 
-    private void close(final StoreFile.Writer w) throws IOException {
+    private void close(final StoreFileWriter w) throws IOException {
         if (w != null) {
-            w.appendFileInfo(StoreFile.BULKLOAD_TIME_KEY,
+            w.appendFileInfo(HStoreFile.BULKLOAD_TIME_KEY,
                     Bytes.toBytes(System.currentTimeMillis()));
-            w.appendFileInfo(StoreFile.BULKLOAD_TASK_KEY,
+            w.appendFileInfo(HStoreFile.BULKLOAD_TASK_KEY,
                     HBaseConfiguration.BULKLOAD_TASK_KEY);//context.getTaskAttemptID().toString())); TODO JL
-            w.appendFileInfo(StoreFile.MAJOR_COMPACTION_KEY,
+            w.appendFileInfo(HStoreFile.MAJOR_COMPACTION_KEY,
                     Bytes.toBytes(true));
-            w.appendFileInfo(StoreFile.EXCLUDE_FROM_MINOR_COMPACTION_KEY,
+            w.appendFileInfo(HStoreFile.EXCLUDE_FROM_MINOR_COMPACTION_KEY,
                     Bytes.toBytes(false));
             w.appendTrackedTimestampsToMetadata();
             w.close();
@@ -390,9 +385,19 @@ public abstract class HFileGenerationFunction implements MapPartitionsFunction<R
                 DDLMessage.Table tbl = tentativeIndex.getTable();
                 DDLMessage.Index idx = tentativeIndex.getIndex();
                 Long indexConglomerate = idx.getConglomerate();
-                int n = idx.getIndexColsToMainColMapCount();
+                int n = idx.getDescColumnsCount();
                 ExecRow execRow = new ValueRow(n);
-                List<Integer> formatIds = tbl.getFormatIdsList();
+                List<Integer> formatIds;
+                if (idx.getNumExprs() <= 0) {
+                    List<Integer> indexColsList = idx.getIndexColsToMainColMapList();
+                    List<Integer> allFormatIds = tbl.getFormatIdsList();
+                    formatIds = new ArrayList<>();
+                    for (int i = 0; i < n; i++) {
+                        formatIds.add(allFormatIds.get(indexColsList.get(i)-1));
+                    }
+                } else {
+                    formatIds = idx.getIndexColumnFormatIdsList();
+                }
                 DataValueDescriptor[] dvds = execRow.getRowArray();
                 for (int i = 0; i < n; ++i) {
                     dvds[i] =  LazyDataValueFactory.getLazyNull(formatIds.get(i));

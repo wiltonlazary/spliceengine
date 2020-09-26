@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -30,7 +30,7 @@ import com.splicemachine.management.DirectDatabaseAdministrator;
 import com.splicemachine.management.Manager;
 import com.splicemachine.si.impl.driver.SIDriver;
 import com.splicemachine.uuid.Snowflake;
-import org.spark_project.guava.net.HostAndPort;
+import splice.com.google.common.net.HostAndPort;
 
 import java.io.IOException;
 import java.net.InetAddress;

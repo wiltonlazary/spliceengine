@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -66,7 +66,7 @@ public class SpliceUserWatcher extends TestWatcher {
         Connection connection = null;
         PreparedStatement statement = null;
         try {
-            connection = SpliceNetConnection.getConnection();
+            connection = SpliceNetConnection.getDefaultConnection();
             statement = connection.prepareStatement("call syscs_util.syscs_create_user(?,?)");
             statement.setString(1, userName);
             statement.setString(2, password);
@@ -85,7 +85,7 @@ public class SpliceUserWatcher extends TestWatcher {
         Connection connection = null;
         PreparedStatement statement = null;
         try {
-            connection = SpliceNetConnection.getConnection();
+            connection = SpliceNetConnection.getDefaultConnection();
             statement = connection.prepareStatement("select username from sys.sysusers where username = ?");
             statement.setString(1, userName.toUpperCase());
             ResultSet rs = statement.executeQuery();
@@ -111,7 +111,7 @@ public class SpliceUserWatcher extends TestWatcher {
     }
 
     public void dropSchema(String userName) {
-        try (Connection connection = SpliceNetConnection.getConnection()) {
+        try (Connection connection = SpliceNetConnection.getDefaultConnection()) {
 //            connection.setAutoCommit(false);
 
             SchemaDAO schemaDAO = new SchemaDAO(connection);

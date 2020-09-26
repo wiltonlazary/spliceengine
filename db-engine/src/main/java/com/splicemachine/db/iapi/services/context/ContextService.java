@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -46,6 +46,7 @@ public final class ContextService{
     private static final Logger LOG = Logger.getLogger(ContextService.class);
 
     private static volatile ContextService factory;
+    private static volatile boolean stopped;
 
     private HeaderPrintWriter errorStream;
 
@@ -200,7 +201,8 @@ public final class ContextService{
      * So it can be given to us and taken away...
      */
     public static void stop() {
-        factory = null;
+        stopped = true;
+        factory.allContexts.clear();
     }
 
     public static ContextService getFactory() {
@@ -208,6 +210,7 @@ public final class ContextService{
             synchronized(ContextService.class){
                 if (factory == null) {
                     factory = new ContextService();
+                    stopped = false;
                 }
             }
         }
@@ -222,12 +225,12 @@ public final class ContextService{
      */
     public static Context getContext(String contextId) {
 
-        if (factory == null) {
+        if (stopped) {
             // The context service is already stopped.
             return null;
         }
 
-        ContextManager cm = factory.getCurrentContextManager();
+        ContextManager cm = getCurrentContextManager();
         if (cm == null) {
             return null;
         }
@@ -258,9 +261,9 @@ public final class ContextService{
      *
      * @return ContextManager current Context Manager
      */
-    public ContextManager getCurrentContextManager(){
+    public static ContextManager getCurrentContextManager(){
 
-        if (factory == null) {
+        if (stopped) {
             // The context service is already stopped.
             return null;
         }
@@ -269,11 +272,7 @@ public final class ContextService{
         if (list.isEmpty()) {
             return null;
         }
-        ContextManager cm = list.get(list.size() - 1);
-        if (list.size() == 1 && cm.activeThread != Thread.currentThread()) {
-            return null;
-        }
-        return cm;
+        return list.get(list.size() - 1);
     }
 
     /**
@@ -283,75 +282,30 @@ public final class ContextService{
      */
     public void resetCurrentContextManager(ContextManager cm){
 
-        if (factory == null) {
+        if (stopped) {
             // The context service is already stopped.
             return;
         }
 
-        ContextManager current = getCurrentContextManager();
-        if (current == null) return;
-
-        if (current.activeCount != -1) {
-            if (current == cm ) {
-                if (--cm.activeCount <= 0) {
-                    cm.activeThread = null;
-
-                    // If the ContextManager is empty
-                    // then don't keep a reference to it
-                    // when it is not in use. The ContextManager
-                    // has been closed (most likely) and this
-                    // is now unwanted. Keeping the reference
-                    // would hold onto memory and increase the
-                    // chance of holding onto a another reference
-                    // will could cause issues for future operations.
-                    if (cm.isEmpty()) {
-                        threadContextList.get().remove(cm);
-                    }
-                }
-                return;
-            }
+        if (cm.activeThread != Thread.currentThread()) {
+            LOG.error("resetCurrentContextManager - mismatched threads, current: " + Thread.currentThread() + " CM: " + cm.activeThread);
         }
 
-        if (LOG.isTraceEnabled()) {
-            Thread currThread = Thread.currentThread();
-            Thread activeThread = cm.activeThread;
-            if (currThread != activeThread) {
-                LOG.trace("resetCurrentContextManager - mismatch threads - current"+currThread+" - cm's "+activeThread);
-            }
-            if (getCurrentContextManager() != cm) {
-                LOG.trace("resetCurrentContextManager - mismatch contexts - "+currThread+" : "+getCurrentContextManager()+" : "+cm);
-            }
-        }
-
+        // Remove even if not the current context manager
         List<ContextManager> list = threadContextList.get();
         int idx = list.lastIndexOf(cm);
         if (idx >= 0) {
             list.remove(idx);
-        }
-
-        ContextManager nextCM = list.get(list.size() - 1);
-        boolean seenMultipleCM=false;
-        boolean seenCM=false;
-        for (ContextManager stackCM : list) {
-            if (stackCM != nextCM) {
-                seenMultipleCM = true;
+            if (--cm.activeCount <= 0) {
+                cm.activeThread = null;
             }
-            if (stackCM == cm) {
-                seenCM = true;
+            // A hack to ensure a context manager is available outside push/pop scope (inherited from original derby code)
+            if (!cm.isEmpty() && list.size() == 0) {
+                list.add(cm);
             }
         }
-
-        if(!seenCM){
-            cm.activeThread=null;
-            cm.activeCount=0;
-        }
-
-        if(!seenMultipleCM){
-            // all the context managers on the stack
-            // are the same so reduce to a simple count.
-            nextCM.activeCount = list.size();
-            list.clear();
-            list.add(nextCM);
+        else {
+            LOG.error("resetCurrentContextManager - ContextManager not found");
         }
     }
 
@@ -360,62 +314,24 @@ public final class ContextService{
      * to be its current context manager. Sets the thread local
      * variable threadContextList to reflect associateCM being
      * the current ContextManager.
-     *
-     * @return True if the nesting level is to be represented in
-     * the ContextManager.activeCount field. False if not.
-     * @see ContextManager#activeCount
-     * @see ContextManager#activeThread
      */
-    private void addToThreadList(ContextManager associateCM) {
+    private static void addToThreadList(ContextManager associateCM) {
 
         List<ContextManager> list = threadContextList.get();
-
-        // Not currently using any ContextManager
-        if (list.isEmpty()){
-            list.add(associateCM);
-            associateCM.activeCount++;
-            return;
-        }
-
-        // Already set up to reflect associateCM ContextManager
-        ContextManager threadsCM = list.get(list.size() - 1);
-        if (associateCM == threadsCM) {
-            associateCM.activeCount++;
-            return;
-        }
-
         if (list.size() == 1) {
             // Could be two situations:
             // 1. Single ContextManager not in use by this thread
             // 2. Single ContextManager in use by this thread (nested call)
-
-            list.clear();
-            if (threadsCM.activeThread != Thread.currentThread()) {
-                // Not nested, just a CM left over
-                // from a previous execution.
-                list.add(associateCM);
-                associateCM.activeCount++;
-                return;
+            if (list.get(0).activeThread != Thread.currentThread()) {
+                list.clear();
             }
-            // Nested, need to create a Stack of ContextManagers,
-            // the top of the stack will be the active one.
-            // The stack represents the true nesting
-            // of ContextManagers, splitting out nesting
-            // of a single ContextManager into multiple
-            // entries in the stack.
-            for (int i = 0; i < threadsCM.activeCount; i++) {
-                list.add(threadsCM);
-            }
-            threadsCM.activeCount = -1;
         }
 
         list.add(associateCM);
-        associateCM.activeCount = -1;
+        associateCM.activeCount++;
 
-        if (LOG.isTraceEnabled()) {
-            if (list.size() > 10) {
-                LOG.trace("memoryLeakTrace:threadLocal " + list.size());
-            }
+        if (list.size() > 10) {
+            LOG.error("memoryLeakTrace:threadLocal " + list.size());
         }
     }
 
@@ -445,20 +361,16 @@ public final class ContextService{
      */
     public void setCurrentContextManager(ContextManager cm){
 
-        if (factory == null) {
+        if (stopped) {
             // The context service is already stopped.
             return;
         }
 
-        if (LOG.isTraceEnabled()) {
-            Thread me = Thread.currentThread();
-            if (cm.activeThread != null && me != cm.activeThread) {
-                LOG.trace("setCurrentContextManager - mismatch threads - current " + me + " - cm's " + cm.activeThread);
-            }
-        }
-
         if (cm.activeThread == null) {
             cm.activeThread = Thread.currentThread();
+        }
+        else if (cm.activeThread != Thread.currentThread()) {
+            LOG.error("setCurrentContextManager - mismatch threads - current " + Thread.currentThread() + " - cm's " + cm.activeThread);
         }
         addToThreadList(cm);
     }
@@ -468,21 +380,25 @@ public final class ContextService{
      * in the context manager list using setCurrentContextManager.
      * We don't keep track of it due to this call being made.
      */
-    public ContextManager newContextManager(){
-        ContextManager cm=new ContextManager(this,errorStream);
+    public ContextManager newContextManager() {
+        return newContextManager(null);
+    }
 
-        // push a context that will shut down the system on
-        // a severe error.
-        new SystemContext(cm);
+    public ContextManager newContextManager(ContextManager parent){
+        ContextManager cm = new ContextManager(parent, errorStream);
+
+        if (parent == null) {
+            // push a context that will shut down the system on
+            // a severe error.
+            new SystemContext(cm);
+        }
 
         synchronized(allContexts) {
             allContexts.add(cm);
         }
 
-        if (LOG.isTraceEnabled()) {
-            if (allContexts.size() > 1000) {
-                LOG.trace("memoryLeakTrace:allContexts " + allContexts.size());
-            }
+        if (allContexts.size() > 1000) {
+            LOG.error("memoryLeakTrace:allContexts " + allContexts.size());
         }
 
         return cm;
@@ -513,7 +429,7 @@ public final class ContextService{
      * Remove a ContextManager from the list of all active
      * contexts managers.
      */
-    public void removeContext(ContextManager cm){
+    public void removeContextManager(ContextManager cm){
         synchronized (allContexts) {
             allContexts.remove(cm);
         }
@@ -525,11 +441,14 @@ public final class ContextService{
      * @param contextId ConnectionContext.CONTEXT_ID, AccessFactoryGlobals.RAMXACT_CONTEXT_ID,
      *                  AccessFactoryGlobals.USER_TRANS_NAME, LanguageConnectionContext.CONTEXT_ID, etc
      */
-    public <T extends Context> List<T> getAllContexts(String contextId){
-        List<T> contexts= new ArrayList<>();
+    public List<Context> getAllContexts(String contextId) {
+        List<Context> contexts= new ArrayList<>();
         synchronized (allContexts) {
+            /* Synchronization guards against allContexts updates only.
+             * It does not guard against updates in context managers themselves.
+             */
             for (ContextManager contextManager : allContexts) {
-                contexts.addAll((Collection<? extends T>) contextManager.getContextStack(contextId));
+                contextManager.accumulate(contexts, contextId);
             }
         }
         return contexts;

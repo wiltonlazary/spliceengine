@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -68,7 +68,7 @@ public class Configuration {
 
 
     // for DatabaseMetaData.getDriverName()
-    public final static String dncDriverName = "Apache Derby Network Client JDBC Driver";
+    public final static String dncDriverName = "Splice Machine Network Client JDBC Driver";
 
 
     // Hard-wired for JDBC

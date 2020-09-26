@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.db.impl.sql.compile;
@@ -35,6 +35,7 @@ import com.splicemachine.derby.test.framework.SpliceUnitTest;
 import com.splicemachine.derby.test.framework.SpliceWatcher;
 import com.splicemachine.derby.test.framework.TestConnection;
 import com.splicemachine.homeless.TestUtils;
+import com.splicemachine.test.LongerThanTwoMinutes;
 import com.splicemachine.test.SerialTest;
 import com.splicemachine.test_tools.TableCreator;
 import org.apache.log4j.Logger;
@@ -44,7 +45,7 @@ import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -61,7 +62,7 @@ import static org.junit.Assert.assertEquals;
 /* The test result is dependent on different values of the service property setting at the time of the run, so
    need to run sequentially
  */
-@Category(SerialTest.class)
+@Category({SerialTest.class, LongerThanTwoMinutes.class})
 @RunWith(Parameterized.class)
 public class ProjectionPruningIT extends SpliceUnitTest {
     private static Logger LOG = Logger.getLogger(ProjectionPruningIT.class);
@@ -561,13 +562,13 @@ public class ProjectionPruningIT extends SpliceUnitTest {
         /* case 1: DT in set operation  */
         String sqlText = "select b1 from (select * from t1  --splice-properties index=idx_t1\n ) dt union all select b2 from t2";
 
-        String expected = "1  |\n" +
+        String expected = "B1  |\n" +
                 "-----\n" +
                 "aaa |\n" +
                 "bbb |\n" +
                 "ccc |";
 
-        assertPruneResult(sqlText, expected, projectionPruningDisabled.equals("false")?true:false);
+        assertPruneResult(sqlText, expected, projectionPruningDisabled.equals("false"));
 
         /* case 2: set in a subquery */
         sqlText = "select b1 from t1 where a1 in (select a3 from t3 union all values 4,5,6)";
@@ -596,7 +597,7 @@ public class ProjectionPruningIT extends SpliceUnitTest {
         /* case 3: set operation with predicate */
         sqlText = "select b1 from (select * from t1) dt where a1>1 union all select b2 from t2";
 
-        expected = "1  |\n" +
+        expected = "B1  |\n" +
                 "-----\n" +
                 "bbb |\n" +
                 "ccc |";
@@ -615,7 +616,7 @@ public class ProjectionPruningIT extends SpliceUnitTest {
         /* case 5: order by in set operation */
         sqlText = "select b1 from (select * from t1  --splice-properties index=idx_t1\n ) dt union all select b2 from t2 order by 1";
 
-        expected = "1  |\n" +
+        expected = "B1  |\n" +
                 "-----\n" +
                 "aaa |\n" +
                 "bbb |\n" +

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -30,13 +30,13 @@ import com.google.common.collect.Maps;
 import com.google.protobuf.ZeroCopyLiteralByteString;
 import com.splicemachine.storage.SkeletonHBaseClientPartition;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClusterStatusProtos;
 import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
+import org.apache.hadoop.hbase.regionserver.HBasePlatformUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.base.Throwables;
+import splice.com.google.common.base.Throwables;
 import com.splicemachine.access.HConfiguration;
 import com.splicemachine.access.api.PartitionAdmin;
 import com.splicemachine.access.api.SConfiguration;
@@ -45,13 +45,13 @@ import com.splicemachine.concurrent.MoreExecutors;
 import com.splicemachine.coprocessor.SpliceMessage;
 import com.splicemachine.derby.iapi.sql.PartitionLoadWatcher;
 import com.splicemachine.si.impl.driver.SIDriver;
-import com.splicemachine.storage.ClientPartition;
 import com.splicemachine.storage.HPartitionLoad;
 import com.splicemachine.storage.Partition;
 import com.splicemachine.storage.PartitionLoad;
 import com.splicemachine.storage.PartitionServer;
 import com.splicemachine.storage.PartitionServerLoad;
 import com.splicemachine.utils.SpliceLogUtils;
+import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 
 /**
  * @author P Trolard
@@ -64,7 +64,7 @@ public class HBaseRegionLoads implements PartitionLoadWatcher{
     // The cache is a map from tablename to map of regionname to RegionLoad
     private static final AtomicReference<Map<String, Map<String,PartitionLoad>>> cache = new AtomicReference<>();
 
-    public static HBaseRegionLoads INSTANCE = new HBaseRegionLoads();
+    public static final HBaseRegionLoads INSTANCE = new HBaseRegionLoads();
 
     private HBaseRegionLoads(){}
 
@@ -81,7 +81,7 @@ public class HBaseRegionLoads implements PartitionLoadWatcher{
             Map<String,Map<String,PartitionLoad>> loads = fetchRegionLoads();
             cache.set(loads);
             if (LOG.isDebugEnabled()) {
-                LOG.debug(String.format("Region loads loaded in %dms:\n%s",
+                LOG.debug(String.format("Region loads loaded in %dms:%n%s",
                                            System.currentTimeMillis() - begin,
                                            loads.keySet()));
             }
@@ -210,18 +210,11 @@ public class HBaseRegionLoads implements PartitionLoadWatcher{
                         }
                     });
             Collection<Pair<String, Long>> collection = ret.values();
-            long factor = 1024 * 1024;
             Map<String, PartitionLoad> retMap = new HashMap<>();
             for(Pair<String, Long> info : collection){
-                long sizeMB = info.getSecond() / factor;
-                ClusterStatusProtos.RegionLoad.Builder rl = ClusterStatusProtos.RegionLoad.newBuilder();
-                rl.setMemstoreSizeMB((int)(sizeMB / 2));
-                rl.setStorefileSizeMB((int) (sizeMB / 2));
-                rl.setRegionSpecifier(HBaseProtos.RegionSpecifier.newBuilder()
-                    .setType(HBaseProtos.RegionSpecifier.RegionSpecifierType.ENCODED_REGION_NAME).setValue(
-                                        ZeroCopyLiteralByteString.copyFromUtf8(info.getFirst())).build());
-                ClusterStatusProtos.RegionLoad load = rl.build();
-                HPartitionLoad value=new HPartitionLoad(info.getFirst(),load.getStorefileSizeMB(),load.getMemstoreSizeMB(),load.getStorefileIndexSizeMB());
+                long size = info.getSecond();
+                HPartitionLoad value=new HPartitionLoad(info.getFirst(),size/2,
+                        size/2);
                 retMap.put(info.getFirst(),value);
             }
 
@@ -241,6 +234,11 @@ public class HBaseRegionLoads implements PartitionLoadWatcher{
     public Collection<PartitionLoad> tableLoad(String tableName, boolean refresh){
         if (refresh) {
             Map<String, Map<String, PartitionLoad>> loads = cache.get();
+            if (loads == null) {
+                if (LOG.isDebugEnabled())
+                    SpliceLogUtils.debug(LOG, "This should not happen");
+                return Collections.emptyList();
+            }
             Map<String, PartitionLoad> regions = getCostWhenNoCachedRegionLoadsFound(tableName);
             loads.put(HBaseTableInfoFactory.getInstance(HConfiguration.getConfiguration()).getTableInfo(tableName).getNameWithNamespaceInclAsString(),
                     regions
@@ -277,10 +275,10 @@ public class HBaseRegionLoads implements PartitionLoadWatcher{
         return loads.get(tableName);
     }
     /**
-     * Region Size in MB
+     * Region Size in bytes
      */
-    public static int memstoreAndStorefileSize(PartitionLoad load){
-        return load.getStorefileSizeMB() + load.getMemStoreSizeMB();
+    public static long memstoreAndStorefileSize(PartitionLoad load){
+        return load.getStorefileSize() + load.getMemStoreSize();
     }
 
     public static long memstoreAndStoreFileSize(String tableName) {

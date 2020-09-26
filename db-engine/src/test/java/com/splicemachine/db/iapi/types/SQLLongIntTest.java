@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.db.iapi.types;
@@ -35,13 +35,10 @@ import com.splicemachine.db.iapi.stats.ColumnStatisticsImpl;
 import com.splicemachine.db.iapi.stats.ItemStatistics;
 import com.splicemachine.db.impl.sql.execute.ValueRow;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
-import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.Arrays;
+import java.io.*;
 
 /**
  *
@@ -78,30 +75,6 @@ public class SQLLongIntTest extends SQLDataValueDescriptorTest {
         }
     
         @Test
-        public void serdeValueData() throws Exception {
-                UnsafeRow row = new UnsafeRow(1);
-                UnsafeRowWriter writer = new UnsafeRowWriter(new BufferHolder(row),1);
-                SQLLongint value = new SQLLongint(100l);
-                SQLLongint valueA = new SQLLongint();
-                value.write(writer, 0);
-                Assert.assertEquals("SerdeIncorrect",100l,row.getLong(0),0l);
-                valueA.read(row,0);
-                Assert.assertEquals("SerdeIncorrect",100l,valueA.getLong(),0l);
-            }
-
-        @Test
-        public void serdeNullValueData() throws Exception {
-                UnsafeRow row = new UnsafeRow(1);
-                UnsafeRowWriter writer = new UnsafeRowWriter(new BufferHolder(row),1);
-                SQLLongint value = new SQLLongint();
-                SQLLongint valueA = new SQLLongint();
-                value.write(writer, 0);
-                Assert.assertTrue("SerdeIncorrect", row.isNullAt(0));
-                value.read(row, 0);
-                Assert.assertTrue("SerdeIncorrect", valueA.isNull());
-            }
-
-        @Test
         public void testColumnStatistics() throws Exception {
                 SQLLongint value1 = new SQLLongint();
                 ItemStatistics stats = new ColumnStatisticsImpl(value1);
@@ -128,21 +101,6 @@ public class SQLLongIntTest extends SQLDataValueDescriptorTest {
                 Assert.assertEquals(1000.0d,(double) stats.rangeSelectivity(new SQLLongint(1000),new SQLLongint(2000),true,false),RANGE_SELECTIVITY_ERRROR_BOUNDS);
                 Assert.assertEquals(500.0d,(double) stats.rangeSelectivity(new SQLLongint(),new SQLLongint(500),true,false),RANGE_SELECTIVITY_ERRROR_BOUNDS);
                 Assert.assertEquals(4000.0d,(double) stats.rangeSelectivity(new SQLLongint(5000),new SQLLongint(),true,false),RANGE_SELECTIVITY_ERRROR_BOUNDS);
-        }
-        @Test
-        public void testArray() throws Exception {
-                UnsafeRow row = new UnsafeRow(1);
-                UnsafeRowWriter writer = new UnsafeRowWriter(new BufferHolder(row),1);
-                SQLArray value = new SQLArray();
-                value.setType(new SQLLongint());
-                value.setValue(new DataValueDescriptor[] {new SQLLongint(23),new SQLLongint(48), new SQLLongint(10), new SQLLongint()});
-                SQLArray valueA = new SQLArray();
-                valueA.setType(new SQLLongint());
-                writer.reset();
-                value.write(writer,0);
-                valueA.read(row,0);
-                Assert.assertTrue("SerdeIncorrect", Arrays.equals(value.value,valueA.value));
-
         }
 
         @Test
@@ -180,5 +138,63 @@ public class SQLLongIntTest extends SQLDataValueDescriptorTest {
                  */
                 double range = stats.selectivityExcludingValueIfSkewed(sqlLongint);
                 Assert.assertTrue(range + " did not match expected value of 1.0d", (range == 1.0d));
+        }
+
+        class MockObjectOutput extends ObjectOutputStream {
+                public MockObjectOutput() throws IOException { super(); }
+                public Boolean isNull = null;
+                public Long value = null;
+                @Override
+                public void writeBoolean(boolean bool) { isNull = bool; }
+                @Override
+                public void writeLong(long val) { value = val; }
+        }
+
+        class MockObjectInput extends ObjectInputStream {
+                public MockObjectInput() throws IOException { super(); }
+                public Boolean isNull = null;
+                public Long value = null;
+                @Override
+                public boolean readBoolean() { return isNull; }
+                @Override
+                public long readLong() { return value; }
+        }
+
+        @Test
+        public void writeExternal() throws IOException {
+                SQLLongint lint = new SQLLongint(42);
+                MockObjectOutput moo = new MockObjectOutput();
+                lint.writeExternal(moo);
+                Assert.assertFalse("Shouldn't be null", moo.isNull);
+                Assert.assertTrue("Unexpected value", moo.value == 42);
+        }
+
+        @Test
+        public void readExternal() throws IOException {
+                SQLLongint lint = new SQLLongint();
+                MockObjectInput moi = new MockObjectInput();
+                moi.isNull = false;
+                moi.value = 42L;
+                lint.readExternal(moi);
+                Assert.assertFalse("Shouldn't be null", lint.isNull());
+                Assert.assertTrue("Unexpected value", lint.getLong() == 42);
+        }
+
+        @Test
+        public void writeExternalNull() throws IOException {
+                SQLLongint lint = new SQLLongint();
+                MockObjectOutput moo = new MockObjectOutput();
+                lint.writeExternal(moo);
+                Assert.assertTrue("Should be null", moo.isNull);
+        }
+
+        @Test
+        public void readExternalNull() throws IOException {
+                SQLLongint lint = new SQLLongint();
+                MockObjectInput moi = new MockObjectInput();
+                moi.isNull = true;
+                moi.value = 0L;
+                lint.readExternal(moi);
+                Assert.assertTrue("Should be null", lint.isNull());
         }
 }

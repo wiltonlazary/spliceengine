@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -259,4 +259,15 @@ public interface AccessFactory
 	 */
 	void checkpoint() throws StandardException;
 
+	/**
+	 * Get a transaction controller with which to query data within
+	 * the access manager.  Implicitly creates an access context if one
+	 * does not already exist.
+	 *
+	 * @param cm    The context manager for the current context.
+	 *
+	 * @exception StandardException Standard exception policy.
+	 * @see TransactionController
+	 **/
+	TransactionController getReadOnlyTransaction(ContextManager cm, long txnId) throws StandardException;
 }

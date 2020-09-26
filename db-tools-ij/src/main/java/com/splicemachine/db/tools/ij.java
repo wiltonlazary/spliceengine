@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -37,6 +37,7 @@ import com.splicemachine.db.iapi.tools.i18n.LocalizedResource;
 
 import com.splicemachine.db.impl.tools.ij.Main;
 import com.splicemachine.db.impl.tools.ij.utilMain;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -58,6 +59,7 @@ import java.sql.Connection;
 	<P>
 	ij is can also be used with any database server that supports a JDBC driver.
 */
+@SuppressFBWarnings(value = "NM_CLASS_NAMING_CONVENTION",justification = "DB-9772")
 public class ij {
 
   /**

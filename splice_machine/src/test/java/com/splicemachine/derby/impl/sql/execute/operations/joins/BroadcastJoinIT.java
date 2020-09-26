@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,33 +14,27 @@
 
 package com.splicemachine.derby.impl.sql.execute.operations.joins;
 
-import com.splicemachine.db.iapi.sql.compile.JoinStrategy;
 import com.splicemachine.derby.test.framework.*;
 import com.splicemachine.homeless.TestUtils;
+import com.splicemachine.test.LongerThanTwoMinutes;
 import com.splicemachine.test_tools.TableCreator;
 import org.junit.*;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 import java.math.BigDecimal;
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLDataException;
-import java.sql.SQLSyntaxErrorException;
-import java.sql.Time;
-import java.sql.Timestamp;
+import java.sql.*;
 import java.util.Collection;
 
-import static com.splicemachine.db.iapi.sql.compile.JoinStrategy.JoinStrategyType.NESTED_LOOP;
 import static com.splicemachine.test_tools.Rows.row;
 import static com.splicemachine.test_tools.Rows.rows;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThat;
 
 /**
  * @author Scott Fines
@@ -49,6 +43,7 @@ import static org.junit.Assert.assertEquals;
 
 
 @RunWith(Parameterized.class)
+@Category(LongerThanTwoMinutes.class)
 public class BroadcastJoinIT extends SpliceUnitTest {
 
     private Boolean useSpark;
@@ -278,6 +273,30 @@ public class BroadcastJoinIT extends SpliceUnitTest {
             classWatcher.executeUpdate(SpliceUnitTest.format("insert into tab1 select a+%d,b from tab1", factor));
             factor = factor * 2;
         }
+
+        new TableCreator(conn)
+        .withCreate("create table tab4 (a int, b varchar(10))")
+        .withInsert("insert into tab4 values(?,?)")
+        .withRows(rows(
+        row(2, "abc"),
+        row(3, "abcdefghi")
+        )).create();
+
+        new TableCreator(conn)
+        .withCreate("create table tab5 (a int, b varchar(10))")
+        .withInsert("insert into tab5 values(?,?)")
+        .withRows(rows(
+        row(3, "bc")
+        )).create();
+
+        new TableCreator(conn)
+        .withCreate("create table tab6 (a int, b varchar(10))")
+        .withInsert("insert into tab6 values(?,?)")
+        .withRows(rows(
+        row(3, "c"),
+        row(3, "ce")
+        )).create();
+
         conn.commit();
     }
 
@@ -690,5 +709,90 @@ public class BroadcastJoinIT extends SpliceUnitTest {
         Assert.assertTrue("count(s1.a1) returned incorrect number of rows:", (c == 1));
 
         rs.close();
+    }
+
+    @Test
+    public void testSubstrInJoinPredicate() throws Exception {
+        String sqlTexts[] = {
+                format("select * from tab4 --SPLICE-PROPERTIES joinStrategy=BROADCAST,useSpark=%s %n" +
+                        "inner join tab5 on tab5.b = SUBSTR(tab4.b, 2) %n" +
+                        "left join tab6 on tab6.b = SUBSTR(tab4.b, 3)", useSpark),
+                format("select * from tab4 --SPLICE-PROPERTIES joinStrategy=BROADCAST,useSpark=%s %n" +
+                        "inner join tab5 on tab5.b = SUBSTR('abc', tab4.a) %n" +
+                        "left join tab6 on tab6.b = SUBSTR('bc', tab4.a)", useSpark),
+                format("select * from tab4 --SPLICE-PROPERTIES joinStrategy=BROADCAST,useSpark=%s %n" +
+                        "inner join tab5 on tab5.b = SUBSTR('bcefgh', 1, tab4.a) %n" +
+                        "left join tab6 on tab6.b = SUBSTR('cefgh', 1, tab4.a)", useSpark)
+        };
+
+        String expecteds[] = {
+                "A | B  | A | B | A | B |\n" +
+                "-------------------------\n" +
+                " 2 |abc | 3 |bc | 3 | c |",
+                "A | B  | A | B | A | B |\n" +
+                "-------------------------\n" +
+                " 2 |abc | 3 |bc | 3 | c |",
+                "A | B  | A | B | A | B |\n" +
+                "-------------------------\n" +
+                " 2 |abc | 3 |bc | 3 |ce |"
+        };
+        for (int i = 0; i < expecteds.length; ++i) {
+            String sqlText = sqlTexts[i];
+            String expected = expecteds[i];
+            try (ResultSet rs = classWatcher.executeQuery(sqlText)) {
+                String resultString = TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs);
+                assertEquals("\n" + sqlText + "\n" + "expected result: " + expected + "\n, actual result: " + resultString, expected, resultString);
+            }
+        }
+    }
+
+    @Test
+    public void testCaseInJoinPredicate() throws Exception {
+        String[] sqlTexts = {
+                format("select * from tab2 inner join tab3 --splice-properties joinStrategy=broadcast, useSpark=%s\n" +
+                       "on case when tab2.b=3 then 5 else 0 end = tab3.b", useSpark),
+
+                format("select * from tab2 inner join tab3 --splice-properties joinStrategy=broadcast, useSpark=%s\n" +
+                       "on case when tab2.b is null then 5 else 9 end = tab3.b order by 1,2,3,4", useSpark),
+        };
+        String[] expecteds = {
+                "A | B | A | B |\n" +
+                "----------------\n" +
+                " 3 | 3 | 5 | 5 |",
+
+                "A | B | A | B |\n" +
+                "----------------\n" +
+                " 1 | 1 | 9 | 9 |\n" +
+                " 2 | 2 | 9 | 9 |\n" +
+                " 3 | 3 | 9 | 9 |\n" +
+                " 4 | 4 | 9 | 9 |\n" +
+                " 5 | 5 | 9 | 9 |\n" +
+                " 6 | 6 | 9 | 9 |\n" +
+                " 7 | 7 | 9 | 9 |\n" +
+                " 8 | 8 | 9 | 9 |\n" +
+                " 9 | 9 | 9 | 9 |\n" +
+                "10 |10 | 9 | 9 |"
+        };
+        for (int i = 0; i < sqlTexts.length; ++i) {
+            String sqlText = sqlTexts[i];
+            String expected = expecteds[i];
+            try (ResultSet rs = classWatcher.executeQuery(sqlText)) {
+                String resultString = TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs);
+                assertEquals("\n" + sqlText + "\n" + "expected result: " + expected + "\n, actual result: " + resultString, expected, resultString);
+            }
+        }
+    }
+
+    @Test
+    public void testBroadcastJoinInNonFlattenedCorrelatedSubquery() throws Exception {
+        String sqlText = "select * from tab4 where a in (select tab5.a from tab6, tab5 --splice-properties joinStrategy=broadcast\n" +
+                "where tab5.a=tab6.a and tab4.a=tab5.a)";
+        String expected = "A |    B     |\n" +
+                "---------------\n" +
+                " 3 |abcdefghi |";
+        try (ResultSet rs = classWatcher.executeQuery(sqlText)) {
+            String resultString = TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs);
+            assertEquals("\n" + sqlText + "\n" + "expected result: " + expected + "\n, actual result: " + resultString, expected, resultString);
+        }
     }
 }

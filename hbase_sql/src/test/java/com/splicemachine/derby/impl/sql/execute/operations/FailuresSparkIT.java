@@ -1,6 +1,6 @@
 /*
  *
- *  * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ *  * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *  *
  *  * This file is part of Splice Machine.
  *  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -183,7 +183,7 @@ public class FailuresSparkIT {
             try(ResultSet rs = s.executeQuery("explain " + sql)) {
                 assertTrue(rs.next());
                 String plan = rs.getString(1);
-                assertTrue(plan.contains("control"));
+                assertTrue(plan.contains("OLTP"));
             }
             try(ResultSet rs = s.executeQuery(sql)) {
                 assertTrue(rs.next());

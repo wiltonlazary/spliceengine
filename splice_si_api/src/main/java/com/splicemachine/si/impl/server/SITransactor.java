@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -18,6 +18,7 @@ import com.carrotsearch.hppc.IntObjectHashMap;
 import com.carrotsearch.hppc.LongHashSet;
 import com.carrotsearch.hppc.cursors.IntObjectCursor;
 import com.carrotsearch.hppc.cursors.LongCursor;
+import com.splicemachine.access.configuration.SIConfigurations;
 import com.splicemachine.kvpair.KVPair;
 import com.splicemachine.primitives.Bytes;
 import com.splicemachine.si.api.data.*;
@@ -26,7 +27,6 @@ import com.splicemachine.si.api.rollforward.RollForward;
 import com.splicemachine.si.api.server.ConstraintChecker;
 import com.splicemachine.si.api.server.Transactor;
 import com.splicemachine.si.api.txn.ConflictType;
-import com.splicemachine.si.api.txn.TaskId;
 import com.splicemachine.si.api.txn.Txn;
 import com.splicemachine.si.api.txn.TxnSupplier;
 import com.splicemachine.si.api.txn.TxnView;
@@ -42,11 +42,10 @@ import com.splicemachine.utils.ByteSlice;
 import com.splicemachine.utils.Pair;
 import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.base.Predicate;
-import org.spark_project.guava.collect.Collections2;
-import org.spark_project.guava.collect.Lists;
-import org.spark_project.guava.collect.Maps;
-import javax.annotation.Nullable;
+import splice.com.google.common.collect.Collections2;
+import splice.com.google.common.collect.Lists;
+import splice.com.google.common.collect.Maps;
+
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
@@ -87,7 +86,6 @@ public class SITransactor implements Transactor{
     public boolean processPut(Partition table,RollForward rollForwardQueue,DataPut put) throws IOException{
         if(!isFlaggedForSITreatment(put)) return false;
         final DataPut[] mutations= {put};
-        mutations[0]=put;
         MutationStatus[] operationStatuses=processPutBatch(table,rollForwardQueue,mutations);
         return operationStatusLib.processPutStatus(operationStatuses[0]);
     }
@@ -110,12 +108,9 @@ public class SITransactor implements Transactor{
                 Map<byte[], List<KVPair>> columnMap=familyEntry.getValue();
                 for(Map.Entry<byte[], List<KVPair>> columnEntry : columnMap.entrySet()){
                     byte[] qualifier=columnEntry.getKey();
-                    List<KVPair> kvPairs= Lists.newArrayList(Collections2.filter(columnEntry.getValue(), new Predicate<KVPair>() {
-                        @Override
-                        public boolean apply(@Nullable KVPair input) {
-                            assert input != null;
-                            return !statusMap.containsKey(input.getRowKey()) || statusMap.get(input.getRowKey()).isSuccess();
-                        }
+                    List<KVPair> kvPairs= Lists.newArrayList(Collections2.filter(columnEntry.getValue(), input -> {
+                        assert input != null;
+                        return !statusMap.containsKey(input.getRowKey()) || statusMap.get(input.getRowKey()).isSuccess();
                     }));
                     MutationStatus[] statuses=processKvBatch(table,null,family,qualifier,kvPairs,txnId,defaultConstraintChecker);
                     for(int i=0;i<statuses.length;i++){
@@ -182,17 +177,26 @@ public class SITransactor implements Transactor{
                                              ConstraintChecker constraintChecker,
                                              boolean skipConflictDetection,
                                              boolean skipWAL, boolean rollforward) throws IOException{
-        MutationStatus[] finalStatus=new MutationStatus[mutations.size()];
-        Pair<KVPair, Lock>[] lockPairs=new Pair[mutations.size()];
+        int size = mutations.size();
+        MutationStatus[] finalStatus=new MutationStatus[size];
+        Pair<KVPair, Lock>[] lockPairs=new Pair[size];
+
         SimpleTxnFilter constraintState=null;
         TxnSupplier supplier = null;
         if(constraintChecker!=null) {
             constraintState = new SimpleTxnFilter(null, txn, NoOpReadResolver.INSTANCE, txnSupplier);
             supplier = constraintState.getTxnSupplier();
         } else {
-            supplier = new ActiveTxnCacheSupplier(txnSupplier, 100);
+            SIDriver driver = SIDriver.driver();
+            int initialSize = driver != null ?
+                    driver.getConfiguration().getActiveTransactionInitialCacheSize() :
+                    SIConfigurations.DEFAULT_ACTIVE_TRANSACTION_INITIAL_CACHE_SIZE;
+            int maxSize = driver != null ?
+                    driver.getConfiguration().getActiveTransactionMaxCacheSize() :
+                    SIConfigurations.DEFAULT_ACTIVE_TRANSACTION_MAX_CACHE_SIZE;
+            supplier = new ActiveTxnCacheSupplier(txnSupplier, initialSize, maxSize);
         }
-        @SuppressWarnings("unchecked") final LongHashSet[] conflictingChildren=new LongHashSet[mutations.size()];
+        @SuppressWarnings("unchecked") final LongHashSet[] conflictingChildren=new LongHashSet[size];
 
 
         ConflictRollForward conflictRollForward = new ConflictRollForward(opFactory, supplier);
@@ -215,6 +219,9 @@ public class SITransactor implements Transactor{
             for(IntObjectCursor<DataPut> write : writes){
                 toWrite[i]=write.value;
                 i++;
+            }
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Writing " + Arrays.toString(toWrite));
             }
             Iterator<MutationStatus> status=table.writeBatch(toWrite);
 
@@ -270,8 +277,8 @@ public class SITransactor implements Transactor{
         if (rollforward) {
             toRollforward = new ArrayList<>(dataAndLocks.length);
         }
-        for(int i=0;i<dataAndLocks.length;i++){
-            Pair<KVPair, Lock> baseDataAndLock=dataAndLocks[i];
+        for(int i = 0; i<dataAndLocks.length; i++) {
+            Pair<KVPair, Lock> baseDataAndLock = dataAndLocks[i];
             if(baseDataAndLock==null) continue;
 
             ConflictResults conflictResults=ConflictResults.NO_CONFLICT;
@@ -289,7 +296,7 @@ public class SITransactor implements Transactor{
                  */
                 //todo -sf remove the Row key copy here
                 possibleConflicts=bloomInMemoryCheck==null||bloomInMemoryCheck.get(i)?table.getLatest(kvPair.getRowKey(),possibleConflicts):null;
-                if(possibleConflicts!=null){
+                if(possibleConflicts!=null && !possibleConflicts.isEmpty()){
                     //we need to check for write conflicts
                     try {
                         conflictResults = ensureNoWriteConflict(transaction, writeType, possibleConflicts, rollForwardQueue, supplier);
@@ -315,9 +322,25 @@ public class SITransactor implements Transactor{
                 }
             }
 
-            conflictingChildren[i]=conflictResults.getChildConflicts();
-            DataPut mutationToRun=getMutationToRun(table,kvPair,
-                    family,qualifier,transaction,conflictResults,skipWAL,toRollforward);
+            conflictingChildren[i] = conflictResults.getChildConflicts();
+            boolean addFirstOccurrenceToken = false;
+
+            if (!skipConflictDetection) {
+                if (possibleConflicts == null || possibleConflicts.isEmpty())
+                {
+                    // First write
+                    if (KVPair.Type.INSERT.equals(writeType) ||
+                        KVPair.Type.UPSERT.equals(writeType))
+                        addFirstOccurrenceToken = true;
+                } else if (KVPair.Type.DELETE.equals(writeType) && possibleConflicts.firstWriteToken() != null) {
+                    // Delete following first write
+                    assert possibleConflicts.userData() != null;
+                    addFirstOccurrenceToken = possibleConflicts.firstWriteToken().version() == possibleConflicts.userData().version();
+                }
+            }
+
+            DataPut mutationToRun = getMutationToRun(
+                    table, kvPair, family, qualifier, transaction, conflictResults, addFirstOccurrenceToken, skipWAL, toRollforward);
             finalMutationsToWrite.put(i,mutationToRun);
         }
         if (toRollforward != null && toRollforward.size() > 0) {
@@ -340,7 +363,7 @@ public class SITransactor implements Transactor{
          */
         if(constraintChecker==null) return false;
 
-        if(row==null || row.size()<=0) return false;
+        if(row==null || row.isEmpty()) return false;
         //must reset the filter here to avoid contaminating multiple rows with tombstones and stuff
         constraintStateFilter.reset();
 
@@ -407,11 +430,12 @@ public class SITransactor implements Transactor{
 
     private DataPut getMutationToRun(Partition table, KVPair kvPair,
                                      byte[] family, byte[] column,
-                                     TxnView transaction, ConflictResults conflictResults, boolean skipWAL, List<ByteSlice> rollforward) throws IOException{
+                                     TxnView transaction, ConflictResults conflictResults, boolean addFirstOccurrenceToken,
+                                     boolean skipWAL, List<ByteSlice> rollforward) throws IOException{
         long txnIdLong=transaction.getTxnId();
 //                if (LOG.isTraceEnabled()) LOG.trace(String.format("table = %s, kvPair = %s, txnId = %s", table.toString(), kvPair.toString(), txnIdLong));
         DataPut newPut;
-        if(kvPair.getType()==KVPair.Type.EMPTY_COLUMN){
+        if(kvPair.getType()==KVPair.Type.EMPTY_COLUMN) {
             /*
              * WARNING: This requires a read of column data to populate! Try not to use
              * it unless no other option presents itself.
@@ -423,11 +447,18 @@ public class SITransactor implements Transactor{
              */
             newPut=opFactory.newPut(kvPair.rowKeySlice());
             setTombstonesOnColumns(table,txnIdLong,newPut);
-        }else if(kvPair.getType()==KVPair.Type.DELETE){
+        } else if(kvPair.getType()==KVPair.Type.DELETE) {
             newPut=opFactory.newPut(kvPair.rowKeySlice());
             newPut.tombstone(txnIdLong);
-        }else
-            newPut=opFactory.toDataPut(kvPair,family,column,txnIdLong);
+            if (addFirstOccurrenceToken) {
+                newPut.addDeleteRightAfterFirstWriteToken(family, txnIdLong);
+            }
+        } else {
+            newPut = opFactory.toDataPut(kvPair, family, column, txnIdLong);
+            if (addFirstOccurrenceToken) {
+                newPut.addFirstWriteToken(family, txnIdLong);
+            }
+        }
 
         newPut.addAttribute(SIConstants.SUPPRESS_INDEXING_ATTRIBUTE_NAME,SIConstants.SUPPRESS_INDEXING_ATTRIBUTE_VALUE);
         if(kvPair.getType()!=KVPair.Type.DELETE && conflictResults.hasTombstone())
@@ -449,8 +480,8 @@ public class SITransactor implements Transactor{
                 for(DataCell dc : cells){
                     delete.deleteColumn(dc.family(),dc.qualifier(),lc.value);
                 }
-                delete.deleteColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.SNAPSHOT_ISOLATION_TOMBSTONE_COLUMN_BYTES,lc.value);
-                delete.deleteColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.SNAPSHOT_ISOLATION_COMMIT_TIMESTAMP_COLUMN_BYTES,lc.value);
+                delete.deleteColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.TOMBSTONE_COLUMN_BYTES,lc.value);
+                delete.deleteColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.COMMIT_TIMESTAMP_COLUMN_BYTES,lc.value);
             }
             delete.addAttribute(SIConstants.SUPPRESS_INDEXING_ATTRIBUTE_NAME,SIConstants.SUPPRESS_INDEXING_ATTRIBUTE_VALUE);
             table.delete(delete);
@@ -478,7 +509,7 @@ public class SITransactor implements Transactor{
 
         conflictRollForward.reset(txnId, commitTs);
 
-        DataCell tombstoneKeyValue=row.tombstone();
+        DataCell tombstoneKeyValue=row.tombstoneOrAntiTombstone();
         conflictRollForward.handle(tombstoneKeyValue);
         if(tombstoneKeyValue!=null){
             long dataTransactionId=tombstoneKeyValue.version();

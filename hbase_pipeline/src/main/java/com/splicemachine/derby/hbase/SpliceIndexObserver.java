@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -18,6 +18,7 @@ import com.splicemachine.access.HConfiguration;
 import com.splicemachine.access.api.ServerControl;
 import com.splicemachine.concurrent.SystemClock;
 import com.splicemachine.constants.EnvUtils;
+import com.splicemachine.db.iapi.error.ExceptionUtil;
 import com.splicemachine.kvpair.KVPair;
 import com.splicemachine.lifecycle.DatabaseLifecycleManager;
 import com.splicemachine.lifecycle.PipelineLoadService;
@@ -43,18 +44,21 @@ import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionCoprocessorHost;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
+import org.apache.hadoop.hbase.regionserver.RegionServerServices;
+import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.base.Function;
+import splice.com.google.common.base.Function;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Region Observer for managing indices.
@@ -62,7 +66,7 @@ import java.util.List;
  * @author Scott Fines
  *         Created on: 2/28/13
  */
-public class SpliceIndexObserver extends BaseRegionObserver {
+public class SpliceIndexObserver implements RegionObserver, RegionCoprocessor {
     private static final Logger LOG = Logger.getLogger(SpliceIndexObserver.class);
 
     private long conglomId=-1L;
@@ -72,28 +76,37 @@ public class SpliceIndexObserver extends BaseRegionObserver {
     private volatile ContextFactoryLoader factoryLoader;
     private volatile PipelineLoadService<TableName> service;
     private volatile WriteContextFactory<TransactionalRegion> ctxFactory;
+    protected Optional<RegionObserver> optionalRegionObserver = Optional.empty();
 
     @Override
     public void start(final CoprocessorEnvironment e) throws IOException{
         try {
-            RegionCoprocessorEnvironment rce=((RegionCoprocessorEnvironment)e);
-
-            String tableName=rce.getRegion().getTableDesc().getTableName().getQualifierAsString();
-            TableType table=EnvUtils.getTableType(HConfiguration.getConfiguration(),rce);
-            switch(table){
+            RegionCoprocessorEnvironment rce = ((RegionCoprocessorEnvironment) e);
+            optionalRegionObserver = Optional.of(this);
+            String tableName = rce.getRegion().getTableDescriptor().getTableName().getQualifierAsString();
+            TableType table = EnvUtils.getTableType(HConfiguration.getConfiguration(), rce);
+            switch (table) {
                 case DERBY_SYS_TABLE:
-                    conglomId=-1; //bypass index management on derby system tables
+                    conglomId = -1; //bypass index management on derby system tables
                     break;
                 case USER_TABLE:
-                    conglomId=Long.parseLong(tableName);
+                    conglomId = Long.parseLong(tableName);
                     break;
                 default:
                     return; //disregard table environments which are not user or system tables
             }
+        } catch (Throwable t) {
+            throw CoprocessorUtils.getIOException(t);
+        }
+    }
 
+    @Override
+    public void postOpen(ObserverContext<RegionCoprocessorEnvironment> c) {
+        RegionCoprocessorEnvironment rce = c.getEnvironment();
+        try {
             final long cId = conglomId;
             final RegionPartition baseRegion=new RegionPartition((HRegion)rce.getRegion());
-            ServerControl sc = new RegionServerControl((HRegion)rce.getRegion(),rce.getRegionServerServices());
+            ServerControl sc = new RegionServerControl((HRegion)rce.getRegion(),(RegionServerServices)rce.getOnlineRegions());
             if(service==null){
                 service=new PipelineLoadService<TableName>(sc,baseRegion,cId){
                     @Override
@@ -136,14 +149,14 @@ public class SpliceIndexObserver extends BaseRegionObserver {
             }
             DatabaseLifecycleManager.manager().registerGeneralService(service);
         } catch (Throwable t) {
-            throw CoprocessorUtils.getIOException(t);
+            ExceptionUtil.throwAsRuntime(CoprocessorUtils.getIOException(t));
         }
     }
 
     @Override
     public void stop(CoprocessorEnvironment e) throws IOException {
         try {
-            super.stop(e);
+            optionalRegionObserver = Optional.empty();
             if (region != null)
                 region.close();
             if(service!=null) {
@@ -156,7 +169,7 @@ public class SpliceIndexObserver extends BaseRegionObserver {
     }
 
     @Override
-    public void prePut(ObserverContext<RegionCoprocessorEnvironment> e, Put put, WALEdit edit, Durability durability) throws IOException {
+    public void prePut(ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit, Durability durability) throws IOException {
         try {
             if (LOG.isTraceEnabled())
                 SpliceLogUtils.trace(LOG, "prePut %s",put);
@@ -176,7 +189,6 @@ public class SpliceIndexObserver extends BaseRegionObserver {
                        bigger than 0, but it should still go through the path for system index instead of the regular
                        user table index
                      */
-                    super.prePut(e, put, edit, durability);
                     return;
                 }
                 //we can't update an index if the conglomerate id isn't positive--it's probably a temp table or something
@@ -196,21 +208,19 @@ public class SpliceIndexObserver extends BaseRegionObserver {
                 TxnView txn = operationFactory.fromWrites(txnData,0,txnData.length);
                 mutate(kv,txn);
             }
-            super.prePut(e, put, edit, durability);
         } catch (Throwable t) {
             throw CoprocessorUtils.getIOException(t);
         }
     }
 
-    @Override
+   
     public void postRollBackSplit(ObserverContext<RegionCoprocessorEnvironment> ctx) throws IOException{
         try {
             RegionCoprocessorEnvironment rce=ctx.getEnvironment();
             start(rce);
-            RegionCoprocessorHost coprocessorHost=rce.getRegion().getCoprocessorHost();
+            RegionCoprocessorHost coprocessorHost=((HRegion)rce.getRegion()).getCoprocessorHost();
             Coprocessor coprocessor=coprocessorHost.findCoprocessor(SpliceIndexEndpoint.class.getName());
             coprocessor.start(rce);
-            super.postRollBackSplit(ctx);
         } catch (Throwable t) {
             throw CoprocessorUtils.getIOException(t);
         }
@@ -264,4 +274,8 @@ public class SpliceIndexObserver extends BaseRegionObserver {
         }
     }
 
+    @Override
+    public Optional<RegionObserver> getRegionObserver() {
+        return optionalRegionObserver;
+    }
 }

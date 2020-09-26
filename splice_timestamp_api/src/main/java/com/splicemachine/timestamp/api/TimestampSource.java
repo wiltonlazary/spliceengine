@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -18,9 +18,10 @@ package com.splicemachine.timestamp.api;
  * Generator of transaction timestamps. Expected to produce unique, monotonically increasing values.
  */
 public interface TimestampSource {
+    long currentTimestamp();
     long nextTimestamp();
     void rememberTimestamp(long timestamp);
     long retrieveTimestamp();
     void shutdown();
-    void refresh();
+    void bumpTimestamp(long timestamp);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -41,6 +41,7 @@ public class CrossJoinOperation extends JoinOperation{
     protected int[] leftHashKeys;
     protected int rightHashKeyItem;
     protected int[] rightHashKeys;
+    protected boolean broadcastRightSide;
     protected long sequenceId;
     protected static final String NAME = CrossJoinOperation.class.getSimpleName().replaceAll("Operation","");
 
@@ -63,19 +64,21 @@ public class CrossJoinOperation extends JoinOperation{
                               GeneratedMethod restriction,
                               int resultSetNumber,
                               boolean oneRowRightSide,
-                              boolean notExistsRightSide,
+                              byte semiJoinType,
                               boolean rightFromSSQ,
+                              boolean broadcastRightSide,
                               double optimizerEstimatedRowCount,
                               double optimizerEstimatedCost,
                               String userSuppliedOptimizerOverrides,
                               String sparkExpressionTreeAsString) throws
             StandardException{
         super(leftResultSet,leftNumCols,rightResultSet,rightNumCols,
-                activation,restriction,resultSetNumber,oneRowRightSide,notExistsRightSide, rightFromSSQ,
+                activation,restriction,resultSetNumber,oneRowRightSide, semiJoinType, rightFromSSQ,
                 optimizerEstimatedRowCount,optimizerEstimatedCost,userSuppliedOptimizerOverrides,
                 sparkExpressionTreeAsString);
         this.leftHashKeyItem=leftHashKeyItem;
         this.rightHashKeyItem=rightHashKeyItem;
+        this.broadcastRightSide=broadcastRightSide;
         this.sequenceId = Bytes.toLong(operationInformation.getUUIDGenerator().nextBytes());
         init();
     }
@@ -85,6 +88,7 @@ public class CrossJoinOperation extends JoinOperation{
             ClassNotFoundException{
         super.readExternal(in);
         sequenceId = in.readLong();
+        broadcastRightSide = in.readBoolean();
         leftHashKeyItem=in.readInt();
         rightHashKeyItem=in.readInt();
     }
@@ -97,6 +101,7 @@ public class CrossJoinOperation extends JoinOperation{
     public void writeExternal(ObjectOutput out) throws IOException{
         super.writeExternal(out);
         out.writeLong(sequenceId);
+        out.writeBoolean(broadcastRightSide);
         out.writeInt(leftHashKeyItem);
         out.writeInt(rightHashKeyItem);
     }
@@ -119,34 +124,45 @@ public class CrossJoinOperation extends JoinOperation{
             throw new IllegalStateException("Operation is not open");
 
         OperationContext operationContext = dsp.createOperationContext(this);
+        dsp.incrementOpDepth();
+        boolean usesNativeSparkDataSet = 
+           dsp.getType().equals(DataSetProcessor.Type.SPARK) &&
+                (this.leftHashKeys.length == 0 || !containsUnsafeSQLRealComparison());
+        if (usesNativeSparkDataSet)
+            dsp.finalizeTempOperationStrings();
+
+        DataSet.Broadcast rightBroadcastType = broadcastRightSide ? DataSet.Broadcast.RIGHT : DataSet.Broadcast.NONE;
         DataSet<ExecRow> leftDataSet = leftResultSet.getDataSet(dsp);
+        dsp.finalizeTempOperationStrings();
         DataSet<ExecRow> rightDataSet = rightResultSet.getDataSet(dsp);
+        dsp.decrementOpDepth();
 
 //        operationContext.pushScope();
         leftDataSet = leftDataSet.map(new CountJoinedLeftFunction(operationContext));
 
         DataSet<ExecRow> result;
 
-        if (dsp.getType().equals(DataSetProcessor.Type.SPARK) &&
-                (this.leftHashKeys.length == 0 || !containsUnsafeSQLRealComparison())) {
-            result = leftDataSet.crossJoin(operationContext, rightDataSet);
+        if (usesNativeSparkDataSet) {
+            result = leftDataSet.crossJoin(operationContext, rightDataSet, rightBroadcastType);
             if (restriction != null) {
                 result = result.filter(new JoinRestrictionPredicateFunction(operationContext));
             }
         } else {
             LOG.warn("Cross join supposed to be run with Spark only, using BroadcastJoin now");
-            if (isOuterJoin() || this.notExistsRightSide || isOneRowRightSide()) {
+            if (isOuterJoin() || isAntiJoin() || isInclusionJoin()) {
                 throw new UnsupportedOperationException("Cross join shouldn't be run on outer join or anti join");
             }
             if (this.leftHashKeys.length != 0)
                 leftDataSet = leftDataSet.filter(new InnerJoinNullFilterFunction(operationContext,this.leftHashKeys));
-            result = leftDataSet.mapPartitions(new BroadcastJoinFlatMapFunction(operationContext))
+            result = leftDataSet.mapPartitions(new BroadcastJoinFlatMapFunction(operationContext, false))
                     .map(new InnerJoinFunction<SpliceOperation>(operationContext));
             if (restriction != null) { // with restriction
                 result = result.filter(new JoinRestrictionPredicateFunction(operationContext));
             }
         }
         result = result.map(new CountProducedFunction(operationContext), true);
+
+        handleSparkExplain(result, leftDataSet, rightDataSet, dsp);
         return result;
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -16,8 +16,7 @@ package com.splicemachine.derby.lifecycle;
 
 import com.splicemachine.access.api.SConfiguration;
 import com.splicemachine.derby.utils.DatabasePropertyManagementImpl;
-import com.yammer.metrics.core.MetricsRegistry;
-import com.yammer.metrics.reporting.JmxReporter;
+import com.sun.xml.internal.bind.v2.TODO;
 
 import javax.management.MBeanServer;
 
@@ -27,20 +26,21 @@ import javax.management.MBeanServer;
  */
 public class MonitoredLifecycleService extends EngineLifecycleService{
 
-    private JmxReporter metricsReporter;
-    private MetricsRegistry metricsRegistry = new MetricsRegistry();
+    // TODO; Fix metrics
+//    private JmxReporter metricsReporter;
+//    private MetricsRegistry metricsRegistry = new MetricsRegistry();
 
     public MonitoredLifecycleService(DistributedDerbyStartup startup,
                                      SConfiguration configuration,
                                      boolean isMaster){
-        super(startup, configuration, isMaster);
+        super(startup, configuration, isMaster, true);
     }
 
     @Override
     public void registerJMX(MBeanServer mbs) throws Exception{
         super.registerJMX(mbs);
-        metricsReporter = new JmxReporter(metricsRegistry);
-        metricsReporter.start();
+//        metricsReporter = new JmxReporter(metricsRegistry);
+//        metricsReporter.start();
 
         DatabasePropertyManagementImpl.registerJMX(mbs);
     }
@@ -48,8 +48,8 @@ public class MonitoredLifecycleService extends EngineLifecycleService{
 
     @Override
     public void shutdown() throws Exception{
-        if(metricsReporter!=null)
-            metricsReporter.shutdown();
+//        if(metricsReporter!=null)
+//            metricsReporter.shutdown();
         super.shutdown();
     }
 }

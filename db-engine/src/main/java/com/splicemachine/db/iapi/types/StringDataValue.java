@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -139,7 +139,7 @@ public interface StringDataValue extends ConcatableDataValue
 	 * @param length Number of characters to take.
 	 * @param result The result of this method.
 	 * @return A StringDataValue containing the result of the right().
-	 * @throws StandardException.
+	 * @throws StandardException
 	 */
 	StringDataValue right(
 			NumberDataValue length,
@@ -219,24 +219,6 @@ public interface StringDataValue extends ConcatableDataValue
 	 */
 	StringDataValue lower(StringDataValue result)
 							throws StandardException;
-
-    /**
-     * Position in searchFrom of the first occurrence of this.value.
-     * The search begins from position start.  0 is returned if searchFrom does
-     * not contain this.value.  Position 1 is the first character in searchFrom.
-     *
-     * @param searchFrom    - The string to search from
-     * @param start         - The position to search from in string searchFrom
-     * @param result        - The object to return
-     *
-     * @return  The position in searchFrom the fist occurrence of this.value.
-     *              0 is returned if searchFrom does not contain this.value.
-     * @exception StandardException     Thrown on error
-     */
-	NumberDataValue locate(StringDataValue searchFrom,
-						   NumberDataValue start,
-						   NumberDataValue result)
-                                    throws StandardException;
 
 
 	/**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -34,6 +34,18 @@ public class TxnUtils {
 		return rowKey;
 	}
 
+	private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
+	public static String rowKeytoHbaseEscaped(byte[] rowKey) {
+		char[] hexChars = new char[rowKey.length * 4];
+		for (int j = 0; j < rowKey.length; j++) {
+			int v = rowKey[j] & 0xFF;
+			hexChars[j * 4] = '\\';
+			hexChars[j * 4 + 1] = 'x';
+			hexChars[j * 4 + 2] = HEX_ARRAY[v >>> 4];
+			hexChars[j * 4 + 3] = HEX_ARRAY[v & 0x0F];
+		}
+		return new String(hexChars);
+	}
 
 	public static long txnIdFromRowKey(byte[] buffer, int rowOffset, int rowLength) {
 		return Bytes.toLong(buffer, rowOffset + 1, rowLength - 1);

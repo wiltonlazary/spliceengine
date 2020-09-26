@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -160,7 +160,7 @@ public class ForeignKeyChildInterceptWriteHandler implements WriteHandler{
     }
 
     private boolean hasData(DataResult result,SimpleTxnFilter filter) throws IOException {
-        if(result!=null && result.size()>0) {
+        if(result!=null && !result.isEmpty()) {
             int cellCount = result.size();
             for (DataCell dc : result) {
                 DataFilter.ReturnCode returnCode = filter.filterCell(dc);

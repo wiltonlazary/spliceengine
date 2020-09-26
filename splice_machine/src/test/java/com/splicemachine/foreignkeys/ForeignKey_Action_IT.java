@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -38,8 +38,6 @@ import static org.junit.Assert.fail;
  * ON UPDATE NO ACTION
  */
 //
-// SPLICE-894 Remove Serial
-@Category(value = {SerialTest.class})
 public class ForeignKey_Action_IT {
 
     private static final String SCHEMA = ForeignKey_Action_IT.class.getSimpleName();

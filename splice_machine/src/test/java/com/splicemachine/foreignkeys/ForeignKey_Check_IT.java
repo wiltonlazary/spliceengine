@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -17,7 +17,7 @@ package com.splicemachine.foreignkeys;
 import com.splicemachine.derby.test.framework.SpliceSchemaWatcher;
 import com.splicemachine.derby.test.framework.SpliceWatcher;
 import com.splicemachine.derby.test.framework.TestConnection;
-import com.splicemachine.test.SerialTest;
+import com.splicemachine.test.LongerThanTwoMinutes;
 import com.splicemachine.test_tools.TableCreator;
 import org.junit.*;
 import org.junit.experimental.categories.Category;
@@ -32,8 +32,7 @@ import static org.junit.Assert.*;
 /**
  * Foreign key tests for *checking* that the FK constraint is enforced in various scenarios.
  */
-// SPLICE-894 Remove Serial
-@Category(value = {SerialTest.class})
+@Category(LongerThanTwoMinutes.class)
 public class ForeignKey_Check_IT {
 
     private static final String SCHEMA = ForeignKey_Check_IT.class.getSimpleName();

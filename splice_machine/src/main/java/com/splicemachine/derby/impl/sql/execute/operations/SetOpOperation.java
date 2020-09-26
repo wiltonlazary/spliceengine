@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -16,7 +16,7 @@ package com.splicemachine.derby.impl.sql.execute.operations;
 
 import com.splicemachine.derby.stream.function.CloneFunction;
 import com.splicemachine.derby.stream.iapi.OperationContext;
-import org.spark_project.guava.base.Strings;
+import splice.com.google.common.base.Strings;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.execute.ExecPreparedStatement;
@@ -165,17 +165,25 @@ public class SetOpOperation extends SpliceBaseOperation {
             throw new IllegalStateException("Operation is not open");
 
         OperationContext operationContext = dsp.createOperationContext(this);
+        dsp.incrementOpDepth();
+        dsp.finalizeTempOperationStrings();
+        DataSet<ExecRow> leftDS = leftSource.getDataSet(dsp);
+        dsp.finalizeTempOperationStrings();
+        DataSet<ExecRow> rightDS = rightSource.getDataSet(dsp);
+        dsp.decrementOpDepth();
+
+        DataSet<ExecRow> resultDS = null;
         if (this.opType==IntersectOrExceptNode.INTERSECT_OP) {
-            return leftSource.getDataSet(dsp).map(new CloneFunction<SetOpOperation>(operationContext)).intersect(
-                    rightSource.getDataSet(dsp).map(new CloneFunction<SetOpOperation>(operationContext)),
+            resultDS = leftDS.map(new CloneFunction<SetOpOperation>(operationContext)).intersect(
+                    rightDS.map(new CloneFunction<SetOpOperation>(operationContext)),
                     OperationContext.Scope.INTERSECT.displayName(),
                     operationContext,
                     true,
                     OperationContext.Scope.INTERSECT.displayName());
         }
         else if (this.opType==IntersectOrExceptNode.EXCEPT_OP) {
-            return leftSource.getDataSet(dsp).map(new CloneFunction<SetOpOperation>(operationContext)).subtract(
-                    rightSource.getDataSet(dsp).map(new CloneFunction<SetOpOperation>(operationContext)),
+            resultDS = leftDS.map(new CloneFunction<SetOpOperation>(operationContext)).subtract(
+                    rightDS.map(new CloneFunction<SetOpOperation>(operationContext)),
                     OperationContext.Scope.SUBTRACT.displayName(),
                     operationContext,
                     true,
@@ -183,6 +191,7 @@ public class SetOpOperation extends SpliceBaseOperation {
         } else {
             throw new RuntimeException("Operation Type not Supported "+opType);
         }
-
+        handleSparkExplain(resultDS, leftDS, rightDS, dsp);
+        return resultDS;
     }
 }

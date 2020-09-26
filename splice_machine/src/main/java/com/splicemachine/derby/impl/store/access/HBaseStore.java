@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -107,6 +107,11 @@ public class HBaseStore implements ModuleControl, ModuleSupportable {
 		public Transaction findUserTransaction(ContextManager contextManager, String transactionName) throws StandardException {
 				SpliceLogUtils.trace(LOG, "marshalTransaction with Context Manager %s  and transaction name %s", contextManager, transactionName);
 				return transactionFactory.findUserTransaction(this, contextManager, transactionName);
+		}
+
+		public Transaction createPastTransaction(ContextManager contextManager, String transactionName, long transactionId) throws StandardException {
+			SpliceLogUtils.trace(LOG, "marshalTransaction with Context Manager %s  and transaction name %s", contextManager, transactionName);
+			return transactionFactory.createPastTransaction(this, contextManager, transactionName, transactionId);
 		}
 
 		/**

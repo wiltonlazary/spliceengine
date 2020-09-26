@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,7 +14,6 @@
 
 package com.splicemachine.si.impl;
 
-import com.splicemachine.access.api.PartitionFactory;
 import com.splicemachine.concurrent.IncrementingClock;
 import com.splicemachine.encoding.Encoding;
 import com.splicemachine.primitives.Bytes;
@@ -77,7 +76,7 @@ public class SimpleTxnFilterTest{
         OperationFactory operationFactory = testEnv.getBaseOperationFactory();
         TimestampSource tss = new TestingTimestampSource();
         this.txnStore=new TestingTxnStore(new IncrementingClock(),tss,exceptionFactory,Long.MAX_VALUE);
-        this.txnSupplier = new ActiveTxnCacheSupplier(new CompletedTxnCacheSupplier(txnStore, 1024, 4),1024);
+        this.txnSupplier = new ActiveTxnCacheSupplier(new CompletedTxnCacheSupplier(txnStore, 1024, 4),1024,1024);
         this.txnLifecycleManager= new ClientTxnLifecycleManager(tss,exceptionFactory);
         this.txnLifecycleManager.setTxnStore(txnStore);
         this.txnLifecycleManager.setKeepAliveScheduler(new ManualKeepAliveScheduler(txnStore));
@@ -94,7 +93,7 @@ public class SimpleTxnFilterTest{
         TxnView myTxn=new InheritingTxnView(Txn.ROOT_TRANSACTION,0x300l,0x300l,Txn.IsolationLevel.SNAPSHOT_ISOLATION,Txn.State.ACTIVE);
 
         DataPut testCommitKv=operationFactory.newDataPut(myTxn,Encoding.encode("1"));
-        testCommitKv.addCell(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.SNAPSHOT_ISOLATION_COMMIT_TIMESTAMP_COLUMN_BYTES,0x100l,Bytes.toBytes(1l));
+        testCommitKv.addCell(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.COMMIT_TIMESTAMP_COLUMN_BYTES,0x100l,Bytes.toBytes(1l));
         DataCell commitCell=testCommitKv.cells().iterator().next();
         Assert.assertNotNull("Did not create a commit cell!",commitCell);
         Assert.assertEquals("Incorrect data type!",CellType.COMMIT_TIMESTAMP,commitCell.dataType());

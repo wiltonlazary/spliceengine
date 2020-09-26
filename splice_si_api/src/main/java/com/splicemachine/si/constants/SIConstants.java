@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -49,6 +49,11 @@ public class SIConstants {
     public static final long TRASANCTION_INCREMENT = 0x100l;
     public static final long SUBTRANSANCTION_ID_MASK = 0xFFl;
     public static final long TRANSANCTION_ID_MASK= 0xFFFFFFFFFFFFFF00l;
+    public static final long OLDEST_TIME_TRAVEL_TX = TRASANCTION_INCREMENT;
+
+    public static final String REPLICATION_ROLE_REPLICA = "REPLICA";
+    public static final String REPLICATION_ROLE_PRIMARY = "PRIMARY";
+    public static final String REPLICATION_ROLE_NONE = "NONE";
 
     /**
      * Splice Columns
@@ -56,13 +61,17 @@ public class SIConstants {
      * 0 = contains commit timestamp (optionally written after writing transaction is final)
      * 1 = tombstone (if value empty) or anti-tombstone (if value "0")
      * 7 = encoded user data
+     * 8 = token placed the first time we write to this row
      * 9 = column for causing write conflicts between concurrent transactions writing to parent and child FK tables
      */
-    public static final byte[] SNAPSHOT_ISOLATION_COMMIT_TIMESTAMP_COLUMN_BYTES = Bytes.toBytes("0");
-    public static final byte[] SNAPSHOT_ISOLATION_TOMBSTONE_COLUMN_BYTES = Bytes.toBytes("1");
-    public static final byte[] SNAPSHOT_ISOLATION_FK_COUNTER_COLUMN_BYTES = Bytes.toBytes("9");
-    public static final byte[] SNAPSHOT_ISOLATION_ANTI_TOMBSTONE_VALUE_BYTES = Bytes.toBytes("0");
-
+    public static final byte[] COMMIT_TIMESTAMP_COLUMN_BYTES = Bytes.toBytes("0");
+    public static final byte[] TOMBSTONE_COLUMN_BYTES = Bytes.toBytes("1");
+    public static final byte[] FK_COUNTER_COLUMN_BYTES = Bytes.toBytes("9");
+    public static final byte[] FIRST_OCCURRENCE_TOKEN_COLUMN_BYTES = Bytes.toBytes("8");
+    public static final byte[] ANTI_TOMBSTONE_VALUE_BYTES = Bytes.toBytes("0");
+    public static final byte[] DELETE_RIGHT_AFTER_FIRST_WRITE_VALUE_BYTES = Bytes.toBytes("0");
+    public static final byte[] TOMBSTONE_VALUE_BYTES = EMPTY_BYTE_ARRAY;
+    public static final byte[] FIRST_WRITE_VALUE_BYTES = EMPTY_BYTE_ARRAY;
 
     public static final String SI_TRANSACTION_KEY = "T";
     public static final String SI_TRANSACTION_ID_KEY = "A";
@@ -103,6 +112,7 @@ public class SIConstants {
     public static final String SCHEMA_DISPLAY_NAME_ATTR = "schemaDisplayName";
     public static final String TABLE_DISPLAY_NAME_ATTR = "tableDisplayName";
     public static final String INDEX_DISPLAY_NAME_ATTR = "indexDisplayName";
+    public static final String CATALOG_VERSION_ATTR = "catalogVersion";
     public static final String TRANSACTION_ID_ATTR = "createTransactionId";
     public static final String DROPPED_TRANSACTION_ID_ATTR = "droppedTransactionId";
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,16 +14,16 @@
 
 package com.splicemachine.derby.impl.sql.execute.operations.window.function;
 
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
-
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.io.FormatableHashtable;
 import com.splicemachine.db.iapi.services.loader.ClassFactory;
 import com.splicemachine.db.iapi.sql.execute.WindowFunction;
 import com.splicemachine.db.iapi.types.DataTypeDescriptor;
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
+
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 
 /**
  *
@@ -50,8 +50,9 @@ public class MaxMinAggregator extends SpliceGenericWindowFunction {
         DataValueDescriptor result = chunk.getResult();
         if (result == null || result.isNull()) {
             chunk.setResult(dvd[0]);
-        }
-        else if(isMax && dvd[0].compare(result) > 0) {
+        } else if (dvd[0] == null || dvd[0].isNull()) {
+            return;
+        } else if(isMax && dvd[0].compare(result) > 0) {
             chunk.setResult(dvd[0]);
         }
         else if (!isMax && dvd[0].compare(result) < 0) {
@@ -88,6 +89,9 @@ public class MaxMinAggregator extends SpliceGenericWindowFunction {
 
     public DataValueDescriptor getResult() throws StandardException {
         // Iterate through each chunk, compute the max/min of each chunk
+        if (chunks.isEmpty() || chunks.get(0).isEmpty())
+            return null;
+
         WindowChunk first = chunks.get(0);
         DataValueDescriptor result = first.getResult();
         for (int i = 1; i < chunks.size(); ++i) {

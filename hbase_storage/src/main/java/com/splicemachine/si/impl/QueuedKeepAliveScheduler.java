@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,7 +14,8 @@
 
 package com.splicemachine.si.impl;
 
-import org.spark_project.guava.util.concurrent.ThreadFactoryBuilder;
+import com.splicemachine.si.impl.driver.SIDriver;
+import splice.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.splicemachine.annotations.ThreadSafe;
 import com.splicemachine.concurrent.ThreadLocalRandom;
 import com.splicemachine.si.api.txn.KeepAliveScheduler;
@@ -86,6 +87,9 @@ public class QueuedKeepAliveScheduler implements KeepAliveScheduler{
 
         @Override
         public void run(){
+            if (SIDriver.driver().lifecycleManager().isRestoreMode()){
+                return;
+            }
             if(txn.getEffectiveState()!=Txn.State.ACTIVE){
                 return; //nothing to do, we no longer need to keep anything alive
             }

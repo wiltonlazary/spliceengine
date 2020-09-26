@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,10 +14,11 @@
 
 package com.splicemachine.compactions;
 
+import com.clearspring.analytics.util.Lists;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.regionserver.StoreConfigInformation;
-import org.apache.hadoop.hbase.regionserver.StoreFile;
+import org.apache.hadoop.hbase.regionserver.*;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
+import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequestImpl;
 import org.apache.hadoop.hbase.regionserver.compactions.ExploringCompactionPolicy;
 
 import java.io.IOException;
@@ -39,10 +40,19 @@ public class SpliceDefaultCompactionPolicy extends ExploringCompactionPolicy {
     }
 
     @Override
-    public CompactionRequest selectCompaction(Collection<StoreFile> candidateFiles, List<StoreFile> filesCompacting, boolean isUserCompaction, boolean mayUseOffPeak, boolean forceMajor) throws IOException {
-        CompactionRequest cr = super.selectCompaction(candidateFiles, filesCompacting, isUserCompaction, mayUseOffPeak, forceMajor);
-        SpliceCompactionRequest scr = new SpliceCompactionRequest();
-        scr.combineWith(cr);
+    public CompactionRequestImpl selectCompaction(Collection<HStoreFile> candidateFiles, List<HStoreFile> filesCompacting,
+                                                  boolean isUserCompaction, boolean mayUseOffPeak, boolean forceMajor) throws IOException {
+        CompactionRequestImpl cr = super.selectCompaction(candidateFiles, filesCompacting, isUserCompaction, mayUseOffPeak, forceMajor);
+        SpliceCompactionRequest scr = new SpliceCompactionRequest(cr.getFiles());
+        HStore store = (HStore)storeConfigInfo;
+        HRegion region = store.getHRegion();
+        String storeName = store.getColumnFamilyName();
+        scr.setIsMajor(cr.isMajor(), cr.isAllFiles());
+        // Ignoring cr.isOffPeak() and hardcoding true because SpliceCompactionRequest.setOffPeak is hijacked to run
+        // SpliceCompactionRequest.afterExecute if isOffPeak(false) is called.
+        scr.setOffPeak(true);
+        scr.setPriority(cr.getPriority());
+        scr.setDescription(region.getRegionInfo().getEncodedName(), storeName);
         return scr;
     }
 }

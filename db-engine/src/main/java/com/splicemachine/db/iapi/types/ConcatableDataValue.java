@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -80,7 +80,8 @@ public interface ConcatableDataValue extends DataValueDescriptor, VariableSizeDa
 			NumberDataValue start,
 			NumberDataValue length,
 			ConcatableDataValue result,
-			int maxLen)
+			int maxLen,
+			boolean isFixedLength)
 		throws StandardException;
 
 	/**
@@ -102,4 +103,22 @@ public interface ConcatableDataValue extends DataValueDescriptor, VariableSizeDa
 			StringDataValue toStr,
 			ConcatableDataValue result)
             throws StandardException;
+
+	/**
+	 * Position in searchFrom of the first occurrence of this.value.
+	 * The search begins from position start.  0 is returned if searchFrom does
+	 * not contain this.value.  Position 1 is the first character in searchFrom.
+	 *
+	 * @param searchFrom    - The string or binary string to search from
+	 * @param start         - The position to search from in string searchFrom
+	 * @param result        - The object to return
+	 *
+	 * @return  The position in searchFrom the fist occurrence of this.value.
+	 *              0 is returned if searchFrom does not contain this.value.
+	 * @exception StandardException     Thrown on error
+	 */
+	NumberDataValue locate(ConcatableDataValue searchFrom,
+						   NumberDataValue start,
+						   NumberDataValue result)
+			throws StandardException;
 }

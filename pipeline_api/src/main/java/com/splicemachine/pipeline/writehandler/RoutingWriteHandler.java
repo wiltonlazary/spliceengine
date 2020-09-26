@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -16,6 +16,7 @@ package com.splicemachine.pipeline.writehandler;
 
 import java.io.IOException;
 import com.carrotsearch.hppc.ObjectObjectHashMap;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
 import com.splicemachine.access.api.NotServingPartitionException;
 import com.splicemachine.access.api.WrongPartitionException;
 import com.splicemachine.kvpair.KVPair;
@@ -75,10 +76,8 @@ public abstract class RoutingWriteHandler implements WriteHandler {
             doFlush(ctx);
         } catch (Exception e) {
             SpliceLogUtils.error(LOG, e);
-            Object[] buffer = routedToBaseMutationMap.values;
-            int size = routedToBaseMutationMap.size();
-            for (int i = 0; i < size; i++) {
-                fail((KVPair)buffer[i],ctx,e);
+            for (ObjectCursor<KVPair> pair : routedToBaseMutationMap.values()) {
+                fail(pair.value,ctx,e);
             }
         }
     }
@@ -91,10 +90,8 @@ public abstract class RoutingWriteHandler implements WriteHandler {
             doClose(ctx);
         } catch (Exception e) {
             SpliceLogUtils.error(LOG, e);
-            Object[] buffer = routedToBaseMutationMap.values;
-            int size = routedToBaseMutationMap.size();
-            for (int i = 0; i < size; i++) {
-                fail((KVPair)buffer[i],ctx,e);
+            for (ObjectCursor<KVPair> pair : routedToBaseMutationMap.values()) {
+                fail(pair.value,ctx,e);
             }
         }
     }
@@ -112,12 +109,17 @@ public abstract class RoutingWriteHandler implements WriteHandler {
     }
 
     protected final void fail(KVPair mutation,WriteContext ctx,Exception e){
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("fail, ", e);
+        }
         @SuppressWarnings("ThrowableResultOfMethodCallIgnored") Throwable t = ctx.exceptionFactory().processPipelineException(e);
         if(t instanceof NotServingPartitionException)
             ctx.failed(mutation,WriteResult.notServingRegion());
         else if(t instanceof WrongPartitionException)
             ctx.failed(mutation,WriteResult.wrongRegion());
-        else
-            ctx.failed(mutation, WriteResult.failed(t.getClass().getSimpleName()+":"+t.getMessage()));
+        else {
+            LOG.error("Unexpected exception", t);
+            ctx.failed(mutation, WriteResult.failed(t.getClass().getSimpleName() + ":" + t.getMessage()));
+        }
     }
 }

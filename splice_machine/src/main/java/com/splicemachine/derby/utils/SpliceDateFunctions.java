@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -20,7 +20,7 @@ import com.splicemachine.pipeline.ErrorState;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeFieldType;
 import org.joda.time.Months;
-import org.spark_project.guava.collect.ImmutableMap;
+import splice.com.google.common.collect.ImmutableMap;
 
 import java.sql.Date;
 import java.sql.SQLException;
@@ -45,10 +45,22 @@ public class SpliceDateFunctions {
             .put("sunday", 1).put("monday", 2).put("tuesday", 3).put("wednesday", 4).put("thursday", 5)
             .put("friday", 6).put("saturday", 7).build();
 
-    public static Date ADD_MONTHS(Date source, int numOfMonths) {
-        if (source == null) return null;
+    public static Date ADD_MONTHS(Date source, Integer numOfMonths) {
+        if (source == null || numOfMonths == null) return null;
         DateTime dt = new DateTime(source);
         return new Date(dt.plusMonths(numOfMonths).getMillis());
+    }
+
+    public static Date ADD_DAYS(Date source, Integer numOfDays) {
+        if (source == null || numOfDays == null) return null;
+        DateTime dt = new DateTime(source);
+        return new Date(dt.plusDays(numOfDays).getMillis());
+    }
+
+    public static Date ADD_YEARS(Date source, Integer numOfYears) {
+        if (source == null || numOfYears == null) return null;
+        DateTime dt = new DateTime(source);
+        return new Date(dt.plusYears(numOfYears).getMillis());
     }
 
     /**

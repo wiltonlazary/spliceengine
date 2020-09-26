@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -64,7 +64,7 @@ public abstract class SkeletonHBaseClientPartition implements Partition{
     @Override
     public DataResult getFkCounter(byte[] key,DataResult previous) throws IOException{
         Get g = new Get(key);
-        g.addColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.SNAPSHOT_ISOLATION_FK_COUNTER_COLUMN_BYTES);
+        g.addColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.FK_COUNTER_COLUMN_BYTES);
 
         Result r = doGet(g);
         if(previous==null)
@@ -239,4 +239,10 @@ public abstract class SkeletonHBaseClientPartition implements Partition{
     public abstract Table unwrapDelegate();
 
     public abstract  <T extends Service,V> Map<byte[],V> coprocessorExec(Class<T> serviceClass, Batch.Call<T,V> call) throws Throwable;
+
+    public abstract <T extends Service,V> Map<byte[],V> coprocessorExec(
+            Class<T> serviceClass,
+            byte[] startKey,
+            byte[] endKey,
+            final Batch.Call<T,V> callable) throws Throwable;
 }

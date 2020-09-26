@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -257,6 +257,12 @@ public class LimitOffsetVisitor extends AbstractSpliceVisitor {
 
     @Override
     public Visitable visit(BinaryExportNode node) throws StandardException {
+        nullify();
+        return super.visit(node);
+    }
+
+    @Override
+    public Visitable visit(KafkaExportNode node) throws StandardException {
         nullify();
         return super.visit(node);
     }

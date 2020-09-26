@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -240,11 +240,11 @@ public class TransactionImpl extends BaseTransaction {
             return null;
     }
 
-    public final void setActiveState(boolean nested,boolean additive,TxnView parentTxn){
+    public void setActiveState(boolean nested,boolean additive,TxnView parentTxn){
         setActiveState(nested,additive,parentTxn,null);
     }
 
-    public final void setActiveState(boolean nested,boolean additive,TxnView parentTxn,byte[] table){
+    public void setActiveState(boolean nested,boolean additive,TxnView parentTxn,byte[] table){
         if(state==IDLE){
             try{
                 synchronized(this){
@@ -346,6 +346,10 @@ public class TransactionImpl extends BaseTransaction {
         return txn!=null && txn.allowsWrites();
     }
 
+    @Override
+    public boolean isRestoreMode() {
+        return lifecycleManager != null && lifecycleManager.isRestoreMode();
+    }
     /*****************************************************************************************************************/
     /*private helper methods*/
     private Txn doElevate(byte[] writeTable,Txn currentTxn,TxnView elevatedParent) throws IOException{

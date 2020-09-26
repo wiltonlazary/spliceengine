@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,9 +14,12 @@
 
 package com.splicemachine.derby.impl.store.access;
 
+import com.splicemachine.access.api.PartitionAdmin;
+import com.splicemachine.access.api.PartitionFactory;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.reference.SQLState;
 import com.splicemachine.db.iapi.services.context.ContextManager;
+import com.splicemachine.db.iapi.services.context.ContextService;
 import com.splicemachine.db.iapi.services.daemon.Serviceable;
 import com.splicemachine.db.iapi.services.io.FormatableBitSet;
 import com.splicemachine.db.iapi.services.io.Storable;
@@ -36,10 +39,13 @@ import com.splicemachine.derby.utils.ConglomerateUtils;
 import com.splicemachine.primitives.Bytes;
 import com.splicemachine.si.api.txn.Txn;
 import com.splicemachine.si.api.txn.TxnView;
+import com.splicemachine.si.impl.driver.SIDriver;
 import com.splicemachine.si.impl.txn.ReadOnlyTxn;
 import com.splicemachine.utils.SpliceLogUtils;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.log4j.Logger;
+
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -67,6 +73,11 @@ public class SpliceTransactionManager implements XATransactionController,
      * The parent transaction if this is a nested user transaction.
      **/
     protected SpliceTransactionManager parent_tran;
+
+    /**
+     * The context manager if this is a nested transaction.
+     */
+    private ContextManager contextManager;
 
     // XXX (nat) management of the controllers is still embryonic.
     // XXX (nat) would be nice if sort controllers were like conglom controllers
@@ -120,13 +131,17 @@ public class SpliceTransactionManager implements XATransactionController,
     }
 
     protected SpliceTransactionManager(SpliceAccessManager myaccessmanager,
-                                       Transaction theRawTran, SpliceTransactionManager parent_transaction)
-            throws StandardException {
+                                       Transaction theRawTran, SpliceTransactionManager parent_transaction) {
         if (LOG.isTraceEnabled())
             LOG.trace("init");
         init(myaccessmanager, theRawTran, parent_transaction);
     }
 
+    private SpliceTransactionManager(SpliceAccessManager myaccessmanager, Transaction theRawTran,
+                                     SpliceTransactionManager parent_transaction, ContextManager cm) {
+        contextManager = cm;
+        init(myaccessmanager, theRawTran, parent_transaction);
+    }
     /**************************************************************************
      * Private/Protected methods of This class:
      **************************************************************************
@@ -541,14 +556,8 @@ public class SpliceTransactionManager implements XATransactionController,
         // Create the conglomerate
         // RESOLVE (mikem) - eventually segmentid's will be passed into here
         // in the properties. For now just use 0.]
-        long conglomid;
-        if ((temporaryFlag & TransactionController.IS_TEMPORARY) == TransactionController.IS_TEMPORARY) {
-            conglomid = accessmanager.getNextConglomId(cfactory
-                    .getConglomerateFactoryId());
-        } else {
-            conglomid = accessmanager.getNextConglomId(cfactory
-                    .getConglomerateFactoryId());
-        }
+        long conglomid = accessmanager.getNextConglomId(cfactory
+                .getConglomerateFactoryId());;
 
         // call the factory to actually create the conglomerate.
         Conglomerate conglom = cfactory.createConglomerate(isExternal,this,
@@ -1187,7 +1196,7 @@ public class SpliceTransactionManager implements XATransactionController,
      *
      * @return The context manager that the transaction was created with.
      * **/
-    public ContextManager getContextManager() {
+    private ContextManager getContextManager() {
         if (LOG.isTraceEnabled())
             LOG.trace("getContextManager ");
         return (context.getContextManager());
@@ -1238,9 +1247,18 @@ public class SpliceTransactionManager implements XATransactionController,
             }
 
             // If there's a context, pop it.
-            if (context != null)
+            if (context != null) {
                 context.popMe();
-            context = null;
+                context = null;
+            }
+
+            // If there is a context manager, reset and remove it
+            if (contextManager != null) {
+                ContextService contextService = ContextService.getService();
+                contextService.resetCurrentContextManager(contextManager);
+                contextService.removeContextManager(contextManager);
+                contextManager = null;
+            }
 
             accessmanager = null;
             tempCongloms = null;
@@ -1274,12 +1292,32 @@ public class SpliceTransactionManager implements XATransactionController,
     @Override
     public boolean isElevated(){
         BaseSpliceTransaction rawTransaction=getRawTransaction();
-        assert rawTransaction instanceof BaseSpliceTransaction:
-                "Programmer Error: Cannot perform a data dictionary write with a non-SpliceTransaction -> " + rawTransaction;
-        BaseSpliceTransaction txn=(BaseSpliceTransaction)rawTransaction;
-        return txn.allowsWrites();
+        return rawTransaction.allowsWrites();
     }
 
+    @Override
+    public String getCatalogVersion(long conglomerateNumber) throws StandardException {
+        SIDriver driver=SIDriver.driver();
+        PartitionFactory tableFactory=driver.getTableFactory();
+        try (PartitionAdmin admin = tableFactory.getAdmin()) {
+            return admin.getCatalogVersion(conglomerateNumber);
+        }
+        catch (IOException e) {
+            throw StandardException.plainWrapException(e);
+        }
+    }
+
+    @Override
+    public void setCatalogVersion(long conglomerateNumber, String version) throws StandardException {
+        SIDriver driver=SIDriver.driver();
+        PartitionFactory tableFactory=driver.getTableFactory();
+        try (PartitionAdmin admin = tableFactory.getAdmin()) {
+            admin.setCatalogVersion(conglomerateNumber, version);
+        }
+        catch (IOException e) {
+            throw StandardException.plainWrapException(e);
+        }
+    }
     /**************************************************************************
      * Public Methods implementing the XATransactionController interface.
      **************************************************************************
@@ -1554,7 +1592,18 @@ public class SpliceTransactionManager implements XATransactionController,
 	    if (LOG.isDebugEnabled())
 	    	SpliceLogUtils.debug(LOG, "Before startNestedUserTransaction: parentTxn=%s, readOnly=%b, nestedTxnStack=\n%s", getRawTransaction(), readOnly, getNestedTransactionStackString());
         // Get the context manager.
-        ContextManager cm = getContextManager();
+        ContextService contextService = ContextService.getService();
+        ContextManager cm = contextService.newContextManager(getContextManager());
+        contextService.setCurrentContextManager(cm);
+
+        if(rawtran instanceof PastTransaction) {
+            SpliceTransactionManager rt = new SpliceTransactionManager(accessmanager, ((PastTransaction)rawtran).getClone(), this);
+
+            //this actually does some work, so don't remove it
+            @SuppressWarnings("UnusedDeclaration") SpliceTransactionManagerContext rtc = new SpliceTransactionManagerContext(
+                    cm, AccessFactoryGlobals.RAMXACT_CHILD_CONTEXT_ID, rt, true /* abortAll */);
+            return rt;
+        }
 
         // Allocate a new transaction no matter what.
 
@@ -1569,14 +1618,14 @@ public class SpliceTransactionManager implements XATransactionController,
 
         Transaction childTxn;
         if(rawtran instanceof SpliceTransaction)
-            childTxn=getChildTransaction(readOnly,cm,(SpliceTransaction)rawtran);
+            childTxn=getChildTransaction(readOnly, cm, (SpliceTransaction)rawtran);
         else
-            childTxn = getChildTransactionFromView(readOnly,cm,(SpliceTransactionView)rawtran);
+            childTxn = getChildTransactionFromView(readOnly, cm, (SpliceTransactionView)rawtran);
 
         if(!readOnly)
             ((SpliceTransaction)childTxn).elevate(Bytes.toBytes("unknown")); //TODO -sf- replace this with an actual name
 
-        SpliceTransactionManager rt = new SpliceTransactionManager(accessmanager, childTxn, this);
+        SpliceTransactionManager rt = new SpliceTransactionManager(accessmanager, childTxn, this, cm);
 
         //this actually does some work, so don't remove it
         @SuppressWarnings("UnusedDeclaration") SpliceTransactionManagerContext rtc = new SpliceTransactionManagerContext(
@@ -1846,4 +1895,9 @@ public class SpliceTransactionManager implements XATransactionController,
         cc.close();
     }
 
+    public long getActiveStateTxId() {
+        if(rawtran!=null)
+            return getRawTransaction().getActiveStateTxn().getTxnId();
+        return -1;
+    }
 }

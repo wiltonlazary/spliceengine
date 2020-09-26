@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -22,7 +22,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import com.splicemachine.db.iapi.sql.conn.ResubmitDistributedException;
-import org.spark_project.guava.base.Strings;
+import splice.com.google.common.base.Strings;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperationContext;
 import com.splicemachine.derby.impl.SpliceMethod;
 import com.splicemachine.derby.stream.iapi.DataSet;
@@ -160,10 +160,17 @@ public class AnyOperation extends SpliceBaseOperation {
             throw new IllegalStateException("Operation is not open");
 
         // we are consuming the dataset, get a ResultDataSet
-        Iterator<ExecRow> iterator = source.getResultDataSet(dsp).toLocalIterator();
+        dsp.incrementOpDepth();
+        DataSet<ExecRow> sourceDS = source.getResultDataSet(dsp);
+        Iterator<ExecRow> iterator = sourceDS.toLocalIterator();
+        dsp.decrementOpDepth();
+        DataSet<ExecRow> ds;
         if (iterator.hasNext())
-                return dsp.singleRowDataSet(iterator.next());
-        return dsp.singleRowDataSet(getRowWithNulls());
+            ds = dsp.singleRowDataSet(iterator.next());
+        else
+            ds = dsp.singleRowDataSet(getRowWithNulls());
+        handleSparkExplain(ds, sourceDS, dsp);
+        return ds;
     }
 
     @Override

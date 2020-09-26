@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 - 2019 Splice Machine, Inc.
+ * Copyright 2012 - 2020 Splice Machine, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use
  * this file except in compliance with the License. You may obtain a copy of the
@@ -16,7 +16,9 @@
 package com.splicemachine.access.client;
 
 import com.splicemachine.si.impl.server.SITestUtils;
-import org.spark_project.guava.collect.Ordering;
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
+import com.splicemachine.si.impl.server.SITestUtils;
+import splice.com.google.common.collect.Ordering;
 import com.splicemachine.si.constants.SIConstants;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -45,7 +47,7 @@ public class MemstoreKeyValueScannerTest {
         MemstoreKeyValueScanner mkvs = new MemstoreKeyValueScanner(rs);
 
         List<Cell> results = new ArrayList<>();
-        results.add(SITestUtils.getMockCommitCell(10));
+        results.add(SITestUtils.getMockCommitCell(10, 11));
         results.add(SITestUtils.getMockValueCell(10));
 
         mkvs.next(results);
@@ -78,6 +80,14 @@ public class MemstoreKeyValueScannerTest {
             @Override
             public void close() {
 
+            }
+
+            public boolean renewLease() {
+                return false;
+            }
+
+            public ScanMetrics getScanMetrics() {
+                return null;
             }
 
             @Override

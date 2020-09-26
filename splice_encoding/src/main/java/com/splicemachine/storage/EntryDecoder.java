@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -21,7 +21,7 @@ import com.splicemachine.encoding.MultiFieldDecoder;
 import com.splicemachine.storage.index.BitIndex;
 import com.splicemachine.storage.index.BitIndexing;
 import com.splicemachine.utils.ByteSlice;
-import org.spark_project.guava.base.Supplier;
+import splice.com.google.common.base.Supplier;
 
 /**
  * Holds the bytes for a row, a BitIndex for that row, and a MultiFieldDecoder for that row and provides methods
@@ -48,6 +48,10 @@ public class EntryDecoder implements Supplier<MultiFieldDecoder> {
 
     public EntryDecoder(byte[] bytes) {
         set(bytes);
+    }
+
+    public EntryDecoder(byte[] bytes, int offset, int length) {
+        set(bytes, offset, length);
     }
 
     public void set(byte[] bytes) {

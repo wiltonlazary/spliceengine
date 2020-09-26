@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -114,11 +114,21 @@ public interface SConfiguration {
 
     int getBackupIOBufferSize();
 
+    boolean replicationEnabled();
+
+    public String getReplicationPath();
+
     int getReplicationSnapshotInterval();
 
-    int getReplicationSinkPort();
-
     int getReplicationProgressUpdateInterval();
+
+    String getReplicationMonitorQuorum();
+
+    String getReplicationMonitorPath();
+
+    int getReplicationMonitorInterval();
+
+    String getReplicationHealthcheckScript();
 
     String getCompressionAlgorithm();
 
@@ -129,6 +139,8 @@ public interface SConfiguration {
     String getHbaseSecurityAuthorization();
 
     boolean getHbaseSecurityAuthentication();
+
+    String getKafkaBootstrapServers();
 
     // OperationConfiguration
     int getSequenceBlockSize();
@@ -167,8 +179,10 @@ public interface SConfiguration {
     String getSparkIoCompressionCodec();
 
     int getSparkResultStreamingBatches();
-
     int getSparkResultStreamingBatchSize();
+
+    int getSparkSlowResultStreamingBatches();
+    int getSparkSlowResultStreamingBatchSize();
 
     double getBulkImportSampleFraction();
 
@@ -183,7 +197,8 @@ public interface SConfiguration {
     int getRegionToLoadPerTask();
 
     // SIConfigurations
-    int getActiveTransactionCacheSize();
+    int getActiveTransactionMaxCacheSize();
+    int getActiveTransactionInitialCacheSize();
 
     int getCompletedTxnCacheSize();
 
@@ -225,6 +240,10 @@ public interface SConfiguration {
 
     boolean getOlapServerExternal();
 
+    int getOlapServerMaxRetries();
+
+    long getOlapServerKeepAliveTimeout();
+
     int getOlapServerThreads();
 
     int getOlapServerSubmitAttempts();
@@ -239,6 +258,10 @@ public interface SConfiguration {
 
     int getOlapShufflePartitions();
 
+    boolean getOlapCompactionAutomaticallyPurgeDeletedRows();
+
+    boolean getOlapCompactionAutomaticallyPurgeOldUpdates();
+
     // SQLConfiguration
     boolean debugDumpBindTree();
 
@@ -252,9 +275,9 @@ public interface SConfiguration {
 
     boolean upgradeForced();
 
-    int getBatchOnceBatchSize();
-
     int getImportMaxQuotedColumnLines();
+
+    long getImportCsvScanThreshold();
 
     int getIndexBatchSize();
 
@@ -326,7 +349,7 @@ public interface SConfiguration {
 
     long getTableSplitSleepInterval();
 
-    int getSplitsPerTableMin();
+    int getSplitsPerRegionMin();
 
     /**
      * Dump splice configuration, including hadoop config, to the log.
@@ -339,8 +362,6 @@ public interface SConfiguration {
      */
     Map<String,Object> getConfigMap();
 
-    int getCompactionReservedSlots();
-
     int getOlapCompactionMaximumWait();
 
     int getOlapCompactionMaximumConcurrent();
@@ -351,11 +372,11 @@ public interface SConfiguration {
 
     int getOlapCompactionResolutionBufferSize();
 
+    int getLocalCompactionResolutionBufferSize();
+
     boolean getOlapCompactionBlocking();
 
     boolean getResolutionOnFlushes();
-
-    int getReservedSlotsTimeout();
 
     int getOlapServerTickLimit();
 
@@ -383,4 +404,7 @@ public interface SConfiguration {
 
     String getRangerUserSyncCaseConversion();
 
+    String getOlapServerMode();
+
+    boolean getSparkAccumulatorsEnabled();
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -126,19 +126,17 @@ public class SchemaPrivilegeIT {
 
     @Before
     public  void setUpClass() throws Exception {
-        String remoteURLTemplate = "jdbc:splice://localhost:1528/splicedb;create=true;user=%s;password=%s";
-
         adminConn = spliceClassWatcherAdmin.createConnection();
-        user1Conn = spliceClassWatcherAdmin.createConnection(USER1, PASSWORD1);
-        user2Conn = spliceClassWatcherAdmin.createConnection(USER2, PASSWORD2);
-        user3Conn = spliceClassWatcherAdmin.createConnection(USER3, PASSWORD3);
+        user1Conn = spliceClassWatcherAdmin.connectionBuilder().user(USER1).password(PASSWORD1).build();
+        user2Conn = spliceClassWatcherAdmin.connectionBuilder().user(USER2).password(PASSWORD2).build();
+        user3Conn = spliceClassWatcherAdmin.connectionBuilder().user(USER3).password(PASSWORD3).build();
         adminConn.execute( format("insert into %s.%s values ( 1, 2, 3)", SCHEMA1, TABLE ) );
         adminConn.execute( format("insert into %s.%s values ( 1, 2, 3)", SCHEMA1, TABLE2 ) );
         user3Conn.execute( format("insert into %s.%s values ( 1, 2, 3)", SECOND_SCHEMA, TABLE ) );
         user3Conn.execute(format("insert into %s.%s values ( 4, 5, 6)", THIRD_SCHEMA, TABLE3 ));
-        user1Conn2 = spliceClassWatcherAdmin.createConnection(remoteURLTemplate, USER1, PASSWORD1);
-        user2Conn2 = spliceClassWatcherAdmin.createConnection(remoteURLTemplate, USER2, PASSWORD2);
-        user3Conn2 = spliceClassWatcherAdmin.createConnection(remoteURLTemplate, USER3, PASSWORD3);
+        user1Conn2 = spliceClassWatcherAdmin.connectionBuilder().port(1528).create(true).user(USER1).password(PASSWORD1).build();
+        user2Conn2 = spliceClassWatcherAdmin.connectionBuilder().port(1528).create(true).user(USER2).password(PASSWORD2).build();
+        user3Conn2 = spliceClassWatcherAdmin.connectionBuilder().port(1528).create(true).user(USER3).password(PASSWORD3).build();
     }
 
     @Test

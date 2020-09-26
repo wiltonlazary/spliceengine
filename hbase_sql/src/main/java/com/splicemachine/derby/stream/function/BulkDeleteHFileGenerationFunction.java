@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,7 +14,6 @@
 
 package com.splicemachine.derby.stream.function;
 
-import com.splicemachine.derby.stream.ActivationHolder;
 import com.splicemachine.derby.stream.iapi.OperationContext;
 import com.splicemachine.si.constants.SIConstants;
 import org.apache.hadoop.hbase.KeyValue;
@@ -40,7 +39,7 @@ public class BulkDeleteHFileGenerationFunction extends HFileGenerationFunction {
     @Override
     protected void writeToHFile (byte[] rowKey, byte[] value) throws Exception {
         KeyValue kv = new KeyValue(rowKey, SIConstants.DEFAULT_FAMILY_BYTES,
-                SIConstants.SNAPSHOT_ISOLATION_TOMBSTONE_COLUMN_BYTES, txnId, value);
+                SIConstants.TOMBSTONE_COLUMN_BYTES, txnId, value);
         writer.append(kv);
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -29,31 +29,32 @@ import java.io.IOException;
 
 public class NestedLoopLeftOuterJoinOperation extends NestedLoopJoinOperation {
 		private static Logger LOG = Logger.getLogger(NestedLoopLeftOuterJoinOperation.class);
-        	protected SpliceMethod<ExecRow> emptyRowFun;
+		protected SpliceMethod<ExecRow> emptyRowFun;
+		protected ExecRow emptyRow;
 		public int emptyRightRowsReturned = 0;
 		public NestedLoopLeftOuterJoinOperation() {
 				super();
 		}
 
 		public NestedLoopLeftOuterJoinOperation(
-						SpliceOperation leftResultSet,
-						int leftNumCols,
-						SpliceOperation rightResultSet,
-						int rightNumCols,
-						Activation activation,
-						GeneratedMethod restriction,
-						int resultSetNumber,
-						GeneratedMethod emptyRowFun,
-						boolean wasRightOuterJoin,
-						boolean oneRowRightSide,
-						boolean notExistsRightSide,
-						boolean rightFromSSQ,
-						double optimizerEstimatedRowCount,
-						double optimizerEstimatedCost,
-						String userSuppliedOptimizerOverrides,
-						String sparkExpressionTreeAsString) throws StandardException {
+				SpliceOperation leftResultSet,
+				int leftNumCols,
+				SpliceOperation rightResultSet,
+				int rightNumCols,
+				Activation activation,
+				GeneratedMethod restriction,
+				int resultSetNumber,
+				GeneratedMethod emptyRowFun,
+				boolean wasRightOuterJoin,
+				boolean oneRowRightSide,
+				byte semiJoinType,
+				boolean rightFromSSQ,
+				double optimizerEstimatedRowCount,
+				double optimizerEstimatedCost,
+				String userSuppliedOptimizerOverrides,
+				String sparkExpressionTreeAsString) throws StandardException {
 				super(leftResultSet, leftNumCols, rightResultSet, rightNumCols,
-					activation, restriction, resultSetNumber,oneRowRightSide, notExistsRightSide, rightFromSSQ,
+					activation, restriction, resultSetNumber,oneRowRightSide, semiJoinType, rightFromSSQ,
 					optimizerEstimatedRowCount, optimizerEstimatedCost,userSuppliedOptimizerOverrides,
 					sparkExpressionTreeAsString);
 				SpliceLogUtils.trace(LOG, "instantiate");
@@ -77,4 +78,11 @@ public class NestedLoopLeftOuterJoinOperation extends NestedLoopJoinOperation {
 				return "LeftOuter"+super.prettyPrint(indentLevel);
 		}
 
+		@Override
+		public ExecRow getRightEmptyRow() throws StandardException {
+			if (emptyRow == null){
+				emptyRow = emptyRowFun.invoke();
+			}
+			return emptyRow;
+		}
 }

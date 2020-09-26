@@ -25,26 +25,22 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
 package com.splicemachine.db.iapi.sql.conn;
 
-import com.splicemachine.db.iapi.db.Database;
+import com.splicemachine.db.iapi.db.InternalDatabase;
 
 import com.splicemachine.db.iapi.services.authorization.AuthorizationFactory;
 import com.splicemachine.db.iapi.services.property.PropertyFactory;
 
-import com.splicemachine.db.iapi.sql.compile.OptimizerFactory;
-import com.splicemachine.db.iapi.sql.compile.NodeFactory;
-import com.splicemachine.db.iapi.sql.compile.CompilerContext;
+import com.splicemachine.db.iapi.sql.compile.*;
 
 import com.splicemachine.db.iapi.types.DataValueFactory;
-import com.splicemachine.db.iapi.sql.compile.TypeCompilerFactory;
 import com.splicemachine.db.iapi.sql.execute.ExecutionFactory;
 import com.splicemachine.db.iapi.sql.Statement;
-import com.splicemachine.db.iapi.sql.compile.Parser;
 
 import com.splicemachine.db.iapi.services.uuid.UUIDFactory;
 import com.splicemachine.db.iapi.error.StandardException;
@@ -116,13 +112,13 @@ public interface LanguageConnectionFactory {
 	newLanguageConnectionContext(ContextManager cm,
 								TransactionController tc,
 								LanguageFactory lf,
-								Database db,
+								InternalDatabase db,
 								String userName,
 								List<String> groupuserlist,
 								String drdaID,
 								String dbname,
 								String rdbIntTkn,
-                                CompilerContext.DataSetProcessorType type,
+                                DataSetProcessorType type,
 								boolean skipStats,
 								double defaultSelectivityFactor,
 								String ipAddress,

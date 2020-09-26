@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -30,6 +30,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicReference;
@@ -157,11 +158,11 @@ public class SpliceAdmin_OperationsIT extends SpliceUnitTest{
             ResultSet opsRs = connection.query(opsCall);
             while (opsRs.next()) {
                 if (opsRs.getString(5).equals(sql)) {
-                    assertEquals("SPARK",opsRs.getString(8)); // check engine "SPARK"
+                    assertEquals("OLAP",opsRs.getString(8)); // check engine "OLAP" (=Spark)
                     assertEquals("Produce Result Set", opsRs.getString(9)); // check job type
                 } else if (opsRs.getString(5).equals(opsCall)) {
                     assertEquals(submitted, opsRs.getString(6)); // check submitted time
-                    assertEquals("SYSTEM", opsRs.getString(8)); // check engine "CONTROL"
+                    assertEquals("SYSTEM", opsRs.getString(8));
                     assertEquals("Call Procedure", opsRs.getString(9)); // check job type
                 }
             }
@@ -223,9 +224,9 @@ public class SpliceAdmin_OperationsIT extends SpliceUnitTest{
                 rows++;
             }
             fail("Should have raised exception");
-        } catch (SQLException se) {
+        } catch (SQLTimeoutException se) {
             LOG.debug("Raised exception after " + rows + " rows.");
-            assertEquals("SE008", se.getSQLState());
+            assertEquals("57014", se.getSQLState());
         }
     }
 
@@ -278,15 +279,15 @@ public class SpliceAdmin_OperationsIT extends SpliceUnitTest{
             thread.join();
             assertNotNull(result.get());
             Exception e = result.get();
-            assertTrue(e instanceof SQLException);
-            assertEquals("SE008", ((SQLException) e).getSQLState());
+            assertTrue(e instanceof SQLTimeoutException);
+            assertEquals("57014", ((SQLException) e).getSQLState());
         }
     }
 
     @Test
     public void testOtherUsersCantKillOperation() throws Exception {
         TestConnection connection1 = methodWatcher.getOrCreateConnection();
-        TestConnection connection2 = methodWatcher.createConnection(USER_NAME, USER_NAME);
+        TestConnection connection2 = methodWatcher.connectionBuilder().user(USER_NAME).password(USER_NAME).build();
 
 
         String sql= "select * from "+bigTableWatcher;
@@ -343,15 +344,15 @@ public class SpliceAdmin_OperationsIT extends SpliceUnitTest{
                 rows++;
             }
             fail("Should have raised exception");
-        } catch (SQLException se) {
+        } catch (SQLTimeoutException se) {
             LOG.debug("Raised exception after " + rows + " rows.");
-            assertEquals("SE008", se.getSQLState());
+            assertEquals("57014", se.getSQLState());
         }
     }
 
     @Test
     public void testDbOwnerCanKillOperation() throws Exception {
-        TestConnection connection1 = methodWatcher.createConnection(USER_NAME, USER_NAME);
+        TestConnection connection1 = methodWatcher.connectionBuilder().user(USER_NAME).password(USER_NAME).build();
         TestConnection connection2 = methodWatcher.getOrCreateConnection();
 
 
@@ -400,9 +401,9 @@ public class SpliceAdmin_OperationsIT extends SpliceUnitTest{
                 rows++;
             }
             fail("Should have raised exception");
-        } catch (SQLException se) {
+        } catch (SQLTimeoutException se) {
             LOG.debug("Raised exception after " + rows + " rows.");
-            assertEquals("SE008", se.getSQLState());
+            assertEquals("57014", se.getSQLState());
         }
 
         // try to kill the cursor again (it should fail)
@@ -488,9 +489,9 @@ public class SpliceAdmin_OperationsIT extends SpliceUnitTest{
                 rows++;
             }
             fail("Should have raised exception");
-        } catch (SQLException se) {
+        } catch (SQLTimeoutException se) {
             LOG.debug("Raised exception after " + rows + " rows.");
-            assertEquals("SE008", se.getSQLState());
+            assertEquals("57014", se.getSQLState());
         }
     }
 

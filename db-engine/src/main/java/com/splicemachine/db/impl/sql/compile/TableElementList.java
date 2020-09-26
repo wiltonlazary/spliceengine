@@ -25,50 +25,34 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
 package com.splicemachine.db.impl.sql.compile;
 
-import org.spark_project.guava.collect.Lists;
-import com.splicemachine.db.iapi.services.io.FormatableBitSet;
-import com.splicemachine.db.iapi.services.sanity.SanityManager;
-
+import com.splicemachine.db.catalog.UUID;
+import com.splicemachine.db.catalog.types.DefaultInfoImpl;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.reference.Property;
+import com.splicemachine.db.iapi.reference.SQLState;
+import com.splicemachine.db.iapi.services.io.FormatableBitSet;
 import com.splicemachine.db.iapi.services.property.PropertyUtil;
-
+import com.splicemachine.db.iapi.services.sanity.SanityManager;
 import com.splicemachine.db.iapi.sql.StatementType;
-import com.splicemachine.db.iapi.sql.compile.CompilerContext;
 import com.splicemachine.db.iapi.sql.compile.C_NodeTypes;
-
-import com.splicemachine.db.iapi.types.DataTypeDescriptor;
-import com.splicemachine.db.iapi.types.TypeId;
-
-import com.splicemachine.db.catalog.types.DefaultInfoImpl;
-
-import com.splicemachine.db.iapi.sql.dictionary.ColumnDescriptorList;
-import com.splicemachine.db.iapi.sql.dictionary.ConstraintDescriptor;
-import com.splicemachine.db.iapi.sql.dictionary.DataDictionary;
-import com.splicemachine.db.iapi.sql.dictionary.SchemaDescriptor;
-import com.splicemachine.db.iapi.sql.dictionary.TableDescriptor;
-
-import com.splicemachine.db.iapi.sql.execute.ConstantAction;
-
+import com.splicemachine.db.iapi.sql.compile.CompilerContext;
 import com.splicemachine.db.iapi.sql.depend.DependencyManager;
 import com.splicemachine.db.iapi.sql.depend.ProviderInfo;
 import com.splicemachine.db.iapi.sql.depend.ProviderList;
-
-import com.splicemachine.db.iapi.reference.SQLState;
-
+import com.splicemachine.db.iapi.sql.dictionary.*;
+import com.splicemachine.db.iapi.sql.execute.ConstantAction;
+import com.splicemachine.db.iapi.types.DataTypeDescriptor;
+import com.splicemachine.db.iapi.types.TypeId;
+import com.splicemachine.db.iapi.util.ByteArray;
 import com.splicemachine.db.impl.sql.execute.ColumnInfo;
 import com.splicemachine.db.impl.sql.execute.ConstraintInfo;
-
-import	com.splicemachine.db.iapi.sql.dictionary.ConstraintDescriptorList;
-import com.splicemachine.db.iapi.sql.dictionary.ColumnDescriptor;
-
-import com.splicemachine.db.catalog.UUID;
+import splice.com.google.common.collect.Lists;
 
 import java.util.*;
 
@@ -107,7 +91,6 @@ public class TableElementList extends QueryTreeNodeVector {
         throws StandardException
     {
 		int			size = size();
-		int collationType = sd.getCollationType();
 		for (int index = 0; index < size; index++)
 		{
 			TableElementNode tableElement = (TableElementNode) elementAt(index);
@@ -185,10 +168,9 @@ public class TableElementList extends QueryTreeNodeVector {
 			//key constraints for this table. And then we will compare them with  new
 			//primary key/unique key constraint column lists.
 			ConstraintDescriptorList cdl = dd.getConstraintDescriptors(td);
-			ConstraintDescriptor cd;
-
 			if (cdl != null) //table does have some pre-existing constraints defined on it
 			{
+				ConstraintDescriptor cd;
 				for (int i=0; i<cdl.size();i++)
 				{
 					cd = cdl.elementAt(i);
@@ -270,25 +252,35 @@ public class TableElementList extends QueryTreeNodeVector {
 
 				for (int i=0; i<constraintsVector.size();i++)
 				{
-
 					destConstraint = constraintsVector.elementAt(i);
-					if (destConstraint instanceof ConstraintDefinitionNode)
+					if (destConstraint instanceof ConstraintDefinitionNode) // match against newly added constraint (create table)
 					{
 						ConstraintDefinitionNode destCDN = (ConstraintDefinitionNode)destConstraint;
 						destName = destCDN.getConstraintMoniker();
 						destColumnNames = destCDN.getColumnList().getColumnNames();
+						//check if there are multiple constraints with same set of columns
+
+						if (columnsMatch(cdn.getColumnList().getColumnNames(), destColumnNames))
+						{
+							if(cdn.getConstraintType() == DataDictionary.UNIQUE_CONSTRAINT) {
+								cdn.setCanBeIgnored(true);
+							} else if (destCDN.getConstraintType() == DataDictionary.UNIQUE_CONSTRAINT) {
+								cdn.setCanBeIgnored(true);
+							}
+						}
+
 					}
-					else if (destConstraint instanceof ConstraintDescriptor)
+					else if (destConstraint instanceof ConstraintDescriptor) // match against existing constraint (alter table)
 					{
 						//will come here only for pre-existing constraints in case of alter table
 						ConstraintDescriptor destCD = (ConstraintDescriptor)destConstraint;
 						destName = destCD.getConstraintName();
 						destColumnNames = destCD.getColumnDescriptors().getColumnNames();
+						//check if there are multiple constraints with same set of columns
+						if (columnsMatch(cdn.getColumnList().getColumnNames(), destColumnNames))
+							throw StandardException.newException(SQLState.LANG_MULTIPLE_CONSTRAINTS_WITH_SAME_COLUMNS,
+									cdn.getConstraintMoniker(), destName);
 					}
-					//check if there are multiple constraints with same set of columns
-					if (columnsMatch(cdn.getColumnList().getColumnNames(), destColumnNames))
-						throw StandardException.newException(SQLState.LANG_MULTIPLE_CONSTRAINTS_WITH_SAME_COLUMNS,
-						cdn.getConstraintMoniker(), destName);
 				}
 				constraintsVector.addElement(cdn);
 			}
@@ -1294,12 +1286,14 @@ public class TableElementList extends QueryTreeNodeVector {
                     tableName,
                     ((td != null) ? td.getUUID() : (UUID) null),
                     columnNames,
+                    new DataTypeDescriptor[]{},
                     isAscending,
                     isConstraint,
                     cdn.getBackingIndexUUID(),
 					excludeNulls,
 					excludeDefaults,
 					false,false,false,0,null,null,null,null,null,null,null,
+					new String[]{}, new ByteArray[]{}, new String[]{},
                     checkIndexPageSizeProperty(cdn));
 		}
 	}

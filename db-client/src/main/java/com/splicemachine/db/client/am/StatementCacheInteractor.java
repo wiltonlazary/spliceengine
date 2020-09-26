@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -63,7 +63,7 @@ public final class StatementCacheInteractor {
      * with this cache interactor to ensure the interactor methods are not
      * invoked if the logical statement has been closed.
      */
-    private final Connection physicalConnection;
+    private final ClientConnection physicalConnection;
     /** List of open logical statements created by this cache interactor. */
     //@GuardedBy("this")
     private final ArrayList openLogicalStatements = new ArrayList();
@@ -81,7 +81,7 @@ public final class StatementCacheInteractor {
      * @param physicalConnection associated physical connection
      */
     StatementCacheInteractor(JDBCStatementCache cache,
-                             Connection physicalConnection) {
+                             ClientConnection physicalConnection) {
         this.cache = cache;
         this.physicalConnection = physicalConnection;
     }

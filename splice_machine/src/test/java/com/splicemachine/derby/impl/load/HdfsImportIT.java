@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -27,8 +27,8 @@ import org.junit.*;
 import org.junit.rules.RuleChain;
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestRule;
-import org.spark_project.guava.collect.Lists;
-import org.spark_project.guava.collect.Maps;
+import splice.com.google.common.collect.Lists;
+import splice.com.google.common.collect.Maps;
 
 import java.io.File;
 import java.nio.charset.Charset;
@@ -264,6 +264,22 @@ public class HdfsImportIT extends SpliceUnitTest {
                         row(6017, 45829, 146),
                         row(8053, 45192, null)))
                 .withIndex(format("create index idx1 on %s.num_dt1(k)", spliceSchemaWatcher.schemaName))
+                .create();
+
+        new TableCreator(conn)
+                .withCreate("CREATE TABLE hdfsimportit.customers (\n" +
+                        "    name VARCHAR(32) NOT NULL,\n" +
+                        "    email VARCHAR(64) NOT NULL,\n" +
+                        "    address VARCHAR(128),\n" +
+                        "    phonenumber VARCHAR(32),\n" +
+                        "    birthdate DATE,\n" +
+                        "    ssn CHAR(11) NOT NULL PRIMARY KEY,\n" +
+                        "    job VARCHAR(64),\n" +
+                        "    employer VARCHAR(64),\n" +
+                        "    score INT,\n" +
+                        "    notes VARCHAR(1000)\n" +
+                        ")")
+                .withIndex("CREATE INDEX cust_idx ON hdfsimportit.customers(email)")
                 .create();
     }
 
@@ -1982,7 +1998,7 @@ public class HdfsImportIT extends SpliceUnitTest {
         PreparedStatement ps = methodWatcher.prepareStatement(format("call SYSCS_UTIL.IMPORT_DATA(" +
                         "'%s'," +  // schema name
                         "'%s'," +  // table name
-                        "'IRN,GROUP_NUM,GROUP_BEG_DT,SYS_POSTING_DT,GROUP_END_DT,GROUP_TYPE_CD,PROCESSOR_ID',"  +  // insert column list
+                        "'IRN,GROUP_NUM,GROUP_BEG_DT,\"SYS_POSTING_DT\",GROUP_END_DT,\"GROUP_TYPE_CD\",PROCESSOR_ID',"  +  // insert column list
                         "'%s'," +  // file path
                         "'^'," +   // column delimiter
                         "null," +  // character delimiter
@@ -2000,7 +2016,12 @@ public class HdfsImportIT extends SpliceUnitTest {
 
         ps.execute();
 
-
+        ResultSet rs = methodWatcher.executeQuery(format("select * from %s", spliceSchemaWatcher.schemaName+".TIRN_ASSIGNMENT"));
+        String expected = "BATCH_DATE | IRN | GROUP_NUM |GROUP_BEG_DT |SYS_POSTING_DT |GROUP_END_DT | GROUP_TYPE_CD |PROCESSOR_ID |\n" +
+                "--------------------------------------------------------------------------------------------------------\n" +
+                "2018-07-07 |  0  | 130075934 |  20050305   |   20050325    |  99999999   |     'SE'      | 'L7M080  '  |";
+        String s = TestUtils.FormattedResult.ResultFactory.toString(rs);
+        Assert.assertEquals(expected, s);
     }
 
     private static void assertContains(List<String> collection, Matcher<String> target) {
@@ -2010,5 +2031,45 @@ public class HdfsImportIT extends SpliceUnitTest {
             }
         }
         fail("Expected to contain " + target.toString() + " in: " + collection);
+    }
+
+    @Test
+    public void testPKViolation() throws Exception {
+        try (PreparedStatement ps = methodWatcher.prepareStatement(format("call SYSCS_UTIL.IMPORT_DATA(" +
+                        "'%s'," +  // schema name
+                        "'%s'," +  // table name
+                        "null," +  // column list
+                        "'%s'," +  // file path
+                        "null," +   // column delimiter
+                        "null," +  // character delimiter
+                        "null," +  // timestamp format
+                        "null," +  // date format
+                        "null," +  // time format
+                        "-1," +    // max bad records
+                        "'%s'," +  // bad record dir
+                        "false," + // has one line records
+                        "null)",   // char set
+                spliceSchemaWatcher.schemaName, "CUSTOMERS",
+                getResourceDirectory() + "customers.csv",
+                BADDIR.getCanonicalPath()))) {
+            ps.execute();
+        }
+
+        int count1 = 0;
+        int count2 = 0;
+
+        try (PreparedStatement ps = methodWatcher.prepareStatement("select count(*) from customers --splice-properties index=null");
+             ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            count1 = rs.getInt(1);
+        }
+
+        try (PreparedStatement ps = methodWatcher.prepareStatement("select count(*) from customers --splice-properties index=cust_idx");
+             ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            count2 = rs.getInt(1);
+        }
+        Assert.assertEquals(count1, count2);
+        Assert.assertEquals(1999, count1);
     }
 }

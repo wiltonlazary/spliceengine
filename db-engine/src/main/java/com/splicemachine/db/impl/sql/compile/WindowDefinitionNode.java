@@ -25,17 +25,17 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
 package com.splicemachine.db.impl.sql.compile;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.sanity.SanityManager;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * This class represents an OLAP window definition.
@@ -259,4 +259,13 @@ public final class WindowDefinitionNode extends WindowNode
         return result;
     }
 
+    @Override
+    public OverClause getOverClause() {
+        return overClause;
+    }
+
+    @Override
+    public void setOverClause(OverClause overClause) {
+        this.overClause = overClause;
+    }
 }

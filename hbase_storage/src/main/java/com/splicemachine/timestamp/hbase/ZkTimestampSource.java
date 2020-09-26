@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -72,9 +72,36 @@ public class ZkTimestampSource implements TimestampSource {
         }
     	return _tc;
     }
-    
+
+    @Override
+    public long currentTimestamp() {
+        TimestampClient client = getTimestampClient();
+
+        long nextTimestamp;
+        try {
+            nextTimestamp = client.getCurrentTimestamp();
+        } catch (Exception e) {
+            LOG.warn("Unable to fetch new timestamp, will retry", e);
+
+            // In case of error we are going to reconnect, so we can retry once more and see if we are lucky...
+            try {
+                Thread.sleep(100);
+
+                nextTimestamp = client.getCurrentTimestamp();
+            } catch (Exception e2) {
+                LOG.error("Unable to get current timestamp", e2);
+                throw new RuntimeException("Unable to get current timestamp", e2);
+            }
+        }
+
+        SpliceLogUtils.debug(LOG, "Current timestamp: %s", nextTimestamp);
+
+        return nextTimestamp;
+    }
+
     @Override
     public long nextTimestamp() {
+
 		TimestampClient client = getTimestampClient();
 				
 		long nextTimestamp;
@@ -134,10 +161,10 @@ public class ZkTimestampSource implements TimestampSource {
     }
 
     @Override
-    public void refresh() {
+    public void bumpTimestamp(long timestamp) {
         try {
             TimestampClient client = getTimestampClient();
-            client.refresh();
+            client.bumpTimestamp(timestamp);
         } catch (TimestampIOException e) {
             throw new RuntimeException(e);
         }

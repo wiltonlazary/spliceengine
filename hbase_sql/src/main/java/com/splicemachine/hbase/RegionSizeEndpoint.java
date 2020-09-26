@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -21,42 +21,43 @@ import com.google.protobuf.Service;
 import com.splicemachine.coprocessor.SpliceMessage;
 import com.splicemachine.si.constants.SIConstants;
 import com.splicemachine.utils.SpliceLogUtils;
-import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.HBasePlatformUtils;
-import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.HRegionUtil;
-import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.regionserver.*;
 import org.apache.log4j.Logger;
+import splice.com.google.common.collect.Lists;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.List;
 
 /**
  * @author Scott Fines
  *         Date: 1/26/16
  */
-public class RegionSizeEndpoint extends SpliceMessage.SpliceDerbyCoprocessorService implements CoprocessorService,Coprocessor{
+public class RegionSizeEndpoint extends SpliceMessage.SpliceDerbyCoprocessorService implements RegionCoprocessor{
     private static final Logger LOG=Logger.getLogger(RegionSizeEndpoint.class);
     private HRegion region;
     private String hostName;
 
+
     @Override
     public void start(CoprocessorEnvironment env) throws IOException{
-        hostName = ((RegionCoprocessorEnvironment) env).getRegionServerServices().getServerName().getHostname();
+        RegionServerServices service = (RegionServerServices)((RegionCoprocessorEnvironment) env).getOnlineRegions();
+        hostName = service.getServerName().getHostname();
         region = (HRegion)((RegionCoprocessorEnvironment) env).getRegion();
     }
 
     @Override
     public void stop(CoprocessorEnvironment env) throws IOException{
-
     }
 
     @Override
-    public Service getService(){
-        return this;
+    public Iterable<Service> getServices() {
+        List<Service> services = Lists.newArrayList();
+        services.add(this);
+        return services;
     }
 
     @Override
@@ -81,11 +82,11 @@ public class RegionSizeEndpoint extends SpliceMessage.SpliceDerbyCoprocessorServ
             List<byte[]> splits = computeSplits(region, beginKey.toByteArray(), endKey.toByteArray(), requestedSplits, bytesPerSplit);
 
             if (LOG.isDebugEnabled())
-                SpliceLogUtils.debug(LOG,"computeSplits with beginKey=%s, endKey=%s, numberOfSplits=%s, bytesPerSplit=%ld",beginKey,endKey,splits.size(), bytesPerSplit);
+                SpliceLogUtils.debug(LOG,"computeSplits with beginKey=%s, endKey=%s, numberOfSplits=%s, bytesPerSplit=%d",beginKey,endKey,splits.size(), bytesPerSplit);
             for (byte[] split : splits)
                 writeResponse.addCutPoint(com.google.protobuf.ByteString.copyFrom(split));
         } catch (java.io.IOException e) {
-            org.apache.hadoop.hbase.protobuf.ResponseConverter.setControllerException(controller, e);
+            org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter.setControllerException(controller, e);
         }
         callback.run(writeResponse.build());
     }
@@ -97,9 +98,9 @@ public class RegionSizeEndpoint extends SpliceMessage.SpliceDerbyCoprocessorServ
         SpliceMessage.SpliceRegionSizeResponse.Builder writeResponse = SpliceMessage.SpliceRegionSizeResponse.newBuilder();
         try {
             writeResponse.setEncodedName(region.getRegionInfo().getRegionNameAsString());
-            writeResponse.setSizeInBytes(HBasePlatformUtils.getMemstoreSize(region)+getStoreFileSize());
+            writeResponse.setSizeInBytes(region.getMemStoreHeapSize()+getStoreFileSize());
         } catch (Exception e) {
-            org.apache.hadoop.hbase.protobuf.ResponseConverter.setControllerException(controller, new IOException(e));
+            org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter.setControllerException(controller, new IOException(e));
         }
         callback.run(writeResponse.build());
     }
@@ -126,5 +127,32 @@ public class RegionSizeEndpoint extends SpliceMessage.SpliceDerbyCoprocessorServ
         } finally {
             HRegionUtil.unlockStore(store);
         }
+    }
+
+    @Override
+    public void getCompactedHFiles(RpcController controller,
+                                   SpliceMessage.GetCompactedHFilesRequest request,
+                                   RpcCallback<SpliceMessage.GetCompactedHFilesResponse> callback) {
+        if (LOG.isDebugEnabled()) {
+            SpliceLogUtils.debug(LOG, "getCompactedHFiles");
+        }
+        SpliceMessage.GetCompactedHFilesResponse.Builder writeResponse = SpliceMessage.GetCompactedHFilesResponse.newBuilder();
+
+        HStore store = region.getStore(SIConstants.DEFAULT_FAMILY_BYTES);
+        try {
+            HRegionUtil.lockStore(store);
+            Collection<? extends StoreFile> compactedFiles = store.getCompactedFiles();
+            if (LOG.isDebugEnabled()) {
+                String regionName = region.getRegionInfo().getRegionNameAsString();
+                SpliceLogUtils.debug(LOG, "region store files " + regionName + ": " + store.getStorefiles());
+                SpliceLogUtils.debug(LOG, "compacted files " + regionName + ": " + compactedFiles);
+            }
+            for (StoreFile file: compactedFiles) {
+                writeResponse.addFilePath(file.getPath().toString());
+            }
+        } finally {
+            HRegionUtil.unlockStore(store);
+        }
+        callback.run(writeResponse.build());
     }
 }

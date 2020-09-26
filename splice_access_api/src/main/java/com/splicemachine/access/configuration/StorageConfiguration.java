@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -36,13 +36,13 @@ public class StorageConfiguration implements ConfigurationDefault {
     public static final String SPLIT_BLOCK_SIZE = "splice.splitBlockSize";
     public static final int DEFAULT_SPLIT_BLOCK_SIZE=32*1024*1024;
 
-    public static final String MINIMUM_SPLITS_PER_TABLE = "splice.minimumSplitsPerTable";
-    public static final int DEFAULT_MINIMUM_SPLITS_PER_TABLE = 16;
+    public static final String MINIMUM_SPLITS_PER_REGION = "splice.minimumSplitsPerRegion";
+    public static final int DEFAULT_MINIMUM_SPLITS_PER_REGION = 8;
 
     @Override
     public void setDefaults(ConfigurationBuilder builder, ConfigurationSource configurationSource) {
         builder.splitBlockSize = configurationSource.getInt(SPLIT_BLOCK_SIZE, DEFAULT_SPLIT_BLOCK_SIZE);
         builder.tableSplitSleepInterval = configurationSource.getLong(TABLE_SPLIT_SLEEP_INTERVAL, DEFAULT_SPLIT_WAIT_INTERVAL);
-        builder.splitsPerTableMin = configurationSource.getInt(MINIMUM_SPLITS_PER_TABLE, DEFAULT_MINIMUM_SPLITS_PER_TABLE);
+        builder.splitsPerRegionMin = configurationSource.getInt(MINIMUM_SPLITS_PER_REGION, DEFAULT_MINIMUM_SPLITS_PER_REGION);
     }
 }

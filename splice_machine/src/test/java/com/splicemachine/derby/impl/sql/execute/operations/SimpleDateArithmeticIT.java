@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,6 +14,7 @@
 
 package com.splicemachine.derby.impl.sql.execute.operations;
 
+import com.splicemachine.derby.impl.load.HBaseBulkLoadIT;
 import com.splicemachine.derby.test.framework.SpliceSchemaWatcher;
 import com.splicemachine.derby.test.framework.SpliceUnitTest;
 import com.splicemachine.derby.test.framework.SpliceWatcher;
@@ -41,14 +42,17 @@ import static org.junit.Assert.fail;
  *         Date: 2/19/15
  */
 public class SimpleDateArithmeticIT {
-    private static SpliceWatcher spliceClassWatcher = new SpliceWatcher();
+    private static final String SCHEMA_NAME = SimpleDateArithmeticIT.class.getSimpleName().toUpperCase();
 
-    private static SpliceSchemaWatcher schemaWatcher =
-        new SpliceSchemaWatcher(SimpleDateArithmeticIT.class.getSimpleName().toUpperCase());
+    private static SpliceWatcher spliceClassWatcher = new SpliceWatcher();
+    private static SpliceSchemaWatcher schemaWatcher = new SpliceSchemaWatcher(SCHEMA_NAME);
 
     private static final String QUALIFIED_TABLE_NAME = schemaWatcher.schemaName + ".date_add_test";
     private static final String QUALIFIED_TABLE_NAME2 = schemaWatcher.schemaName + ".old_date_test";
     private static final String QUALIFIED_TIME_TABLE_NAME = schemaWatcher.schemaName + ".time_test";
+    private static final String QUALIFIED_TABLE_NAME3 = schemaWatcher.schemaName + ".null_value_test";
+
+    private static String BADDIR;
 
     @ClassRule
     public static TestRule chain = RuleChain.outerRule(spliceClassWatcher)
@@ -56,6 +60,8 @@ public class SimpleDateArithmeticIT {
 
     @BeforeClass
     public static void createTables() throws Exception {
+        BADDIR = SpliceUnitTest.createBadLogDirectory(SCHEMA_NAME).getCanonicalPath();
+
         new TableCreator(spliceClassWatcher.getOrCreateConnection())
         .withCreate(String.format("create table %s (s varchar(15), d date, t timestamp, t2 timestamp)", QUALIFIED_TABLE_NAME))
         .withInsert(String.format("insert into %s values(?,?,?,?)", QUALIFIED_TABLE_NAME))
@@ -71,11 +77,19 @@ public class SimpleDateArithmeticIT {
         .withRows(rows(row(1, null), row(2, null), row(3, null),
                        row(4, null), row(5, null), row(6, null)))
         .create();
+
+        new TableCreator(spliceClassWatcher.getOrCreateConnection())
+                .withCreate(String.format("create table %s (c1 int, c2 date, c3 date, c4 timestamp, c5 timestamp)", QUALIFIED_TABLE_NAME3))
+                .withInsert(String.format("insert into %s values(?,?,?,?,?)", QUALIFIED_TABLE_NAME3))
+                .withRows(rows(
+                        row(1, new SimpleDateFormat("yyyy-MM-dd").parse("2020-02-20"), null, Timestamp.valueOf("2020-02-20 22:22:22"), null)))
+                .create();
+
         spliceClassWatcher.commit();
 
         String dataDir = SpliceUnitTest.getResourceDirectory() + "date.csv";
 
-        String sqlText = String.format("CALL SYSCS_UTIL.MERGE_DATA_FROM_FILE('" + schemaWatcher.schemaName + "','OLD_DATE_TEST',null,'%s',null,null,'yyyy-MM-dd HH:mm:ss.SSS','yyyy-MM-dd',null,0,'/BAD',false,null)", dataDir);
+        String sqlText = String.format("CALL SYSCS_UTIL.MERGE_DATA_FROM_FILE('" + schemaWatcher.schemaName + "','OLD_DATE_TEST',null,'%s',null,null,'yyyy-MM-dd HH:mm:ss.SSS','yyyy-MM-dd',null,0,'%s',false,null)", dataDir, BADDIR);
         try {
             CallableStatement cs = spliceClassWatcher.prepareCall(sqlText);
             ResultSet rs = cs.executeQuery();
@@ -93,7 +107,7 @@ public class SimpleDateArithmeticIT {
 
         dataDir = SpliceUnitTest.getResourceDirectory() + "time.csv";
 
-        sqlText = String.format("CALL SYSCS_UTIL.MERGE_DATA_FROM_FILE('" + schemaWatcher.schemaName + "','TIME_TEST',null,'%s',null,null,'yyyy-MM-dd HH:mm:ss.SSS','yyyy-MM-dd','HH:mm:ss',0,'/BAD',false,null)", dataDir);
+        sqlText = String.format("CALL SYSCS_UTIL.MERGE_DATA_FROM_FILE('" + schemaWatcher.schemaName + "','TIME_TEST',null,'%s',null,null,'yyyy-MM-dd HH:mm:ss.SSS','yyyy-MM-dd','HH:mm:ss',0,'%s',false,null)", dataDir, BADDIR);
         try {
             CallableStatement cs = spliceClassWatcher.prepareCall(sqlText);
             ResultSet rs = cs.executeQuery();
@@ -149,14 +163,14 @@ public class SimpleDateArithmeticIT {
     @Test
     public void testMinusDateColumn() throws Exception {
         String sqlText =
-            String.format("select d + 1 from  %s", QUALIFIED_TABLE_NAME);
+            String.format("select d - 1 from  %s", QUALIFIED_TABLE_NAME);
 
         ResultSet rs = spliceClassWatcher.executeQuery(sqlText);
 
         String expected =
             "1     |\n" +
                 "------------\n" +
-                "1988-12-27 |";
+                "1988-12-25 |";
         Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
         rs.close();
     }
@@ -733,6 +747,81 @@ public class SimpleDateArithmeticIT {
         }
     }
 
+    @Test
+    public void testDateMinusDateNullValues() throws Exception {
+        String sqlText = String.format("select c3 - c2 from %s",QUALIFIED_TABLE_NAME3);
+        ResultSet rs = spliceClassWatcher.executeQuery(sqlText);
+            String expected =
+                    "1  |\n" +
+                    "------\n" +
+                    "NULL |";
+            Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        sqlText = String.format("select c2 - c3 from %s",QUALIFIED_TABLE_NAME3);
+        rs = spliceClassWatcher.executeQuery(sqlText);
+        Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        sqlText = String.format("select c3 - c3 from %s",QUALIFIED_TABLE_NAME3);
+        rs = spliceClassWatcher.executeQuery(sqlText);
+        Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        rs.close();
+    }
+
+    @Test
+    public void testTimestampMinusTimestampNullValues() throws Exception {
+        String sqlText = String.format("select c5 - c4 from %s",QUALIFIED_TABLE_NAME3);
+        ResultSet rs = spliceClassWatcher.executeQuery(sqlText);
+            String expected =
+                    "1  |\n" +
+                    "------\n" +
+                    "NULL |";
+            Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        sqlText = String.format("select c4 - c5 from %s",QUALIFIED_TABLE_NAME3);
+        rs = spliceClassWatcher.executeQuery(sqlText);
+        Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        sqlText = String.format("select c5 - c5 from %s",QUALIFIED_TABLE_NAME3);
+        rs = spliceClassWatcher.executeQuery(sqlText);
+        Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        rs.close();
+    }
+
+    @Test
+    public void testDateMinusTimestampNullValues() throws Exception {
+        String sqlText = String.format("select c5 - c2 from %s",QUALIFIED_TABLE_NAME3);
+        ResultSet rs = spliceClassWatcher.executeQuery(sqlText);
+            String expected =
+                    "1  |\n" +
+                    "------\n" +
+                    "NULL |";;
+            Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        sqlText = String.format("select c2 - c5 from %s",QUALIFIED_TABLE_NAME3);
+        rs = spliceClassWatcher.executeQuery(sqlText);
+        Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        sqlText = String.format("select c4 - c3 from %s",QUALIFIED_TABLE_NAME3);
+        rs = spliceClassWatcher.executeQuery(sqlText);
+        Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        sqlText = String.format("select c3 - c4 from %s",QUALIFIED_TABLE_NAME3);
+        rs = spliceClassWatcher.executeQuery(sqlText);
+        Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        sqlText = String.format("select c5 - c3 from %s",QUALIFIED_TABLE_NAME3);
+        rs = spliceClassWatcher.executeQuery(sqlText);
+        Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        sqlText = String.format("select c3 - c5 from %s",QUALIFIED_TABLE_NAME3);
+        rs = spliceClassWatcher.executeQuery(sqlText);
+        Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
+
+        rs.close();
+    }
+
 
     //=========================================================================================================
     // Time column
@@ -763,6 +852,4 @@ public class SimpleDateArithmeticIT {
         Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs));
         rs.close();
     }
-
 }
-

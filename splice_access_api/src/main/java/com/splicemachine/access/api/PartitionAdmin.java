@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,6 +14,7 @@
 
 package com.splicemachine.access.api;
 
+import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.storage.Partition;
 import com.splicemachine.storage.PartitionServer;
 
@@ -75,4 +76,12 @@ public interface PartitionAdmin extends AutoCloseable{
     void enableTableReplication(String tableName) throws IOException;
 
     void disableTableReplication(String tableName) throws IOException;
+
+    List<ReplicationPeerDescription> getReplicationPeers() throws IOException;
+
+    boolean replicationEnabled(String tableName) throws IOException;
+
+    void setCatalogVersion(long conglomerateNumber, String version) throws IOException;
+
+    String getCatalogVersion(long conglomerateNumber) throws StandardException;
 }

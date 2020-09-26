@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.serde.Constants;
-import org.apache.hadoop.hive.serde2.SerDe;
+import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeStats;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -54,14 +54,14 @@ import java.util.*;
 
 // TODO FIX HIVE INTEGRATION JL
 
-public class SMSerDe implements SerDe {
+public class SMSerDe extends AbstractSerDe {
 	protected StructTypeInfo rowTypeInfo;
     protected ObjectInspector rowOI;
     protected SMSQLUtil sqlUtil = null;
 //    protected SerDeParameters serdeParams;
     protected List<String> colNames = new ArrayList<String>(); // hive names
     protected List<TypeInfo> colTypes; // hive types, not Splice Types
-    protected static Logger Log = Logger.getLogger(SMSerDe.class.getName());
+    protected static final Logger LOG = Logger.getLogger(SMSerDe.class.getName());
     protected List<Object> objectCache;
     protected String tableName;
     
@@ -73,8 +73,8 @@ public class SMSerDe implements SerDe {
      */
     //@Override
     public void initialize(Configuration conf, Properties tbl) throws SerDeException {
-    	if (Log.isDebugEnabled())
-    		SpliceLogUtils.debug(Log, "initialize with conf=%s, tbl=%s",conf,tbl);
+    	if (LOG.isDebugEnabled())
+    		SpliceLogUtils.debug(LOG, "initialize with conf=%s, tbl=%s",conf,tbl);
         // Get a list of the table's column names.
         tableName = tbl.getProperty(MRConstants.SPLICE_TABLE_NAME);
         String hbaseDir = null;
@@ -123,14 +123,14 @@ public class SMSerDe implements SerDe {
 			}
         } 
          
-    	if (Log.isDebugEnabled())
-    		SpliceLogUtils.debug(Log, "generating hive info colNames=%s, colTypes=%s",colNames,colTypes);
+    	if (LOG.isDebugEnabled())
+    		SpliceLogUtils.debug(LOG, "generating hive info colNames=%s, colTypes=%s",colNames,colTypes);
 
         
         rowTypeInfo = (StructTypeInfo) TypeInfoFactory.getStructTypeInfo(colNames, colTypes);
         rowOI = TypeInfoUtils.getStandardJavaObjectInspectorFromTypeInfo(rowTypeInfo);
         //serdeParams = LazySimpleSerDe.initSerdeParams(conf, tbl, getClass().getName());
-        Log.info("--------Finished initialize");
+        LOG.info("--------Finished initialize");
     }
 
     /**
@@ -139,8 +139,8 @@ public class SMSerDe implements SerDe {
      */
     //@Override
     public Object deserialize(Writable blob) throws SerDeException {
-    	if (Log.isTraceEnabled())
-    		SpliceLogUtils.trace(Log, "deserialize " + blob);
+    	if (LOG.isTraceEnabled())
+    		SpliceLogUtils.trace(LOG, "deserialize " + blob);
         ExecRowWritable rowWritable = (ExecRowWritable) blob;
         objectCache.clear();
             ExecRow val = rowWritable.get();
@@ -160,8 +160,8 @@ public class SMSerDe implements SerDe {
      */
     //@Override
     public ObjectInspector getObjectInspector() throws SerDeException {
-    	if (Log.isDebugEnabled())
-    		SpliceLogUtils.trace(Log, "getObjectInspector");
+    	if (LOG.isTraceEnabled())
+    		SpliceLogUtils.trace(LOG, "getObjectInspector");
         return rowOI;
     }
 
@@ -170,8 +170,8 @@ public class SMSerDe implements SerDe {
      */
     //@Override
     public SerDeStats getSerDeStats() {
-    	if (Log.isDebugEnabled())
-    		SpliceLogUtils.trace(Log, "serdeStats");
+    	if (LOG.isTraceEnabled())
+    		SpliceLogUtils.trace(LOG, "serdeStats");
         return null;
     }
 
@@ -180,7 +180,8 @@ public class SMSerDe implements SerDe {
      */
     //@Override
     public Class<? extends Writable> getSerializedClass() {
-        Log.debug("********" + Thread.currentThread().getStackTrace()[1].getMethodName());
+        if (LOG.isDebugEnabled())
+            LOG.debug("********" + Thread.currentThread().getStackTrace()[1].getMethodName());
         return ExecRowWritable.class;
     }
 
@@ -203,8 +204,8 @@ public class SMSerDe implements SerDe {
 		} catch (SQLException | StandardException | IOException e1) {
 			throw new SerDeException(e1);
 		}    	
-    	if (Log.isTraceEnabled())
-    		SpliceLogUtils.trace(Log, "serialize with obj=%s, oi=%s",obj,oi);
+    	if (LOG.isTraceEnabled())
+    		SpliceLogUtils.trace(LOG, "serialize with obj=%s, oi=%s",obj,oi);
         if (oi.getCategory() != ObjectInspector.Category.STRUCT) {
             throw new SerDeException(getClass().toString()
                     + " can only serialize struct types, but we got: "

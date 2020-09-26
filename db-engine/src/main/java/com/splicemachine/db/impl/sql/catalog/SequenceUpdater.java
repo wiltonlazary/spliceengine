@@ -25,13 +25,13 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 package com.splicemachine.db.impl.sql.catalog;
 
 import com.splicemachine.db.catalog.SequencePreallocator;
-import com.splicemachine.db.iapi.db.Database;
+import com.splicemachine.db.iapi.db.InternalDatabase;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.reference.Property;
 import com.splicemachine.db.iapi.reference.SQLState;
@@ -234,7 +234,7 @@ public abstract class SequenceUpdater implements Cacheable
             LanguageConnectionContext lcc = getLCC();
             if (lcc != null)
             {
-                Database db = lcc.getDatabase();
+                InternalDatabase db = lcc.getDatabase();
                 boolean isactive = (db != null && db.isActive());
                 lcc.getContextManager().cleanupOnError(se, isactive);
             }

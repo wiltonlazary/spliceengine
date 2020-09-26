@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -13,6 +13,7 @@
  */
 package com.splicemachine.orc.stream;
 
+import com.splicemachine.compression.SpliceSnappy;
 import com.splicemachine.orc.OrcCorruptionException;
 import com.splicemachine.orc.memory.AbstractAggregatedMemoryContext;
 import com.splicemachine.orc.memory.LocalMemoryContext;
@@ -20,7 +21,6 @@ import com.splicemachine.orc.metadata.CompressionKind;
 import io.airlift.slice.FixedLengthSliceInput;
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
-import org.iq80.snappy.Snappy;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -297,11 +297,11 @@ public final class OrcInputStream
         int inOffset = (int) (in.getAddress() - ARRAY_BYTE_BASE_OFFSET);
         int inLength = in.length();
 
-        int uncompressedLength = Snappy.getUncompressedLength(inArray, inOffset);
+        int uncompressedLength = SpliceSnappy.uncompressedLength(inArray, inOffset, inLength);
         checkArgument(uncompressedLength <= maxBufferSize, "Snappy requires buffer (%s) larger than max size (%s)", uncompressedLength, maxBufferSize);
         allocateOrGrowBuffer(uncompressedLength, false);
 
-        return Snappy.uncompress(inArray, inOffset, inLength, buffer, 0);
+        return SpliceSnappy.uncompress(inArray, inOffset, inLength, buffer, 0);
     }
 
     private void allocateOrGrowBuffer(int size, boolean copyExistingData)

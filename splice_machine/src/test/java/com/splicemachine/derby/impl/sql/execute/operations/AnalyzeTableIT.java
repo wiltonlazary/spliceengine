@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -65,8 +65,28 @@ public class AnalyzeTableIT {
     }
 
     @Test
+    public void testAnalyseAliasTable() throws Exception {
+        ResultSet rs = methodWatcher.executeQuery("analyse table AnalyzeTableIT.T1");
+        int count = 0;
+        while(rs.next()) {
+            count++;
+        }
+        Assert.assertEquals(1, count);
+    }
+
+    @Test
     public void testAnalyzeSchema() throws Exception {
         ResultSet rs = methodWatcher.executeQuery("analyze schema AnalyzeTableIT");
+        int count = 0;
+        while(rs.next()) {
+            count++;
+        }
+        Assert.assertEquals(2, count);
+    }
+
+    @Test
+    public void testAnalyseAliasSchema() throws Exception {
+        ResultSet rs = methodWatcher.executeQuery("analyse schema AnalyzeTableIT");
         int count = 0;
         while(rs.next()) {
             count++;
@@ -90,11 +110,26 @@ public class AnalyzeTableIT {
     }
 
     @Test
+    public void testDefaultSchemaAlias() throws Exception {
+        Connection connection = methodWatcher.getOrCreateConnection();
+        Statement statement = connection.createStatement();
+        statement.execute("set schema " + SCHEMA);
+        ResultSet rs = statement.executeQuery("Analyse table t1");
+        int count = 0;
+        while (rs.next()) {
+            ++count;
+            String schema = rs.getString(1);
+            Assert.assertTrue(schema.compareToIgnoreCase(SCHEMA) == 0);
+        }
+        Assert.assertEquals(1, count);
+    }
+
+    @Test
     public void testAnalyzeTablePrivilege() throws Exception {
         String message = null;
         String expected = null;
         try {
-            Connection connection = methodWatcher.createConnection("analyzeuser", "passwd");
+            Connection connection = methodWatcher.connectionBuilder().user("analyzeuser").password("passwd").build();
             Statement statement = connection.createStatement();
             statement.execute("analyze table AnalyzeTableIT.T2");
         }
@@ -113,7 +148,7 @@ public class AnalyzeTableIT {
         String message = null;
         String expected = null;
         try {
-            Connection connection = methodWatcher.createConnection("analyzeuser", "passwd");
+            Connection connection = methodWatcher.connectionBuilder().user("analyzeuser").password("passwd").build();
             Statement statement = connection.createStatement();
             statement.execute("analyze schema AnalyzeTableIT");
         }

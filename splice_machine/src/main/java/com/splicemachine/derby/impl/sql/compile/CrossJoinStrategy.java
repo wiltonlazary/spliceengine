@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -23,6 +23,7 @@ import com.splicemachine.db.iapi.sql.compile.*;
 import com.splicemachine.db.iapi.sql.dictionary.ConglomerateDescriptor;
 import com.splicemachine.db.iapi.sql.dictionary.DataDictionary;
 import com.splicemachine.db.iapi.store.access.TransactionController;
+import com.splicemachine.db.iapi.util.JBitSet;
 import com.splicemachine.db.impl.sql.compile.*;
 import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.log4j.Logger;
@@ -43,7 +44,7 @@ public class CrossJoinStrategy extends BaseJoinStrategy {
     /**
      * @see JoinStrategy#joinResultSetMethodName
      */
-	@Override
+    @Override
     public String joinResultSetMethodName() {
         return "getCrossJoinResultSet";
     }
@@ -51,9 +52,9 @@ public class CrossJoinStrategy extends BaseJoinStrategy {
     /**
      * @see JoinStrategy#halfOuterJoinResultSetMethodName
      */
-	@Override
+    @Override
     public String halfOuterJoinResultSetMethodName() {
-	    throw new UnsupportedOperationException("Cross join doesn't support half outer join");
+        throw new UnsupportedOperationException("Cross join doesn't support half outer join");
     }
 
     @Override
@@ -131,8 +132,14 @@ public class CrossJoinStrategy extends BaseJoinStrategy {
 
 
     @Override
-    public void divideUpPredicateLists(Optimizable innerTable, OptimizablePredicateList originalRestrictionList, OptimizablePredicateList storeRestrictionList, OptimizablePredicateList nonStoreRestrictionList, OptimizablePredicateList requalificationRestrictionList, DataDictionary dd) throws StandardException {
-       originalRestrictionList.transferPredicates(storeRestrictionList, innerTable.getReferencedTableMap(), innerTable);
+    public void divideUpPredicateLists(Optimizable innerTable,
+                                       JBitSet joinedTableSet,
+                                       OptimizablePredicateList originalRestrictionList,
+                                       OptimizablePredicateList storeRestrictionList,
+                                       OptimizablePredicateList nonStoreRestrictionList,
+                                       OptimizablePredicateList requalificationRestrictionList,
+                                       DataDictionary dd) throws StandardException {
+       originalRestrictionList.transferPredicates(storeRestrictionList, innerTable.getReferencedTableMap(), innerTable, joinedTableSet);
        originalRestrictionList.copyPredicatesToOtherList(nonStoreRestrictionList);
     }
 
@@ -142,9 +149,9 @@ public class CrossJoinStrategy extends BaseJoinStrategy {
     }
 
     /** @see JoinStrategy#multiplyBaseCostByOuterRows */
-	public boolean multiplyBaseCostByOuterRows() {
-		return true;
-	}
+    public boolean multiplyBaseCostByOuterRows() {
+        return true;
+    }
 
     @Override
     public OptimizablePredicateList getBasePredicates(OptimizablePredicateList predList, OptimizablePredicateList basePredicates, Optimizable innerTable) throws StandardException {
@@ -178,8 +185,8 @@ public class CrossJoinStrategy extends BaseJoinStrategy {
         }
     }
 
-	@Override
-	public boolean feasible(Optimizable innerTable,
+    @Override
+    public boolean feasible(Optimizable innerTable,
                             OptimizablePredicateList predList,
                             Optimizer optimizer,
                             CostEstimate outerCost,
@@ -191,26 +198,20 @@ public class CrossJoinStrategy extends BaseJoinStrategy {
             return false;
         }
 
-	// Cross join can't handle IndexLookups on the inner table currently because
+        // Cross join can't handle IndexLookups on the inner table currently because
         // the join predicates get mapped to the IndexScan instead of the CrossJoin.
         // Broadcast join has a similar restriction.
-	if (JoinStrategyUtil.isNonCoveringIndex(innerTable))
-            return false;
-
+        if (JoinStrategyUtil.isNonCoveringIndex(innerTable))
+                return false;
+        
+        boolean isSpark = optimizer.isForSpark();
         AccessPath currentAccessPath = innerTable.getCurrentAccessPath();
-        boolean isSpark = false;
-        boolean isForcedControl = false;
-        boolean isOneRow = false;
         boolean isHinted = currentAccessPath.isHintedJoinStrategy();
-        if (innerTable instanceof FromBaseTable) {
-            CompilerContext.DataSetProcessorType dspt = ((FromBaseTable) innerTable).getdataSetProcessorTypeForAccessPath(currentAccessPath);
-            isSpark = ((FromBaseTable)innerTable).isSpark(dspt);
-            isForcedControl = dspt.name().equals("FORCED_CONTROL");
-            isOneRow = ((FromBaseTable) innerTable).isOneRowResultSet();
-        }
-        // Only use cross join when it is inner join
-        // Only use cross join when it is on Spark, forced control and isHinted is for debug purpose
-        return !outerCost.isOuterJoin() && (isSpark || (isForcedControl && isHinted)) && !isOneRow;
+        boolean isOneRow = ((FromTable)innerTable).isOneRowResultSet();
+
+        // Only use cross join when it is inner join, and not a semi-join
+        // Only use cross join when it is on Spark
+        return !outerCost.isOuterJoin() && isSpark && (innerTable instanceof FromBaseTable || isHinted) && !isOneRow;
     }
 
     @Override
@@ -235,9 +236,7 @@ public class CrossJoinStrategy extends BaseJoinStrategy {
 
         SpliceLogUtils.trace(LOG,"rightResultSetCostEstimate outerCost=%s, innerFullKeyCost=%s",outerCost,innerCost);
 
-        AccessPath currentAccessPath = innerTable.getCurrentAccessPath();
         // Only use cross join when it is inner join and run on Spark
-
         innerCost.setBase(innerCost.cloneMe());
         double joinSelectivity = SelectivityUtil.estimateJoinSelectivity(innerTable, cd, predList, (long) innerCost.rowCount(), (long) outerCost.rowCount(), outerCost, SelectivityUtil.JoinPredicateType.ALL);
         double totalOutputRows = SelectivityUtil.getTotalRows(joinSelectivity, outerCost.rowCount(), innerCost.rowCount());
@@ -303,6 +302,14 @@ public class CrossJoinStrategy extends BaseJoinStrategy {
 
     protected boolean validForOutermostTable() {
         return true;
+    }
+
+    @Override
+    public boolean getBroadcastRight(CostEstimate rightCost) {
+        double estimatedRowCount = rightCost.getEstimatedRowCount();
+        SConfiguration configuration=EngineDriver.driver().getConfiguration();
+        long rowCountThreshold = configuration.getBroadcastRegionRowThreshold();
+        return estimatedRowCount < rowCountThreshold;
     }
 }
 

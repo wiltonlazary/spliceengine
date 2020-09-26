@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -235,18 +235,20 @@ public interface MessageId {
      */
     String REPLICATION_ERROR_BEGIN                       = "R001";
     String REPLICATION_ERROR_END                         = "R002";
-    String REPLICATION_SLAVE_STARTED                     = "R003";
-    String REPLICATION_SLAVE_STOPPED                     = "R004";
+    String REPLICATION_REPLICA_STARTED                   = "R003";
+    String REPLICATION_REPLICA_STOPPED                   = "R004";
     String REPLICATION_FATAL_ERROR                       = "R005";
-    String REPLICATION_SLAVE_LOST_CONN                   = "R006";
-    String REPLICATION_MASTER_STARTED                    = "R007";
-    String REPLICATION_MASTER_STOPPED                    = "R008";
+    String REPLICATION_REPLICA_LOST_CONN                 = "R006";
+    String REPLICATION_PRIMARY_STARTED                   = "R007";
+    String REPLICATION_PRIMARY_STOPPED                   = "R008";
     String REPLICATION_LOGSHIPPER_EXCEPTION              = "R009";
-    String REPLICATION_MASTER_RECONN                     = "R010";
-    String REPLICATION_SLAVE_NETWORK_LISTEN              = "R011";    
+    String REPLICATION_PRIMARY_RECONN                    = "R010";
+    String REPLICATION_REPLICA_NETWORK_LISTEN            = "R011";
     String REPLICATION_INVALID_CONNECTION_HANDLE         = "R012";
     String REPLICATION_ONELINE_MSG_HEADER                = "R013";
     String REPLICATION_FAILOVER_SUCCESSFUL               = "R020";
+
+    String SPLICE_CANCELLATION_EXCEPTION                 = "57014";
 
     /*
      * Splice Engine
@@ -258,7 +260,6 @@ public interface MessageId {
     String SPLICE_REGION_TOO_BUSY                        = "SE005";
     String ZOOKEEPER_FAILURE                             = "SE006.C.3";
     String QUERY_TIMEOUT                                 = "SE007";
-    String SPLICE_CANCELLATION_EXCEPTION                 = "SE008";
     String LANG_IMPORT_TOO_MANY_BAD_RECORDS              = "SE009";
     String LANG_NO_WRITE_PERMISSION                      = "SE010";
     String LANG_NO_READ_PERMISSION                       = "SE011";

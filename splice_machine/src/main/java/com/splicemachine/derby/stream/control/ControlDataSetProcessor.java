@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -21,7 +21,9 @@ import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
 import com.splicemachine.db.iapi.store.access.Qualifier;
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
+import com.splicemachine.db.impl.sql.compile.ExplainNode;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
+import com.splicemachine.derby.impl.sql.execute.operations.ScanOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.scanner.TableScannerBuilder;
 import com.splicemachine.derby.stream.function.Partitioner;
 import com.splicemachine.derby.stream.iapi.*;
@@ -31,17 +33,19 @@ import com.splicemachine.pipeline.Exceptions;
 import com.splicemachine.si.api.data.TxnOperationFactory;
 import com.splicemachine.si.api.server.Transactor;
 import com.splicemachine.si.api.txn.TxnSupplier;
+import com.splicemachine.si.api.txn.TxnView;
 import com.splicemachine.si.impl.TxnRegion;
 import com.splicemachine.si.impl.driver.SIDriver;
 import com.splicemachine.si.impl.readresolve.NoOpReadResolver;
 import com.splicemachine.si.impl.rollforward.NoopRollForward;
 import com.splicemachine.storage.Partition;
+import com.splicemachine.system.CsvOptions;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.collections.iterators.SingletonIterator;
 import org.apache.log4j.Logger;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-import org.spark_project.guava.base.Charsets;
+import splice.com.google.common.base.Charsets;
 import scala.Tuple2;
 
 import javax.annotation.Nonnull;
@@ -53,8 +57,11 @@ import java.nio.file.OpenOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Scanner;
 import java.util.zip.GZIPInputStream;
+
+import static com.splicemachine.db.impl.sql.compile.ExplainNode.SparkExplainKind.NONE;
 
 /**
  * Local control side DataSetProcessor.
@@ -117,7 +124,8 @@ public class ControlDataSetProcessor implements DataSetProcessor{
                             txnSupplier,transactory,txnOperationFactory);
 
                     this.region(localRegion).scanner(p.openScanner(getScan(),metricFactory)); //set the scanner
-                    TableScannerIterator tableScannerIterator=new TableScannerIterator(this,spliceOperation);
+                    SpliceOperation scanOperation = (spliceOperation instanceof ScanOperation) ? spliceOperation : null;
+                    TableScannerIterator tableScannerIterator=new TableScannerIterator(this, scanOperation);
                     if(spliceOperation!=null){
                         spliceOperation.registerCloseable(tableScannerIterator);
                         spliceOperation.registerCloseable(p);
@@ -137,6 +145,11 @@ public class ControlDataSetProcessor implements DataSetProcessor{
 
     @Override
     public <V> DataSet<V> getEmpty(String name){
+        return getEmpty();
+    }
+
+    @Override
+    public <V> DataSet<V> getEmpty(String name, OperationContext context){
         return getEmpty();
     }
 
@@ -334,11 +347,11 @@ public class ControlDataSetProcessor implements DataSetProcessor{
     }
 
     @Override
-    public <V> DataSet<ExecRow> readTextFile(SpliceOperation op, String location, String characterDelimiter, String columnDelimiter, int[] baseColumnMap,
+    public <V> DataSet<ExecRow> readTextFile(SpliceOperation op, String location, CsvOptions csvOptions, int[] baseColumnMap,
                                                 OperationContext context, Qualifier[][] qualifiers, DataValueDescriptor probeValue, ExecRow execRow,
                                                 boolean useSample, double sampleFraction) throws StandardException{
         DistributedDataSetProcessor proc = EngineDriver.driver().processorFactory().distributedProcessor();
-        return new ControlDataSet(proc.readTextFile(op,location,characterDelimiter,columnDelimiter,baseColumnMap, context, qualifiers, probeValue, execRow, useSample, sampleFraction).toLocalIterator());
+        return new ControlDataSet(proc.readTextFile(op,location,csvOptions,baseColumnMap, context, qualifiers, probeValue, execRow, useSample, sampleFraction).toLocalIterator());
     }
 
     @Override
@@ -366,9 +379,9 @@ public class ControlDataSetProcessor implements DataSetProcessor{
     }
 
     @Override
-    public StructType getExternalFileSchema(String storedAs, String location, boolean mergeSchema) throws StandardException {
+    public StructType getExternalFileSchema(String storedAs, String location, boolean mergeSchema, CsvOptions csvOptions) throws StandardException {
         DistributedDataSetProcessor proc = EngineDriver.driver().processorFactory().distributedProcessor();
-        return proc.getExternalFileSchema(storedAs,location,mergeSchema);
+        return proc.getExternalFileSchema(storedAs,location,mergeSchema, csvOptions);
     }
 
     @Override
@@ -378,7 +391,33 @@ public class ControlDataSetProcessor implements DataSetProcessor{
     }
     
     @Override
-    public TableChecker getTableChecker(String schemaName, String tableName, DataSet table, KeyHashDecoder tableKeyDecoder, ExecRow tableKey) {
-        return new ControlTableChecker(schemaName, tableName, table, tableKeyDecoder, tableKey);
+    public TableChecker getTableChecker(String schemaName, String tableName, DataSet table,
+                                        KeyHashDecoder tableKeyDecoder, ExecRow tableKey, TxnView txn, boolean fix,
+                                        int[] baseColumnMap, boolean isSystemTable) {
+        return new ControlTableChecker(schemaName, tableName, table, tableKeyDecoder, tableKey, txn, fix, baseColumnMap,
+                isSystemTable);
+    }
+
+    // Operations specific to native spark explains
+    // have no effect on control queries.
+    @Override public boolean isSparkExplain() { return false; }
+    @Override public ExplainNode.SparkExplainKind getSparkExplainKind() { return NONE; }
+    @Override public void setSparkExplain(ExplainNode.SparkExplainKind newValue) {  }
+
+    @Override public void prependSpliceExplainString(String explainString) { }
+    @Override public void appendSpliceExplainString(String explainString) { }
+    @Override public void prependSparkExplainStrings(List<String> stringsToAdd, boolean firstOperationSource, boolean lastOperationSource) { }
+    @Override public void popSpliceOperation() { }
+    @Override public void finalizeTempOperationStrings() { }
+
+    @Override public List<String> getNativeSparkExplain() { return null; }
+    @Override public int getOpDepth() { return 0; }
+    @Override public void incrementOpDepth() { }
+    @Override public void decrementOpDepth() { }
+    @Override public void resetOpDepth() { }
+
+    @Override
+    public <V> DataSet<ExecRow> readKafkaTopic(String topicName, OperationContext context) throws StandardException {
+        throw new UnsupportedOperationException();
     }
 }

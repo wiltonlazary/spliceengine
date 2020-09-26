@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -15,9 +15,9 @@
 package com.splicemachine.derby.impl.sql.execute.operations.scanner;
 
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
-import org.spark_project.guava.base.Supplier;
-import org.spark_project.guava.base.Suppliers;
-import org.spark_project.guava.base.Throwables;
+import splice.com.google.common.base.Supplier;
+import splice.com.google.common.base.Suppliers;
+import splice.com.google.common.base.Throwables;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.io.FormatableBitSet;
 import com.splicemachine.db.iapi.services.io.StoredFormatIds;
@@ -54,7 +54,7 @@ import java.util.List;
  * Date: 4/4/14
  */
 public class SITableScanner<Data> implements StandardIterator<ExecRow>,AutoCloseable{
-    public static ThreadLocal<String> regionId = new ThreadLocal<String>(){
+    public static final ThreadLocal<String> regionId = new ThreadLocal<String>(){
         @Override
         protected String initialValue(){
             return "--";

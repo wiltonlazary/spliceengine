@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,7 +14,7 @@
 
 package com.splicemachine.pipeline.mem;
 
-import org.spark_project.guava.base.Throwables;
+import splice.com.google.common.base.Throwables;
 import com.splicemachine.access.api.CallTimeoutException;
 import com.splicemachine.access.api.NotServingPartitionException;
 import com.splicemachine.access.api.WrongPartitionException;
@@ -109,6 +109,9 @@ public class DirectPipelineExceptionFactory extends MExceptionFactory implements
             ||t instanceof IndexNotSetUpException) return true;
         return false;
     }
+
+    @Override
+    public boolean isHBase() { return false; }
 
     @Override
     public Exception processErrorResult(WriteResult result){

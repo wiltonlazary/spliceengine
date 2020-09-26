@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -16,12 +16,14 @@ package com.splicemachine.hbase;
 
 import com.splicemachine.access.HConfiguration;
 import com.splicemachine.access.api.SConfiguration;
+import com.splicemachine.access.configuration.HBaseConfiguration;
 import com.splicemachine.concurrent.SystemClock;
 import com.splicemachine.derby.lifecycle.EngineLifecycleService;
 import com.splicemachine.lifecycle.DatabaseLifecycleManager;
+import com.splicemachine.lifecycle.DatabaseLifecycleService;
 import com.splicemachine.lifecycle.MasterLifecycle;
 import com.splicemachine.olap.OlapServer;
-import com.splicemachine.lifecycle.DatabaseLifecycleService;
+import com.splicemachine.olap.OlapServerMaster;
 import com.splicemachine.olap.OlapServerSubmitter;
 import com.splicemachine.pipeline.InitializationCompleted;
 import com.splicemachine.si.constants.SIConstants;
@@ -33,40 +35,38 @@ import com.splicemachine.timestamp.hbase.ZkTimestampBlockManager;
 import com.splicemachine.timestamp.impl.TimestampServer;
 import com.splicemachine.timestamp.impl.TimestampServerHandler;
 import com.splicemachine.utils.SpliceLogUtils;
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.PleaseHoldException;
-import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.coprocessor.BaseMasterObserver;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.coprocessor.MasterCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.MasterCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.MasterObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.zookeeper.RecoverableZooKeeper;
-import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
 import org.apache.log4j.Logger;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.ZooDefs;
 
 import javax.management.MBeanServer;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Responsible for actions (create system tables, restore tables) that should only happen on one node.
  */
-public class SpliceMasterObserver extends BaseMasterObserver {
+public class SpliceMasterObserver implements MasterCoprocessor, MasterObserver, Coprocessor, Stoppable {
 
     private static final Logger LOG = Logger.getLogger(SpliceMasterObserver.class);
-
+    @SuppressFBWarnings(value = "MS_MUTABLE_ARRAY", justification = "Intentional")
     public static final byte[] INIT_TABLE = Bytes.toBytes("SPLICE_INIT");
-
     private TimestampServer timestampServer;
+    @SuppressFBWarnings(value = "IS2_INCONSISTENT_SYNC", justification = "Intentional")
     private DatabaseLifecycleManager manager;
     private OlapServer olapServer;
+    private ChoreService choreService;
+    volatile boolean stopped = false;
 
     @Override
     public void start(CoprocessorEnvironment ctx) throws IOException {
@@ -75,15 +75,17 @@ public class SpliceMasterObserver extends BaseMasterObserver {
 
             LOG.info("Starting Timestamp Master Observer");
 
-            ZooKeeperWatcher zkw = ((MasterCoprocessorEnvironment)ctx).getMasterServices().getZooKeeper();
-            RecoverableZooKeeper rzk = zkw.getRecoverableZooKeeper();
-
-            HBaseSIEnvironment env=HBaseSIEnvironment.loadEnvironment(new SystemClock(),rzk);
+            RecoverableZooKeeper rzk = ZkUtils.getRecoverableZooKeeper();
+            HBaseSIEnvironment env=HBaseSIEnvironment.loadEnvironment(new SystemClock(), null);
             SConfiguration configuration=env.configuration();
 
-            String timestampReservedPath=configuration.getSpliceRootPath()+HConfiguration.MAX_RESERVED_TIMESTAMP_PATH;
+            String timestampReservedPath=configuration.getSpliceRootPath()+ HConfiguration.MAX_RESERVED_TIMESTAMP_PATH;
             int timestampPort=configuration.getTimestampServerBindPort();
             int timestampBlockSize = configuration.getTimestampBlockSize();
+
+            if (!ZkUtils.isSpliceLoaded()) {
+                ZkUtils.refreshZookeeper();
+            }
 
             TimestampBlockManager tbm= new ZkTimestampBlockManager(rzk,timestampReservedPath);
             this.timestampServer =new TimestampServer(timestampPort,new TimestampServerHandler(tbm, timestampBlockSize));
@@ -106,7 +108,6 @@ public class SpliceMasterObserver extends BaseMasterObserver {
              * issue during testing
              */
             this.manager = new DatabaseLifecycleManager();
-            super.start(ctx);
         } catch (Throwable t) {
             throw CoprocessorUtils.getIOException(t);
         }
@@ -116,6 +117,8 @@ public class SpliceMasterObserver extends BaseMasterObserver {
     public void stop(CoprocessorEnvironment ctx) throws IOException {
         try {
             LOG.warn("Stopping SpliceMasterObserver");
+            stopped = true;
+            choreService.shutdown();
             manager.shutdown();
             this.timestampServer.stopServer();
         } catch (Throwable t) {
@@ -124,10 +127,13 @@ public class SpliceMasterObserver extends BaseMasterObserver {
     }
 
     @Override
-    public void preCreateTable(ObserverContext<MasterCoprocessorEnvironment> ctx, HTableDescriptor desc, HRegionInfo[] regions) throws IOException {
+    public void preCreateTableAction(ObserverContext<MasterCoprocessorEnvironment> ctx, TableDescriptor desc, RegionInfo[] regions) throws IOException {
+        SpliceLogUtils.info(LOG, "SpliceMasterObserver.preCreateTable()");
+
+        TableName tableName = desc.getTableName();
         try {
-            SpliceLogUtils.info(LOG, "preCreateTable %s", Bytes.toString(desc.getTableName().getName()));
-            if (Bytes.equals(desc.getTableName().getName(), INIT_TABLE)) {
+            SpliceLogUtils.info(LOG, "preCreateTable %s", Bytes.toString(tableName.getName()));
+            if (Bytes.equals(tableName.getName(), INIT_TABLE)) {
                 switch(manager.getState()){
                     case NOT_STARTED:
                         throw new PleaseHoldException("Please Hold - Master not started");
@@ -149,57 +155,96 @@ public class SpliceMasterObserver extends BaseMasterObserver {
     }
 
     @Override
+    @SuppressFBWarnings(value = "RV_RETURN_VALUE_IGNORED_BAD_PRACTICE", justification = "DB-9405")
     public void postStartMaster(ObserverContext<MasterCoprocessorEnvironment> ctx) throws IOException {
         try {
-            boot(ctx.getEnvironment().getMasterServices().getServerName());
+            boot();
+            boolean replicationEnabled = HConfiguration.getConfiguration().replicationEnabled();
+            if (replicationEnabled) {
+                this.choreService = new ChoreService("Splice Master ChoreService");
+                SpliceReplicationSourceChore replicationSnapshotChore =
+                        new SpliceReplicationSourceChore("SpliceReplicationSourceChore", this,
+                                HConfiguration.getConfiguration().getReplicationSnapshotInterval());
+                choreService.scheduleChore(replicationSnapshotChore);
+
+                SpliceReplicationSinkChore replicationProgressTrackerChore =
+                        new SpliceReplicationSinkChore("SpliceReplicationSinkChore", this,
+                                HConfiguration.getConfiguration().getReplicationProgressUpdateInterval());
+                choreService.scheduleChore(replicationProgressTrackerChore);
+                String replicationMonitorQuorum = HConfiguration.getConfiguration().getReplicationMonitorQuorum();
+                if (replicationMonitorQuorum != null) {
+                    ReplicationMonitorChore replicationMonitorChore =
+                            new ReplicationMonitorChore("ReplicationMonitorCore", this,
+                                    HConfiguration.getConfiguration().getReplicationMonitorInterval());
+                    choreService.scheduleChore(replicationMonitorChore);
+                }
+            }
         } catch (Throwable t) {
             throw CoprocessorUtils.getIOException(t);
         }
     }
 
-    private synchronized void boot(ServerName serverName) throws IOException{
+    @Override
+    public Optional<MasterObserver> getMasterObserver() {
+        return Optional.of(this);
+    }
+
+    private synchronized void boot() throws IOException{
         //make sure the SIDriver is booted
         if (! manager.getState().equals(DatabaseLifecycleManager.State.NOT_STARTED))
             return; // Race Condition, only load one...
 
-        if (HConfiguration.getConfiguration().getOlapServerExternal()) {
-            try {
-                manager.registerNetworkService(new DatabaseLifecycleService() {
-                    List<OlapServerSubmitter> serverSubmitters;
+        SConfiguration conf = HConfiguration.getConfiguration();
+        if (conf.getOlapServerExternal()) {
+            OlapServerMaster.Mode mode = OlapServerMaster.Mode.valueOf(conf.getOlapServerMode());
+            if (mode.equals(OlapServerMaster.Mode.KUBERNETES)) {
+                String root = conf.getSpliceRootPath() + HBaseConfiguration.OLAP_SERVER_PATH;
+                try {
+                    ZkUtils.recursiveSafeCreate(root + HBaseConfiguration.OLAP_SERVER_QUEUE_PATH, new byte[]{}, ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+                    ZkUtils.recursiveSafeCreate(root + HBaseConfiguration.OLAP_SERVER_LEADER_ELECTION_PATH, new byte[]{}, ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+                    ZkUtils.recursiveSafeCreate(root + HBaseConfiguration.OLAP_SERVER_DIAGNOSTICS_PATH, new byte[]{}, ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+                } catch (Exception e) {
+                    throw new IOException(e);
+                }
+            } else {
+                try {
+                    manager.registerNetworkService(new DatabaseLifecycleService() {
+                        List<OlapServerSubmitter> serverSubmitters;
 
-                    @Override
-                    public void start() throws Exception {
-                        Collection<String> queues = HConfiguration.getConfiguration().getOlapServerYarnQueues().keySet();
-                        serverSubmitters = new ArrayList<>();
-                        Set<String> names = new HashSet<>(queues);
-                        names.add(SIConstants.OLAP_DEFAULT_QUEUE_NAME);
-                        if (HConfiguration.getConfiguration().getOlapServerIsolatedCompaction()) {
-                            names.add(HConfiguration.getConfiguration().getOlapServerIsolatedCompactionQueueName());
+                        @Override
+                        public void start() throws Exception {
+                            Collection<String> queues = HConfiguration.getConfiguration().getOlapServerYarnQueues().keySet();
+                            serverSubmitters = new ArrayList<>();
+                            Set<String> names = new HashSet<>(queues);
+                            names.add(SIConstants.OLAP_DEFAULT_QUEUE_NAME);
+                            if (HConfiguration.getConfiguration().getOlapServerIsolatedCompaction()) {
+                                names.add(HConfiguration.getConfiguration().getOlapServerIsolatedCompactionQueueName());
+                            }
+
+                            for (String queue : names) {
+                                OlapServerSubmitter oss = new OlapServerSubmitter(queue);
+                                serverSubmitters.add(oss);
+                                Thread thread = new Thread(oss, "OlapServerSubmitter-" + queue);
+                                thread.setDaemon(true);
+                                thread.start();
+                            }
                         }
 
-                        for (String queue : names) {
-                            OlapServerSubmitter oss = new OlapServerSubmitter(serverName, queue);
-                            serverSubmitters.add(oss);
-                            Thread thread = new Thread(oss, "OlapServerSubmitter-"+queue);
-                            thread.setDaemon(true);
-                            thread.start();
+                        @Override
+                        public void registerJMX(MBeanServer mbs) throws Exception {
                         }
-                    }
 
-                    @Override
-                    public void registerJMX(MBeanServer mbs) throws Exception {
-                    }
-
-                    @Override
-                    public void shutdown() throws Exception {
-                        for (OlapServerSubmitter oss : serverSubmitters) {
-                            oss.stop();
+                        @Override
+                        public void shutdown() throws Exception {
+                            for (OlapServerSubmitter oss : serverSubmitters) {
+                                oss.stop();
+                            }
                         }
-                    }
-                });
-            } catch(Exception e){
-                LOG.error("Unexpected exception registering Olap Server service", e);
-                throw new DoNotRetryIOException(e);
+                    });
+                } catch (Exception e) {
+                    LOG.error("Unexpected exception registering Olap Server service", e);
+                    throw new DoNotRetryIOException(e);
+                }
             }
         }
 
@@ -220,8 +265,8 @@ public class SpliceMasterObserver extends BaseMasterObserver {
             //register the engine boot service
             try {
                 MasterLifecycle distributedStartupSequence = new MasterLifecycle();
-                manager.registerEngineService(new EngineLifecycleService(distributedStartupSequence, config, true));
-                manager.start();
+                manager.registerEngineService(new EngineLifecycleService(distributedStartupSequence, config, true, false));
+                manager.start(null);
             } catch (Exception e1) {
                 LOG.error("Unexpected exception registering boot service", e1);
                 throw new DoNotRetryIOException(e1);
@@ -246,4 +291,13 @@ public class SpliceMasterObserver extends BaseMasterObserver {
         }
     }
 
+    @Override
+    public void stop(String why) {
+        stopped = true;
+    }
+
+    @Override
+    public boolean isStopped() {
+        return stopped;
+    }
 }

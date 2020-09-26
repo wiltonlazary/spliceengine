@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -65,9 +65,14 @@ public interface ExecAggregator extends Formatable
         @param  classFactory Database-specific class factory.
         @param  aggregateName   For builtin aggregates, this is a SQL aggregate name like MAX. For user-defined aggregates, this is the name of the user-written class which implements com.splicemachine.db.agg.Aggregator.
         @param  returnDataType  The type returned by the getResult() method.
+	    @param  parameter Optional constant parameter
 
 	 */
 	ExecAggregator setup(ClassFactory classFactory, String aggregateName, DataTypeDescriptor returnDataType);
+
+	default ExecAggregator setup(ClassFactory classFactory, String aggregateName, DataTypeDescriptor returnDataType, DataValueDescriptor param) throws StandardException {
+		return setup(classFactory, aggregateName, returnDataType);
+	};
 
 	/**
 	 * Iteratively accumulates the addend into the aggregator.

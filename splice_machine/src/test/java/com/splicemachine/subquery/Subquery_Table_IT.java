@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,6 +14,7 @@
 
 package com.splicemachine.subquery;
 
+import com.splicemachine.derby.test.framework.SpliceSchemaWatcher;
 import com.splicemachine.derby.test.framework.SpliceUnitTest;
 import com.splicemachine.derby.test.framework.SpliceWatcher;
 import com.splicemachine.derby.test.framework.TestConnection;
@@ -42,6 +43,9 @@ import static org.junit.Assert.assertEquals;
 public class Subquery_Table_IT extends SpliceUnitTest {
 
     private static final String SCHEMA = Subquery_Table_IT.class.getSimpleName();
+
+    @ClassRule
+    public static SpliceSchemaWatcher schemaWatcher = new SpliceSchemaWatcher(SCHEMA);
 
     @ClassRule
     public static SpliceWatcher classWatcher = new SpliceWatcher();
@@ -1226,6 +1230,23 @@ public class Subquery_Table_IT extends SpliceUnitTest {
 
         assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
         rs.close();
+    }
+
+    @Test
+    public void testSubqueryWithoutCorrelationName() throws Exception {
+       String sqlText = "select SUM(SUMMARY) from (\n" +
+               " SELECT COUNT(*) AS SUMMARY FROM t1 WHERE k=0\n" +
+               " UNION ALL\n" +
+               " SELECT COUNT(*) AS SUMMARY FROM t2 WHERE k=0\n" +
+               " UNION ALL\n" +
+               " SELECT COUNT(*) AS SUMMARY FROM t3 WHERE i=0\n" +
+               " )";
+        try (ResultSet rs = methodWatcher.executeQuery(sqlText)) {
+            String expected = "1 |\n" +
+                    "----\n" +
+                    " 3 |";
+            assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+        }
     }
 
     private static void assertUnorderedResult(ResultSet rs, String expectedResult) throws Exception {

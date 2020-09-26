@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -22,6 +22,7 @@ import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.jdbc.AuthenticationService;
 import com.splicemachine.db.iapi.reference.Property;
 import com.splicemachine.db.iapi.reference.SQLState;
+import com.splicemachine.db.iapi.services.context.Context;
 import com.splicemachine.db.iapi.services.context.ContextManager;
 import com.splicemachine.db.iapi.services.context.ContextService;
 import com.splicemachine.db.iapi.services.daemon.Serviceable;
@@ -29,7 +30,7 @@ import com.splicemachine.db.iapi.services.monitor.Monitor;
 import com.splicemachine.db.iapi.services.property.PropertyFactory;
 import com.splicemachine.db.iapi.services.property.PropertySetCallback;
 import com.splicemachine.db.iapi.services.property.PropertyUtil;
-import com.splicemachine.db.iapi.sql.compile.CompilerContext;
+import com.splicemachine.db.iapi.sql.compile.DataSetProcessorType;
 import com.splicemachine.db.iapi.sql.conn.LanguageConnectionContext;
 import com.splicemachine.db.iapi.sql.depend.DependencyManager;
 import com.splicemachine.db.iapi.sql.dictionary.DataDictionary;
@@ -47,7 +48,6 @@ import com.splicemachine.db.shared.common.sanity.SanityManager;
 import com.splicemachine.ddl.DDLMessage;
 import com.splicemachine.ddl.DDLMessage.DDLChange;
 import com.splicemachine.derby.ddl.*;
-import com.splicemachine.derby.impl.sql.execute.operations.batchonce.BatchOnceVisitor;
 import com.splicemachine.derby.impl.store.access.SpliceAccessManager;
 import com.splicemachine.derby.impl.store.access.SpliceTransaction;
 import com.splicemachine.derby.impl.store.access.SpliceTransactionManager;
@@ -116,10 +116,32 @@ public class SpliceDatabase extends BasicDatabase{
         super.boot(create,startParams);
     }
 
+    private void setupASTVisitors(LanguageConnectionContext lctx) {
+
+        String role = SIDriver.driver().lifecycleManager().getReplicationRole();
+        lctx.setReplicationRole(role);
+        // If you add a visitor, be careful of ordering.
+
+        List<Class<? extends ISpliceVisitor>> afterOptVisitors=new ArrayList<>();
+        afterOptVisitors.add(UnsupportedFormsDetector.class);
+        afterOptVisitors.add(AssignRSNVisitor.class);
+        afterOptVisitors.add(FixSubqueryColRefs.class);
+        afterOptVisitors.add(JoinConditionVisitor.class);
+        afterOptVisitors.add(LimitOffsetVisitor.class);
+        afterOptVisitors.add(PlanPrinter.class);
+
+        List<Class<? extends ISpliceVisitor>> afterBindVisitors=new ArrayList<>(1);
+        afterBindVisitors.add(RepeatedPredicateVisitor.class);
+
+        List<Class<? extends ISpliceVisitor>> afterParseClasses=Collections.emptyList();
+        lctx.setASTVisitor(new SpliceASTWalker(afterParseClasses, afterBindVisitors, afterOptVisitors));
+
+    }
+
     @Override
     public LanguageConnectionContext setupConnection(ContextManager cm,String user, List<String> groupuserlist, String drdaID,String dbname,
                                                      String rdbIntTkn,
-                                                     CompilerContext.DataSetProcessorType dspt,
+                                                     DataSetProcessorType dspt,
                                                      boolean skipStats,
                                                      double defaultSelectivityFactor,
                                                      String ipAddress,
@@ -130,25 +152,21 @@ public class SpliceDatabase extends BasicDatabase{
         final LanguageConnectionContext lctx=super.setupConnection(cm, user, groupuserlist,
                 drdaID, dbname, rdbIntTkn, dspt, skipStats, defaultSelectivityFactor, ipAddress, defaultSchema, sessionProperties);
 
-        // If you add a visitor, be careful of ordering.
-
-        List<Class<? extends ISpliceVisitor>> afterOptVisitors=new ArrayList<>();
-        afterOptVisitors.add(UnsupportedFormsDetector.class);
-        afterOptVisitors.add(AssignRSNVisitor.class);
-        afterOptVisitors.add(RowLocationColumnVisitor.class);
-        afterOptVisitors.add(FixSubqueryColRefs.class);
-        afterOptVisitors.add(JoinConditionVisitor.class);
-        afterOptVisitors.add(BatchOnceVisitor.class);
-        afterOptVisitors.add(LimitOffsetVisitor.class);
-        afterOptVisitors.add(PlanPrinter.class);
-
-        List<Class<? extends ISpliceVisitor>> afterBindVisitors=new ArrayList<>(1);
-        afterBindVisitors.add(RepeatedPredicateVisitor.class);
-
-        List<Class<? extends ISpliceVisitor>> afterParseClasses=Collections.emptyList();
-        lctx.setASTVisitor(new SpliceASTWalker(afterParseClasses, afterBindVisitors, afterOptVisitors));
-
+        setupASTVisitors(lctx);
         return lctx;
+    }
+
+    public LanguageConnectionContext generateLanguageConnectionContext(TxnView txn,ContextManager cm,String user, List<String> groupuserlist, String drdaID,String dbname,
+                                                                       String rdbIntTkn,
+                                                                       DataSetProcessorType type,
+                                                                       boolean skipStats,
+                                                                       double defaultSelectivityFactor,
+                                                                       String ipAddress) throws StandardException {
+        return
+            generateLanguageConnectionContext(txn, cm, user, groupuserlist, drdaID, dbname,
+                                              rdbIntTkn, type, skipStats, defaultSelectivityFactor,
+                                              ipAddress, null);
+
     }
 
     /**
@@ -158,11 +176,12 @@ public class SpliceDatabase extends BasicDatabase{
      */
     public LanguageConnectionContext generateLanguageConnectionContext(TxnView txn,ContextManager cm,String user, List<String> groupuserlist, String drdaID,String dbname,
                                                                        String rdbIntTkn,
-                                                                       CompilerContext.DataSetProcessorType type,
+                                                                       DataSetProcessorType type,
                                                                        boolean skipStats,
                                                                        double defaultSelectivityFactor,
-                                                                       String ipAddress) throws StandardException{
-        TransactionController tc=((SpliceAccessManager)af).marshallTransaction(cm,txn);
+                                                                       String ipAddress,
+                                                                       TransactionController reuseTC) throws StandardException{
+        TransactionController tc = reuseTC == null ? ((SpliceAccessManager)af).marshallTransaction(cm,txn) : reuseTC;
         cm.setLocaleFinder(this);
         pushDbContext(cm);
         LanguageConnectionContext lctx=lcf.newLanguageConnectionContext(cm,tc,lf,this,user,
@@ -173,6 +192,7 @@ public class SpliceDatabase extends BasicDatabase{
         ExecutionFactory ef=lcf.getExecutionFactory();
         ef.newExecutionContext(cm);
         lctx.initialize();
+        setupASTVisitors(lctx);
         return lctx;
     }
 
@@ -383,10 +403,19 @@ public class SpliceDatabase extends BasicDatabase{
                         break;
                     case ENTER_RESTORE_MODE:
                         SIDriver.driver().lifecycleManager().enterRestoreMode();
-                        Collection<LanguageConnectionContext> allContexts=ContextService.getFactory().getAllContexts(LanguageConnectionContext.CONTEXT_ID);
-                        for(LanguageConnectionContext context : allContexts){
-                            context.enterRestoreMode();
+                        Collection<Context> allContexts = ContextService.getService().getAllContexts(LanguageConnectionContext.CONTEXT_ID);
+                        for (Context context : allContexts) {
+                            ((LanguageConnectionContext) context).enterRestoreMode();
                         }
+                        break;
+                    case SET_REPLICATION_ROLE:
+                        String role = change.getSetReplicationRole().getRole();
+                        SIDriver.driver().lifecycleManager().setReplicationRole(role);
+                        allContexts=ContextService.getFactory().getAllContexts(LanguageConnectionContext.CONTEXT_ID);
+                        for(Context context : allContexts){
+                            ((LanguageConnectionContext) context).setReplicationRole(role);
+                        }
+                        SpliceLogUtils.info(LOG,"set replication role to %s", role);
                         break;
                     case NOTIFY_JAR_LOADER:
                         DDLUtils.preNotifyJarLoader(change,dataDictionary,dependencyManager);
@@ -405,6 +434,12 @@ public class SpliceDatabase extends BasicDatabase{
                         break;
                     case UPDATE_SYSTEM_PROCEDURES:
                         DDLUtils.preUpdateSystemProcedures(change, dataDictionary);
+                        break;
+                    case CREATE_ALIAS:
+                    case CREATE_VIEW:
+                        break;
+                    default:
+                        break;
                 }
                 final List<DDLAction> ddlActions = new ArrayList<>();
                 ddlActions.add(new AddIndexToPipeline());

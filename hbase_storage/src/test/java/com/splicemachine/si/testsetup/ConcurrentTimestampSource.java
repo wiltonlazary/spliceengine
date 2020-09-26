@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -29,6 +29,11 @@ public class ConcurrentTimestampSource implements TimestampSource{
 
 
      @Override
+     public long currentTimestamp() {
+          return id.get();
+     }
+
+     @Override
      public long nextTimestamp() {
           return id.addAndGet(SIConstants.TRASANCTION_INCREMENT);
      }
@@ -49,7 +54,7 @@ public class ConcurrentTimestampSource implements TimestampSource{
      }
 
      @Override
-     public void refresh() {
+     public void bumpTimestamp(long timestamp) {
 
      }
 }

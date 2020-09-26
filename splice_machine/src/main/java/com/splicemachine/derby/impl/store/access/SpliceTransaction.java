@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -34,26 +34,31 @@ public class SpliceTransaction extends BaseSpliceTransaction<TransactionImpl> {
                              SpliceTransactionFactory spliceTransactionFactory,
                              DataValueFactory dataValueFactory,
                              String transName){
-        SpliceLogUtils.trace(LOG,"Instantiating Splice transaction");
-        this.compatibilitySpace=compatibilitySpace;
-        this.spliceTransactionFactory=spliceTransactionFactory;
-        this.dataValueFactory=dataValueFactory;
-        boolean ignoreSavepoints = SIDriver.driver().getConfiguration().ignoreSavePoints();
-        TxnLifecycleManager lifecycleManager = SIDriver.driver().lifecycleManager();
-        this.transaction = new TransactionImpl(transName, ignoreSavepoints, lifecycleManager);
+        this(compatibilitySpace, spliceTransactionFactory, dataValueFactory,
+                new TransactionImpl(transName,
+                        SIDriver.driver().getConfiguration().ignoreSavePoints(),
+                        SIDriver.driver().lifecycleManager()));
     }
 
     public SpliceTransaction(CompatibilitySpace compatibilitySpace,
                              SpliceTransactionFactory spliceTransactionFactory,
                              DataValueFactory dataValueFactory,
                              String transName,Txn txn){
+        this(compatibilitySpace, spliceTransactionFactory, dataValueFactory,
+                new TransactionImpl(transName, txn,
+                        SIDriver.driver().getConfiguration().ignoreSavePoints(),
+                        SIDriver.driver().lifecycleManager()));
+    }
+
+    protected SpliceTransaction(CompatibilitySpace compatibilitySpace,
+                             SpliceTransactionFactory spliceTransactionFactory,
+                             DataValueFactory dataValueFactory,
+                             TransactionImpl txn){
         SpliceLogUtils.trace(LOG,"Instantiating Splice transaction");
         this.compatibilitySpace=compatibilitySpace;
         this.spliceTransactionFactory=spliceTransactionFactory;
         this.dataValueFactory=dataValueFactory;
-        boolean ignoreSavepoints = SIDriver.driver().getConfiguration().ignoreSavePoints();
-        TxnLifecycleManager lifecycleManager = SIDriver.driver().lifecycleManager();
-        this.transaction = new TransactionImpl(transName, txn, ignoreSavepoints, lifecycleManager);
+        this.transaction = txn;
     }
 
     @Override

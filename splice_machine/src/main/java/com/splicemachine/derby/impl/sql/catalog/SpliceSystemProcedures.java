@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -1177,14 +1177,24 @@ public class SpliceSystemProcedures extends DefaultSystemProcedureGenerator {
                             .build());
 
                     Procedure purgeDeletedRows = Procedure.newBuilder().name("SET_PURGE_DELETED_ROWS")
-                            .varchar("schemaName", 128)
-                            .varchar("tableName", 128)
+                            .catalog("schemaName")
+                            .catalog("tableName")
                             .varchar("enable", 5)
                             .numOutputParams(0)
                             .numResultSets(0)
                             .ownerClass(SpliceAdmin.class.getCanonicalName())
                             .build();
                     procedures.add(purgeDeletedRows);
+
+                    Procedure minRetentionPeriod = Procedure.newBuilder().name("SET_MIN_RETENTION_PERIOD")
+                            .varchar("schemaName", 128)
+                            .varchar("tableName", 128)
+                            .bigint("minRetentionPeriod")
+                            .numOutputParams(0)
+                            .numResultSets(0)
+                            .ownerClass(SpliceAdmin.class.getCanonicalName())
+                            .build();
+                    procedures.add(minRetentionPeriod);
 
                     Procedure snapshotSchema = Procedure.newBuilder().name("SNAPSHOT_SCHEMA")
                             .varchar("schemaName", 128)
@@ -1337,6 +1347,17 @@ public class SpliceSystemProcedures extends DefaultSystemProcedureGenerator {
                             .build();
                     procedures.add(checkTable);
 
+                    Procedure fixTable = Procedure.newBuilder().name("FIX_TABLE")
+                            .catalog("schemaName")
+                            .catalog("tableName")
+                            .catalog("indexName")
+                            .varchar("outputFile", 32672)
+                            .numOutputParams(0)
+                            .numResultSets(1)
+                            .ownerClass(SpliceTableAdmin.class.getCanonicalName())
+                            .build();
+                    procedures.add(fixTable);
+
                     Procedure showCreateTable = Procedure.newBuilder().name("SHOW_CREATE_TABLE")
                             .numOutputParams(0)
                             .numResultSets(1)
@@ -1351,6 +1372,7 @@ public class SpliceSystemProcedures extends DefaultSystemProcedureGenerator {
                             .numResultSets(1)
                             .smallint("peerId")
                             .varchar("clusterKey", 32672)
+                            .arg("enabled", DataTypeDescriptor.getBuiltInDataTypeDescriptor(Types.BOOLEAN).getCatalogType())
                             .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
                             .build();
                     procedures.add(addPeer);
@@ -1379,34 +1401,6 @@ public class SpliceSystemProcedures extends DefaultSystemProcedureGenerator {
                             .build();
                     procedures.add(disablePeer);
 
-                    Procedure setupReplicationSink = Procedure.newBuilder().name("SETUP_REPLICATION_SINK")
-                            .numOutputParams(0)
-                            .numResultSets(1)
-                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
-                            .build();
-                    procedures.add(setupReplicationSink);
-
-                    Procedure setupReplicationSinkLocal = Procedure.newBuilder().name("SETUP_REPLICATION_SINK_LOCAL")
-                            .numOutputParams(0)
-                            .numResultSets(1)
-                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
-                            .build();
-                    procedures.add(setupReplicationSinkLocal);
-
-                    Procedure shutdownReplicationSink = Procedure.newBuilder().name("SHUTDOWN_REPLICATION_SINK")
-                            .numOutputParams(0)
-                            .numResultSets(1)
-                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
-                            .build();
-                    procedures.add(shutdownReplicationSink);
-
-                    Procedure shutdownReplicationSinkLocal = Procedure.newBuilder().name("SHUTDOWN_REPLICATION_SINK_LOCAL")
-                            .numOutputParams(0)
-                            .numResultSets(1)
-                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
-                            .build();
-                    procedures.add(shutdownReplicationSinkLocal);
-
                     Procedure enableTableReplication = Procedure.newBuilder().name("ENABLE_TABLE_REPLICATION")
                             .numOutputParams(0)
                             .numResultSets(1)
@@ -1425,6 +1419,21 @@ public class SpliceSystemProcedures extends DefaultSystemProcedureGenerator {
                             .build();
                     procedures.add(disableTableReplication);
 
+                    Procedure setReplicationRole = Procedure.newBuilder().name("SET_REPLICATION_ROLE")
+                            .numOutputParams(0)
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .varchar("role", 10)
+                            .build();
+                    procedures.add(setReplicationRole);
+
+                    Procedure getReplicationRole = Procedure.newBuilder().name("GET_REPLICATION_ROLE")
+                            .numOutputParams(0)
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .build();
+                    procedures.add(getReplicationRole);
+
                     Procedure updateAllSystemProcedures = Procedure.newBuilder()
                             .name("SYSCS_UPDATE_ALL_SYSTEM_PROCEDURES")
                             .numOutputParams(0).numResultSets(0).modifiesSql()
@@ -1441,6 +1450,90 @@ public class SpliceSystemProcedures extends DefaultSystemProcedureGenerator {
                             .catalog("procName")
                             .build();
                     procedures.add(updateSystemProcedure);
+
+                    Procedure enableSchemaReplication = Procedure.newBuilder().name("ENABLE_SCHEMA_REPLICATION")
+                            .numOutputParams(0)
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .catalog("schemaName")
+                            .build();
+                    procedures.add(enableSchemaReplication);
+
+
+                    Procedure disableSchemaReplication = Procedure.newBuilder().name("DISABLE_SCHEMA_REPLICATION")
+                            .numOutputParams(0)
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .catalog("schemaName")
+                            .build();
+                    procedures.add(disableSchemaReplication);
+
+                    Procedure enableDatabaseReplication = Procedure.newBuilder().name("ENABLE_DATABASE_REPLICATION")
+                            .numOutputParams(0)
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .build();
+                    procedures.add(enableDatabaseReplication);
+
+                    Procedure disableDatabaseReplication = Procedure.newBuilder().name("DISABLE_DATABASE_REPLICATION")
+                            .numOutputParams(0)
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .build();
+                    procedures.add(disableDatabaseReplication);
+
+                    Procedure getClusterKey = Procedure.newBuilder().name("GET_CLUSTER_KEY")
+                            .numOutputParams(0)
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .build();
+                    procedures.add(getClusterKey);
+
+                    Procedure getPeers = Procedure.newBuilder().name("LIST_PEERS")
+                            .numOutputParams(0)
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .build();
+                    procedures.add(getPeers);
+
+                    Procedure getWalPositions = Procedure.newBuilder().name("GET_REPLICATED_WAL_POSITIONS")
+                            .numOutputParams(0)
+                            .smallint("peerId")
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .build();
+                    procedures.add(getWalPositions);
+
+                    Procedure getWalPosition = Procedure.newBuilder().name("GET_REPLICATED_WAL_POSITION")
+                            .numOutputParams(0)
+                            .varchar("wal",32672)
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .build();
+                    procedures.add(getWalPosition);
+
+                    Procedure getReplicationProgress = Procedure.newBuilder().name("GET_REPLICATION_PROGRESS")
+                            .numOutputParams(0)
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .build();
+                    procedures.add(getReplicationProgress);
+
+                    Procedure dumpUnreplicatedWals = Procedure.newBuilder().name("DUMP_UNREPLICATED_WALS")
+                            .numOutputParams(0)
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .build();
+                    procedures.add(dumpUnreplicatedWals);
+
+                    Procedure replicationEnabled = Procedure.newBuilder().name("REPLICATION_ENABLED")
+                            .numOutputParams(0)
+                            .catalog("schemaName")
+                            .catalog("tableName")
+                            .numResultSets(1)
+                            .ownerClass(ReplicationSystemProcedure.class.getCanonicalName())
+                            .build();
+                    procedures.add(replicationEnabled);
                 }  // End key == sysUUID
 
             } // End iteration through map keys (schema UUIDs)
@@ -1529,6 +1622,15 @@ public class SpliceSystemProcedures extends DefaultSystemProcedureGenerator {
                     //
                     // Date functions
                     //
+                    Procedure.newBuilder().name("ADD_YEARS")
+                            .numOutputParams(0)
+                            .numResultSets(0)
+                            .sqlControl(RoutineAliasInfo.NO_SQL)
+                            .returnType(DataTypeDescriptor.getCatalogType(Types.DATE))
+                            .isDeterministic(true).ownerClass(SpliceDateFunctions.class.getCanonicalName())
+                            .arg("SOURCE", DataTypeDescriptor.getCatalogType(Types.DATE))
+                            .integer("NUMOFYEARS")
+                            .build(),
                     Procedure.newBuilder().name("ADD_MONTHS")
                             .numOutputParams(0)
                             .numResultSets(0)
@@ -1537,6 +1639,15 @@ public class SpliceSystemProcedures extends DefaultSystemProcedureGenerator {
                             .isDeterministic(true).ownerClass(SpliceDateFunctions.class.getCanonicalName())
                             .arg("SOURCE", DataTypeDescriptor.getCatalogType(Types.DATE))
                             .integer("NUMOFMONTHS")
+                            .build(),
+                    Procedure.newBuilder().name("ADD_DAYS")
+                            .numOutputParams(0)
+                            .numResultSets(0)
+                            .sqlControl(RoutineAliasInfo.NO_SQL)
+                            .returnType(DataTypeDescriptor.getCatalogType(Types.DATE))
+                            .isDeterministic(true).ownerClass(SpliceDateFunctions.class.getCanonicalName())
+                            .arg("SOURCE", DataTypeDescriptor.getCatalogType(Types.DATE))
+                            .integer("NUMOFDAYS")
                             .build(),
                     Procedure.newBuilder().name("LAST_DAY")
                             .numOutputParams(0)

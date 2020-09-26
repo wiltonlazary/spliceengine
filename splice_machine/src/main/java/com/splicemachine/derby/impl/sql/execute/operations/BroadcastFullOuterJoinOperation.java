@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -57,6 +57,7 @@ public class BroadcastFullOuterJoinOperation extends BroadcastJoinOperation {
             int rightNumCols,
             int leftHashKeyItem,
             int rightHashKeyItem,
+            boolean noCacheBroadcastJoinRight,
             Activation activation,
             GeneratedMethod restriction,
             int resultSetNumber,
@@ -64,14 +65,14 @@ public class BroadcastFullOuterJoinOperation extends BroadcastJoinOperation {
             GeneratedMethod rightEmptyRowFun,
             boolean wasRightOuterJoin,
             boolean oneRowRightSide,
-            boolean notExistsRightSide,
+            byte semiJoinType,
             boolean rightFromSSQ,
             double optimizerEstimatedRowCount,
             double optimizerEstimatedCost,
             String userSuppliedOptimizerOverrides,
             String sparkExpressionTreeAsString) throws StandardException {
-        super(leftResultSet, leftNumCols, rightResultSet, rightNumCols, leftHashKeyItem, rightHashKeyItem,
-                activation, restriction, resultSetNumber, oneRowRightSide, notExistsRightSide, rightFromSSQ,
+        super(leftResultSet, leftNumCols, rightResultSet, rightNumCols, leftHashKeyItem, rightHashKeyItem,  noCacheBroadcastJoinRight,
+                activation, restriction, resultSetNumber, oneRowRightSide, semiJoinType, rightFromSSQ,
                 optimizerEstimatedRowCount, optimizerEstimatedCost,userSuppliedOptimizerOverrides,
                 sparkExpressionTreeAsString);
         SpliceLogUtils.trace(LOG, "instantiate");
@@ -132,20 +133,28 @@ public class BroadcastFullOuterJoinOperation extends BroadcastJoinOperation {
 
         if (LOG.isDebugEnabled())
             SpliceLogUtils.debug(LOG, "getDataSet Performing BroadcastJoin type=%s, antiJoin=%s, hasRestriction=%s",
-                    getJoinTypeString(), notExistsRightSide, restriction != null);
+                    getJoinTypeString(), isAntiJoin(), restriction != null);
 
         DataSet<ExecRow> result;
         boolean usesNativeSparkDataSet =
                 (dsp.getType().equals(DataSetProcessor.Type.SPARK) &&
                         (restriction == null || hasSparkJoinPredicate()) &&
                         !containsUnsafeSQLRealComparison());
+
+        dsp.incrementOpDepth();
+        if (usesNativeSparkDataSet)
+            dsp.finalizeTempOperationStrings();
+
+        DataSet<ExecRow> leftDataSet;
+        DataSet<ExecRow> rightDataSet;
         if (usesNativeSparkDataSet)
         {
             opContextForLeftJoin = null;
             opContextForAntiJoin = null;
-            DataSet<ExecRow> leftDataSet = leftResultSet.getDataSet(dsp);
+            leftDataSet = leftResultSet.getDataSet(dsp);
             leftDataSet = leftDataSet.map(new CountJoinedLeftFunction(operationContext));
-            DataSet<ExecRow> rightDataSet = rightResultSet.getDataSet(dsp);
+            dsp.finalizeTempOperationStrings();
+            rightDataSet = rightResultSet.getDataSet(dsp);
             result = leftDataSet.join(operationContext,rightDataSet, DataSet.JoinType.FULLOUTER,true);
         }
         else {
@@ -156,16 +165,17 @@ public class BroadcastFullOuterJoinOperation extends BroadcastJoinOperation {
 
                 // compute left join
                 BroadcastJoinOperation opCloneForLeftJoin = (BroadcastJoinOperation) opContextForLeftJoin.getOperation();
-                DataSet<ExecRow> leftDataSet = opCloneForLeftJoin.getLeftOperation().getDataSet(dsp).map(new CountJoinedLeftFunction(opContextForLeftJoin));
-                result = leftDataSet.mapPartitions(new CogroupBroadcastJoinFunction(opContextForLeftJoin))
+                leftDataSet = opCloneForLeftJoin.getLeftOperation().getDataSet(dsp).map(new CountJoinedLeftFunction(opContextForLeftJoin));
+                dsp.finalizeTempOperationStrings();
+                result = leftDataSet.mapPartitions(new CogroupBroadcastJoinFunction(opContextForLeftJoin,noCacheBroadcastJoinRight))
                         .flatMap(new LeftOuterJoinRestrictionFlatMapFunction(opContextForLeftJoin));
 
                 // do right anti join left to get the non-matching rows
                 BroadcastJoinOperation opCloneForAntiJoin = (BroadcastJoinOperation) opContextForAntiJoin.getOperation();
 
-                DataSet<ExecRow> nonMatchingRightSet = opCloneForAntiJoin.getRightResultSet().getDataSet(dsp).mapPartitions(new CogroupBroadcastJoinFunction(opContextForAntiJoin, true))
+                DataSet<ExecRow> nonMatchingRightSet = opCloneForAntiJoin.getRightResultSet().getDataSet(dsp).mapPartitions(new CogroupBroadcastJoinFunction(opContextForAntiJoin, true, noCacheBroadcastJoinRight))
                         .flatMap(new LeftAntiJoinRestrictionFlatMapFunction(opContextForAntiJoin, true));
-
+                rightDataSet = nonMatchingRightSet;
                 result = result.union(nonMatchingRightSet, operationContext)
                         .map(new SetCurrentLocatedRowFunction(operationContext));
             } catch (Exception e) {
@@ -174,7 +184,8 @@ public class BroadcastFullOuterJoinOperation extends BroadcastJoinOperation {
         }
 
         result = result.map(new CountProducedFunction(operationContext), /*isLast=*/false);
-
+        dsp.decrementOpDepth();
+        handleSparkExplain(result, leftDataSet, rightDataSet, dsp);
 
         return result;
     }

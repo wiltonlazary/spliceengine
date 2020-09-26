@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -15,12 +15,10 @@
 
 package com.splicemachine.si.api.txn;
 
-import io.netty.util.internal.ConcurrentSet;
 import org.apache.log4j.Logger;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class ActiveTxnTracker {
     private static final Logger LOG = Logger.getLogger(ActiveTxnTracker.class);

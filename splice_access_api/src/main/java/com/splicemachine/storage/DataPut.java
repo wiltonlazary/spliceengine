@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -23,6 +23,10 @@ public interface DataPut extends DataMutation{
     void tombstone(long txnIdLong);
 
     void antiTombstone(long txnIdLong);
+
+    void addFirstWriteToken(byte[] family, long txnIdLong);
+
+    void addDeleteRightAfterFirstWriteToken(byte[] family, long txnIdLong);
 
     void addCell(byte[] family, byte[] qualifier, long timestamp, byte[] value);
 

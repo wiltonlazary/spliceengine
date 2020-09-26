@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,23 +14,9 @@
 
 package com.splicemachine.si.data.hbase.coprocessor;
 
-import java.io.IOException;
-
-import org.spark_project.guava.primitives.Longs;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.apache.hadoop.hbase.Coprocessor;
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.ipc.RpcServer;
-import org.apache.hadoop.hbase.ipc.RpcUtils;
-import org.apache.hadoop.hbase.protobuf.ResponseConverter;
-import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.log4j.Logger;
-
 import com.splicemachine.access.api.SConfiguration;
 import com.splicemachine.concurrent.CountedReference;
 import com.splicemachine.concurrent.SystemClock;
@@ -45,17 +31,32 @@ import com.splicemachine.si.impl.region.RegionServerControl;
 import com.splicemachine.si.impl.region.RegionTxnStore;
 import com.splicemachine.si.impl.region.TransactionResolver;
 import com.splicemachine.timestamp.api.TimestampSource;
+import com.splicemachine.utils.Pair;
 import com.splicemachine.utils.Source;
 import com.splicemachine.utils.SpliceLogUtils;
-import org.spark_project.guava.base.Supplier;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.ipc.RpcUtils;
+import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.RegionServerServices;
+import org.apache.hadoop.util.StringUtils;
+import org.apache.log4j.Logger;
+import splice.com.google.common.base.Supplier;
+import splice.com.google.common.collect.Lists;
+import splice.com.google.common.primitives.Longs;
+
+import java.io.IOException;
+import java.util.List;
 
 /**
  * @author Scott Fines
  *         Date: 6/19/14
  */
-public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService implements CoprocessorService, Coprocessor{
+public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService implements RegionCoprocessor {
     private static final Logger LOG=Logger.getLogger(TxnLifecycleEndpoint.class);
-
     private TxnLifecycleStore lifecycleStore;
     private volatile boolean isTxnTable=false;
 
@@ -64,7 +65,7 @@ public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService impleme
         public TransactionResolver get(){
             return new TransactionResolver(SIDriver.driver().getTxnSupplier(),2,128);
         }
-    },new CountedReference.ShutdownAction<TransactionResolver>(){
+    }, new CountedReference.ShutdownAction<TransactionResolver>(){
         @Override
         public void shutdown(TransactionResolver instance){
             instance.shutdown();
@@ -76,9 +77,9 @@ public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService impleme
         try {
             RegionCoprocessorEnvironment rce=(RegionCoprocessorEnvironment)env;
             HRegion region=(HRegion)rce.getRegion();
-            HBaseSIEnvironment siEnv = HBaseSIEnvironment.loadEnvironment(new SystemClock(),ZkUtils.getRecoverableZooKeeper());
+            HBaseSIEnvironment siEnv = HBaseSIEnvironment.loadEnvironment(new SystemClock(), ZkUtils.getRecoverableZooKeeper());
             SConfiguration configuration=siEnv.configuration();
-            TableType table=EnvUtils.getTableType(configuration,rce);
+            TableType table= EnvUtils.getTableType(configuration,rce);
             if(table.equals(TableType.TRANSACTION_TABLE)){
                 TransactionResolver resolver=resolverRef.get();
                 SIDriver driver=siEnv.getSIDriver();
@@ -92,7 +93,7 @@ public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService impleme
                 TimestampSource timestampSource=driver.getTimestampSource();
                 int txnLockStrips = configuration.getTransactionLockStripes();
                 lifecycleStore = new StripedTxnLifecycleStore(txnLockStrips,regionStore,
-                        new RegionServerControl(region,rce.getRegionServerServices()),timestampSource);
+                        new RegionServerControl(region, (RegionServerServices)rce.getOnlineRegions()),timestampSource);
                 isTxnTable=true;
             }
         } catch (Throwable t) {
@@ -112,19 +113,21 @@ public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService impleme
         }
     }
 
+
     @Override
-    public Service getService(){
-        SpliceLogUtils.trace(LOG,"Getting the TxnLifecycle Service");
-        return this;
+    public Iterable<Service> getServices() {
+        List<Service> services = Lists.newArrayList();
+        services.add(this);
+        return services;
     }
 
     @Override
-    public void beginTransaction(RpcController controller,TxnMessage.TxnInfo request,RpcCallback<TxnMessage.VoidResponse> done){
+    public void beginTransaction(RpcController controller, TxnMessage.TxnInfo request, RpcCallback<TxnMessage.VoidResponse> done){
         try (RpcUtils.RootEnv env = RpcUtils.getRootEnv()) {
             lifecycleStore.beginTransaction(request);
             done.run(TxnMessage.VoidResponse.getDefaultInstance());
         }catch(IOException ioe){
-            ResponseConverter.setControllerException(controller,ioe);
+            setControllerException(controller,ioe);
         }
     }
 
@@ -138,7 +141,7 @@ public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService impleme
             lifecycleStore.elevateTransaction(request.getTxnId(),request.getNewDestinationTable().toByteArray());
             done.run(TxnMessage.VoidResponse.getDefaultInstance());
         }catch(IOException ioe){
-            ResponseConverter.setControllerException(controller,ioe);
+            setControllerException(controller,ioe);
         }
     }
 
@@ -173,7 +176,7 @@ public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService impleme
             }
             done.run(response);
         }catch(IOException ioe){
-            ResponseConverter.setControllerException(controller,ioe);
+            setControllerException(controller,ioe);
         }
     }
 
@@ -190,7 +193,7 @@ public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService impleme
             }
             done.run(transaction);
         }catch(IOException ioe){
-            ResponseConverter.setControllerException(controller,ioe);
+            setControllerException(controller,ioe);
         }
     }
 
@@ -201,7 +204,7 @@ public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService impleme
             TxnMessage.TaskId taskId = lifecycleStore.getTaskId(txnId);
             done.run(taskId);
         }catch(IOException ioe){
-            ResponseConverter.setControllerException(controller,ioe);
+            setControllerException(controller,ioe);
         }
     }
 
@@ -221,7 +224,17 @@ public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService impleme
             }
             done.run(response.build());
         }catch(IOException e){
-            ResponseConverter.setControllerException(controller,e);
+            setControllerException(controller,e);
+        }
+    }
+
+    public static void setControllerException(RpcController controller, IOException ioe) {
+        if (controller != null) {
+            if (controller instanceof ServerRpcController) {
+                ((ServerRpcController)controller).setFailedOn(ioe);
+            } else {
+                controller.setFailed(StringUtils.stringifyException(ioe));
+            }
         }
     }
 
@@ -242,7 +255,7 @@ public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService impleme
             }
             done.run(response.build());
         }catch(IOException e){
-            ResponseConverter.setControllerException(controller,e);
+            setControllerException(controller,e);
         }
 
     }
@@ -277,7 +290,23 @@ public class TxnLifecycleEndpoint extends TxnMessage.TxnLifecycleService impleme
             lifecycleStore.rollbackTransactionsAfter(request.getTxnId());
             done.run(TxnMessage.VoidResponse.getDefaultInstance());
         }catch(IOException ioe){
-            ResponseConverter.setControllerException(controller,ioe);
+            setControllerException(controller,ioe);
+        }
+    }
+
+    @Override
+    public void getTxnAt(
+            com.google.protobuf.RpcController controller,
+            com.splicemachine.si.coprocessor.TxnMessage.TxnAtRequest request,
+            com.google.protobuf.RpcCallback<com.splicemachine.si.coprocessor.TxnMessage.TxnAtResponse> done){
+        try (RpcUtils.RootEnv ignored = RpcUtils.getRootEnv()) {
+            TxnMessage.TxnAtResponse.Builder response = TxnMessage.TxnAtResponse.newBuilder();
+            Pair<Long, Long> result = lifecycleStore.getTxnAt(request.getTs());
+            response.setTxnId(result.getFirst());
+            response.setTs(result.getSecond());
+            done.run(response.build());
+        }catch(IOException ioe){
+            setControllerException(controller,ioe);
         }
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -16,9 +16,10 @@ package com.splicemachine.derby.test.framework;
 
 import com.splicemachine.homeless.TestUtils;
 import com.splicemachine.utils.Pair;
+import org.apache.commons.io.FileUtils;
 import org.junit.Assert;
 import org.junit.runner.Description;
-import org.spark_project.guava.base.Joiner;
+import splice.com.google.common.base.Joiner;
 
 import java.io.*;
 import java.net.URL;
@@ -39,6 +40,9 @@ public class SpliceUnitTest {
     private static Pattern overallCostP = Pattern.compile("totalCost=[0-9]+\\.?[0-9]*");
     private static Pattern outputRowsP = Pattern.compile("outputRows=[0-9]+\\.?[0-9]*");
     private static Pattern scannedRowsP = Pattern.compile("scannedRows=[0-9]+\\.?[0-9]*");
+
+    /// set the following boolean to true to prevent deletion of temporary files (e.g. for debugging)
+    static private final boolean debug_no_delete = false;
 
 	public String getSchemaName() {
 		Class<?> enclosingClass = getClass().getEnclosingClass();
@@ -173,7 +177,7 @@ public class SpliceUnitTest {
     }
     
     public static String getHiveWarehouseDirectory() {
-		return getBaseDirectory()+"/user/hive/warehouse";
+		return getHBaseDirectory()+"/user/hive/warehouse";
 	}
 
     public static class MyWatcher extends SpliceTableWatcher {
@@ -217,11 +221,38 @@ public class SpliceUnitTest {
                     }
                 }
             }
+            for (int level : levels){
+                if (level > i) {
+                    Assert.fail("Try to compare at level " + level + " but result set has only " + i + " levels.");
+                }
+            }
         }
     }
 
     public static void rowContainsQuery(int[] levels, String query,SpliceWatcher methodWatcher,String[]... contains) throws Exception {
         try(ResultSet resultSet = methodWatcher.executeQuery(query)){
+            int i=0;
+            int k=0;
+            while(resultSet.next()){
+                i++;
+                for(int level : levels){
+                    if(level==i){
+                        String resultString = resultSet.getString(1);
+                        for (String phrase: contains[k]) {
+                            Assert.assertTrue("failed query at level (" + level + "): \n" + query + "\nExpected: " + phrase + "\nWas: "
+                                    + resultString, resultString.contains(phrase));
+                        }
+                        k++;
+                    }
+                }
+            }
+            if (k < contains.length)
+                fail("fail to match the given strings");
+        }
+    }
+
+    public static void rowContainsQuery(int[] levels, String query, TestConnection conn, String[]... contains) throws Exception {
+        try(ResultSet resultSet = conn.query(query)){
             int i=0;
             int k=0;
             while(resultSet.next()){
@@ -290,9 +321,28 @@ public class SpliceUnitTest {
 
 
     protected void queryDoesNotContainString(String query, String notContains,SpliceWatcher methodWatcher) throws Exception {
-        ResultSet resultSet = methodWatcher.executeQuery(query);
-        while (resultSet.next())
-            Assert.assertFalse("failed query: " + query + " -> " + resultSet.getString(1), resultSet.getString(1).contains(notContains));
+        queryDoesNotContainString(query,new String[] {notContains}, methodWatcher, false);
+    }
+
+    protected void queryDoesNotContainString(String query, String[] notContains,SpliceWatcher methodWatcher, boolean caseInsensitive) throws Exception {
+        ResultSet rs = null;
+        try {
+            rs = methodWatcher.executeQuery(query);
+            String matchString = TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs);
+            if (caseInsensitive)
+                matchString = matchString.toUpperCase();
+
+            for (String str: notContains) {
+                if (caseInsensitive)
+                    str = str.toUpperCase();
+                if (matchString.contains(str))
+                    fail("ResultSet should not contain string: " + str);
+            }
+        }
+        finally {
+            if (rs != null)
+                rs.close();
+        }
     }
 
     public static void rowsContainsQuery(String query, Contains mustContain, SpliceWatcher methodWatcher) throws Exception {
@@ -353,6 +403,71 @@ public class SpliceUnitTest {
         try {
             rs = s.executeQuery(sqlText);
             if (!TestUtils.FormattedResult.ResultFactory.toString(rs).contains(containedString))
+                fail("ResultSet does not contain string: " + containedString);
+        }
+        finally {
+            if (rs != null)
+                rs.close();
+        }
+    }
+
+    protected void testQueryContains(String sqlText, String containedString,
+                                     SpliceWatcher methodWatcher,
+                                     boolean caseInsensitive) throws Exception {
+        ResultSet rs = null;
+        try {
+            rs = methodWatcher.executeQuery(sqlText);
+            String matchString = TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs);
+            if (caseInsensitive) {
+                matchString = matchString.toUpperCase();
+                containedString = containedString.toUpperCase();
+            }
+            if (!matchString.contains(containedString))
+                fail("ResultSet does not contain string: " + containedString + "\nResult set:\n"+matchString);
+        }
+        finally {
+            if (rs != null)
+                rs.close();
+        }
+    }
+
+    protected void testQueryContains(String sqlText, List<String> containedStrings,
+                                     SpliceWatcher methodWatcher,
+                                     boolean caseInsensitive) throws Exception {
+        ResultSet rs = null;
+        try {
+            rs = methodWatcher.executeQuery(sqlText);
+            String matchString = TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs);
+            if (caseInsensitive)
+                matchString = matchString.toUpperCase();
+
+            for (String containedString:containedStrings) {
+                if (caseInsensitive)
+                    containedString = containedString.toUpperCase();
+                if (matchString.contains(containedString))
+                    return;
+            }
+
+            fail("ResultSet does not contain any of the expected strings.");
+        }
+        finally {
+            if (rs != null)
+                rs.close();
+        }
+    }
+
+    protected void testQueryDoesNotContain(String sqlText, String containedString,
+                                     SpliceWatcher methodWatcher,
+                                     boolean caseInsensitive) throws Exception {
+        ResultSet rs = null;
+        try {
+            rs = methodWatcher.executeQuery(sqlText);
+            String matchString = TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs);
+            if (caseInsensitive) {
+                matchString = matchString.toUpperCase();
+                containedString = containedString.toUpperCase();
+            }
+            if (matchString.contains(containedString))
                 fail("ResultSet does not contain string: " + containedString);
         }
         finally {
@@ -511,20 +626,22 @@ public class SpliceUnitTest {
         Assert.assertEquals("Incorrect number of bad records reported!", bad, resultSet.getInt(2));
     }
 
-    protected static void validateMergeResults(ResultSet resultSet, int updated,int inserted, int bad) throws SQLException {
+    protected static void validateMergeResults(ResultSet resultSet, int affected, int updated,int inserted, int bad) throws SQLException {
         Assert.assertTrue("No rows returned!",resultSet.next());
-        Assert.assertEquals("Incorrect number of rows reported!",updated,resultSet.getInt(1));
-        Assert.assertEquals("Incorrect number of rows reported!",inserted,resultSet.getInt(2));
-        Assert.assertEquals("Incorrect number of files reported!",1,resultSet.getInt(4));
-        Assert.assertEquals("Incorrect number of bad records reported!", bad, resultSet.getInt(3));
+        Assert.assertEquals("Incorrect number of rows reported!",affected,resultSet.getInt(1));
+        Assert.assertEquals("Incorrect number of rows reported!",updated,resultSet.getInt(2));
+        Assert.assertEquals("Incorrect number of rows reported!",inserted,resultSet.getInt(3));
+        Assert.assertEquals("Incorrect number of files reported!",1,resultSet.getInt(5));
+        Assert.assertEquals("Incorrect number of bad records reported!", bad, resultSet.getInt(4));
     }
 
-    protected static void validateMergeResults(ResultSet resultSet, int updated,int inserted, int bad, int file) throws SQLException {
+    protected static void validateMergeResults(ResultSet resultSet, int affected, int updated,int inserted, int bad, int file) throws SQLException {
         Assert.assertTrue("No rows returned!",resultSet.next());
-        Assert.assertEquals("Incorrect number of rows reported!",updated,resultSet.getInt(1));
-        Assert.assertEquals("Incorrect number of rows reported!",inserted,resultSet.getInt(2));
-        Assert.assertEquals("Incorrect number of files reported!",file,resultSet.getInt(4));
-        Assert.assertEquals("Incorrect number of bad records reported!", bad, resultSet.getInt(3));
+        Assert.assertEquals("Incorrect number of rows reported!",affected,resultSet.getInt(1));
+        Assert.assertEquals("Incorrect number of rows reported!",updated,resultSet.getInt(2));
+        Assert.assertEquals("Incorrect number of rows reported!",inserted,resultSet.getInt(3));
+        Assert.assertEquals("Incorrect number of files reported!",file,resultSet.getInt(5));
+        Assert.assertEquals("Incorrect number of bad records reported!", bad, resultSet.getInt(4));
     }
 
     public static String printMsgSQLState(String testName, SQLException e) {
@@ -542,13 +659,32 @@ public class SpliceUnitTest {
     }
 
     public static File createBadLogDirectory(String schemaName) {
-        File badImportLogDirectory = new File(SpliceUnitTest.getBaseDirectory()+"/target/BAD/"+schemaName);
+        File badImportLogDirectory = new File(getHBaseDirectory() + "/target/BAD/" + schemaName);
         if (badImportLogDirectory.exists()) {
             recursiveDelete(badImportLogDirectory);
         }
         assertTrue("Couldn't create "+badImportLogDirectory,badImportLogDirectory.mkdirs());
         assertTrue("Failed to create "+badImportLogDirectory,badImportLogDirectory.exists());
         return badImportLogDirectory;
+    }
+
+    public static File createBulkLoadDirectory(String schemaName) {
+        File bulkLoadDirectory = new File(getHBaseDirectory() + "/target/HFILE/" + schemaName);
+        if (bulkLoadDirectory.exists()) {
+            recursiveDelete(bulkLoadDirectory);
+        }
+        assertTrue("Couldn't create " + bulkLoadDirectory, bulkLoadDirectory.mkdirs());
+        assertTrue("Failed to create " + bulkLoadDirectory, bulkLoadDirectory.exists());
+        return bulkLoadDirectory;
+    }
+
+    public static File createBackupDirectory() {
+        File backupDirectory = new File(getHBaseDirectory() + "/target/backup/");
+        if (!backupDirectory.exists()) {
+            assertTrue("Couldn't create " + backupDirectory, backupDirectory.mkdirs());
+            assertTrue("Failed to create " + backupDirectory, backupDirectory.exists());
+        }
+        return backupDirectory;
     }
 
     public static void recursiveDelete(File file) {
@@ -568,7 +704,7 @@ public class SpliceUnitTest {
     }
 
     public static File createImportFileDirectory(String schemaName) {
-        File importFileDirectory = new File(SpliceUnitTest.getBaseDirectory()+"/target/import_data/"+schemaName);
+        File importFileDirectory = new File(getHBaseDirectory() + "/target/import_data/" + schemaName);
         if (importFileDirectory.exists()) {
             //noinspection ConstantConditions
             for (File file : importFileDirectory.listFiles()) {
@@ -827,6 +963,82 @@ public class SpliceUnitTest {
             assertTrue("Incorrect error type: " + e.getClass().getName(), e instanceof SQLException);
             SQLException se = (SQLException) e;
             assertTrue("Incorrect error state: " + se.getSQLState() + ", expected: " + errorState,  errorState.startsWith( se.getSQLState()));
+        }
+    }
+
+    public static File createTempDirectory(String subpath) throws java.io.IOException
+    {
+        File path = new File(getHBaseDirectory(), "/target/tmp/" + subpath);
+        FileUtils.deleteDirectory(path); // clean directory
+        path.mkdirs();
+        return path;
+    }
+
+    public static void deleteTempDirectory(File tempDir) throws Exception
+    {
+        if( tempDir == null )
+            return;
+        else if( debug_no_delete )
+            System.out.println( "Not deleting test temporary directory " + tempDir );
+        else {
+            FileUtils.deleteDirectory(tempDir);
+        }
+    }
+
+    /// copy subfolder of resource directory (i.e. GITROOT/splice_machine/src/test/test-data/)
+    /// to temporary directory @sa getTempOutputDirectory
+    /// @return destination directory as string
+    public String getTempCopyOfResourceDirectory( File tmpDir, String subfolder ) throws Exception
+    {
+        File src = new File( SpliceUnitTest.getResourceDirectory(), subfolder);
+        File dest = new File( tmpDir, subfolder );
+        FileUtils.copyDirectory( src, dest );
+        return dest.toString();
+    }
+
+    /// @return number of files in directory tree
+    // recursively, going down directories, but not counting directories as files
+    public static int getNumberOfFiles(String dirPath)
+    {
+        int count = 0;
+        File f = new File(dirPath);
+        File[] files = f.listFiles();
+
+        if (files == null)
+            return 0;
+
+        for (File file : files)
+        {
+            count++;
+            if (file.isDirectory()) {
+                count += getNumberOfFiles(file.getAbsolutePath());
+            }
+        }
+        return count;
+    }
+
+    /// execute sql query 'sqlText' and expect an exception of certain state being thrown
+    public static void SqlExpectException( SpliceWatcher methodWatcher, String sqlText, String expectedState )
+    {
+        try {
+            ResultSet rs = methodWatcher.executeQuery(sqlText);
+            rs.close();
+            Assert.fail("Exception not thrown for " + sqlText);
+
+        } catch (SQLException e) {
+            System.out.println( e );
+            Assert.assertEquals("Wrong Exception for " + sqlText, expectedState, e.getSQLState());
+        }
+    }
+
+    /// execute sql query 'sqlText' and expect a certain formatted result
+    public static void SqlExpectToString( SpliceWatcher methodWatcher, String sqlText, String expected, boolean sort ) throws Exception
+    {
+        try( ResultSet rs = methodWatcher.executeQuery(sqlText) ) {
+            String val = sort
+                    ? TestUtils.FormattedResult.ResultFactory.toString(rs)
+                    : TestUtils.FormattedResult.ResultFactory.toStringUnsorted(rs);
+            Assert.assertEquals(expected, val);
         }
     }
 }

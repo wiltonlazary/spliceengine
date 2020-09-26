@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -73,7 +73,7 @@ public abstract class SingleChildResultSetNode extends FromTable{
         super.init(null,tableProperties);
         this.childResult=(ResultSetNode)childResult;
 
-		/* Propagate the child's referenced table map, if one exists */
+        /* Propagate the child's referenced table map, if one exists */
         if(this.childResult.getReferencedTableMap()!=null){
             referencedTableMap=
                     (JBitSet)this.childResult.getReferencedTableMap().clone();
@@ -143,6 +143,14 @@ public abstract class SingleChildResultSetNode extends FromTable{
         super.initAccessPaths(optimizer);
         if(childResult instanceof Optimizable){
             ((Optimizable)childResult).initAccessPaths(optimizer);
+        }
+    }
+
+    @Override
+    public void resetAccessPaths() {
+        super.resetAccessPaths();
+        if (childResult instanceof Optimizable) {
+            ((Optimizable)childResult).resetAccessPaths();
         }
     }
 
@@ -266,7 +274,7 @@ public abstract class SingleChildResultSetNode extends FromTable{
     public ResultSetNode preprocess(int numTables, GroupByList gbl, FromList fromList) throws StandardException{
         childResult=childResult.preprocess(numTables,gbl,fromList);
 
-		/* Build the referenced table map */
+        /* Build the referenced table map */
         referencedTableMap=(JBitSet)childResult.getReferencedTableMap().clone();
 
         return this;
@@ -317,10 +325,10 @@ public abstract class SingleChildResultSetNode extends FromTable{
      */
     @Override
     public boolean flattenableInFromSubquery(FromList fromList){
-		/* Flattening currently involves merging predicates and FromLists.
-		 * We don't have a FromList, so we can't flatten for now.
-		 */
-		/* RESOLVE - this will introduce yet another unnecessary PRN */
+        /* Flattening currently involves merging predicates and FromLists.
+         * We don't have a FromList, so we can't flatten for now.
+         */
+        /* RESOLVE - this will introduce yet another unnecessary PRN */
         return false;
     }
 
@@ -343,30 +351,33 @@ public abstract class SingleChildResultSetNode extends FromTable{
      * @param predicates     The PredicateList to optimize.  This should
      *                       be a join predicate.
      * @param outerRows      The number of outer joining rows
+     * @param forSpark
      * @throws StandardException Thrown on error
      * @return ResultSetNode    The top of the optimized subtree
      */
     @Override
     public ResultSetNode optimize(DataDictionary dataDictionary,
                                   PredicateList predicates,
-                                  double outerRows) throws StandardException{
-		/* We need to implement this method since a NRSN can appear above a
-		 * SelectNode in a query tree.
-		 */
+                                  double outerRows,
+                                  boolean forSpark) throws StandardException{
+        /* We need to implement this method since a NRSN can appear above a
+         * SelectNode in a query tree.
+         */
         childResult=childResult.optimize(
                 dataDictionary,
                 predicates,
-                outerRows);
+                outerRows,
+                forSpark);
 
-        Optimizer optimizer=
-                getOptimizer(
-                        (FromList)getNodeFactory().getNode(
-                                C_NodeTypes.FROM_LIST,
-                                getNodeFactory().doJoinOrderOptimization(),
-                                getContextManager()),
-                        predicates,
-                        dataDictionary,
-                        null);
+        Optimizer optimizer= getOptimizer(
+                (FromList)getNodeFactory().getNode(
+                        C_NodeTypes.FROM_LIST,
+                        getNodeFactory().doJoinOrderOptimization(),
+                        getContextManager()),
+                predicates,
+                dataDictionary,
+                null);
+        optimizer.setForSpark(forSpark);
         costEstimate=optimizer.newCostEstimate();
         costEstimate.setCost(childResult.getCostEstimate().getEstimatedCost(),
                 childResult.getCostEstimate().rowCount(),
@@ -383,8 +394,8 @@ public abstract class SingleChildResultSetNode extends FromTable{
     }
 
     @Override
-    public ResultSetNode changeAccessPath() throws StandardException{
-        childResult=childResult.changeAccessPath();
+    public ResultSetNode changeAccessPath(JBitSet joinedTableSet) throws StandardException{
+        childResult=childResult.changeAccessPath(joinedTableSet);
         return this;
     }
 
@@ -501,12 +512,12 @@ public abstract class SingleChildResultSetNode extends FromTable{
      */
     @Override
     public CostEstimate getFinalCostEstimate(boolean useSelf) throws StandardException{
-		/*
-		** The cost estimate will be set here if either optimize() or
-		** optimizeIt() was called on this node.  It's also possible
-		** that optimization was done directly on the child node,
-		** in which case the cost estimate will be null here.
-		*/
+        /*
+        ** The cost estimate will be set here if either optimize() or
+        ** optimizeIt() was called on this node.  It's also possible
+        ** that optimization was done directly on the child node,
+        ** in which case the cost estimate will be null here.
+        */
         if(costEstimate==null)
             return childResult.getFinalCostEstimate(true);
         else{
@@ -538,5 +549,4 @@ public abstract class SingleChildResultSetNode extends FromTable{
         tree.add(this);
         childResult.buildTree(tree,depth+1);
     }
-
 }

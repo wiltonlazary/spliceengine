@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -30,9 +30,10 @@ import com.splicemachine.pipeline.Exceptions;
 import com.splicemachine.primitives.Bytes;
 import com.splicemachine.si.impl.driver.SIDriver;
 import com.splicemachine.utils.SpliceLogUtils;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.hadoop.fs.Path;
 import org.apache.log4j.Logger;
-import org.spark_project.guava.base.Splitter;
+import splice.com.google.common.base.Splitter;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -52,6 +53,7 @@ import java.util.List;
  * @author Scott Fines
  * Created on: 6/4/13
  */
+@SuppressFBWarnings(value = {"OBL_UNSATISFIED_OBLIGATION_EXCEPTION_EDGE","OS_OPEN_STREAM","RV_RETURN_VALUE_IGNORED"}, justification = "DB-9844")
 public class TableSplit{
     private static final Logger LOG = Logger.getLogger(TableSplit.class);
 
@@ -355,6 +357,7 @@ public class TableSplit{
     }
 
 
+    @SuppressFBWarnings(value = "DM_DEFAULT_ENCODING", justification = "DB-9844")
     private static byte[] createRegionName(String regionName) {
         return regionName.getBytes();
     }

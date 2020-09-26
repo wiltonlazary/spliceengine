@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -56,6 +56,8 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
     // true by default.
     boolean useStatistics=true;
 
+    int tableLimitForExhaustiveSearch;
+
     // FromList could have a view in it's list. If the view is defined in SESSION
     // schema, then we do not want to cache the statement's plan. This boolean
     // will help keep track of such a condition.
@@ -77,6 +79,10 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
      */
     private WindowList windows;
 
+    /// list of aliases that can be used later by the ORDER BY statement in ResultColumnList
+    private List<ResultColumn> aliases = new ArrayList<>();
+    /// @sa useAliases
+    private boolean aliasesUsable = false;
 
     /**
      * Initializer for a FromList
@@ -85,6 +91,7 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
     public void init(Object optimizeJoinOrder){
         fixedJoinOrder=!((Boolean)optimizeJoinOrder);
         isTransparent=false;
+        tableLimitForExhaustiveSearch = getLanguageConnectionContext().getTableLimitForExhaustiveSearch();
     }
 
     /**
@@ -99,9 +106,9 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
         addFromTable((FromTable)fromTable);
     }
 
-	/*
+    /*
      * OptimizableList interface
-	 */
+     */
 
     @Override
     public Optimizable getOptimizable(int index){
@@ -129,19 +136,19 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
      * @throws StandardException Thrown on error
      */
     public void addFromTable(FromTable fromTable) throws StandardException{
-		/* Don't worry about checking TableOperatorNodes since
-		 * they don't have exposed names.  This will potentially
-		 * allow duplicate exposed names in some degenerate cases,
-		 * but the binding of the ColumnReferences will catch those
-		 * cases with a different error.  If the query does not have
-		 * any ColumnReferences from the duplicate exposed name, the
-		 * user is executing a really dumb query and we won't throw
-		 * and exception - consider it an ANSI extension.
-		 */
+        /* Don't worry about checking TableOperatorNodes since
+         * they don't have exposed names.  This will potentially
+         * allow duplicate exposed names in some degenerate cases,
+         * but the binding of the ColumnReferences will catch those
+         * cases with a different error.  If the query does not have
+         * any ColumnReferences from the duplicate exposed name, the
+         * user is executing a really dumb query and we won't throw
+         * and exception - consider it an ANSI extension.
+         */
         TableName leftTable ;
         TableName rightTable ;
         if(!(fromTable instanceof TableOperatorNode)){
-			/* Check for duplicate table name in FROM list */
+            /* Check for duplicate table name in FROM list */
             int size=size();
             for(int index=0;index<size;index++){
                 leftTable=fromTable.getTableName();
@@ -172,7 +179,7 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
         FromTable fromTable;
         boolean found=false;
 
-		/* Check for table or VTI name in FROM list */
+        /* Check for table or VTI name in FROM list */
         int size=size();
         for(int index=0;index<size;index++){
             fromTable=(FromTable)elementAt(index);
@@ -205,7 +212,7 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
         // method and save that information in referencesSeesionSchema field.
         if(referencesSessionSchema) return true;
 
-		/* Check for table or VTI name in FROM list */
+        /* Check for table or VTI name in FROM list */
         int size=size();
         for(int index=0;index<size;index++){
             fromTable=(FromTable)elementAt(index);
@@ -263,14 +270,14 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
     public void bindTables(DataDictionary dataDictionary, FromList fromListParam) throws StandardException{
         FromTable fromTable;
 
-		/* Now we bind the tables - this is a 2 step process.
-		 * We first bind all of the non-VTIs, then we bind the VTIs.
-		 * This enables us to handle the passing of correlation
-		 * columns in VTI parameters.
-		 * NOTE: We set the table numbers for all of the VTIs in the
-		 * first step, when we find them, in order to avoid an ordering
-		 * problem with join columns in parameters.
-		 */
+        /* Now we bind the tables - this is a 2 step process.
+         * We first bind all of the non-VTIs, then we bind the VTIs.
+         * This enables us to handle the passing of correlation
+         * columns in VTI parameters.
+         * NOTE: We set the table numbers for all of the VTIs in the
+         * first step, when we find them, in order to avoid an ordering
+         * problem with join columns in parameters.
+         */
         int size=size();
         for(int index=0;index<size;index++){
             fromTable=(FromTable)elementAt(index);
@@ -306,9 +313,9 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
         for(int index=0;index<size;index++){
             fromTable=(FromTable)elementAt(index);
 
-			/* If this FromList is transparent then its FromTables should
-			 * be bound based on the outer query's FROM list.
-			 */
+            /* If this FromList is transparent then its FromTables should
+             * be bound based on the outer query's FROM list.
+             */
             fromTable.bindExpressions(isTransparent?fromListParam:this);
         }
     }
@@ -336,7 +343,7 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
             fromListParam.insertElementAt(fromTable,0);
         }
 
-		/* Remove all references added here */
+        /* Remove all references added here */
         while(fromListParam.size()>origList)
             fromListParam.removeElementAt(0);
     }
@@ -378,19 +385,19 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
         ResultColumnList tempRCList;
         FromTable fromTable;
  
-		/* Expand the "*" for the table that matches, if it is qualified 
-		 * (allTableName is not null) or for all tables in the list at the
-		 * current nesting level if the "*" is not qualified (allTableName
-		 * is null).  Current nesting level is determined by the nesting
-		 * level of the first FromTable in the list.
-		 */
+        /* Expand the "*" for the table that matches, if it is qualified
+         * (allTableName is not null) or for all tables in the list at the
+         * current nesting level if the "*" is not qualified (allTableName
+         * is null).  Current nesting level is determined by the nesting
+         * level of the first FromTable in the list.
+         */
         int targetNestingLevel=((FromTable)elementAt(0)).getLevel();
         int size=size();
 
-		/* Make sure our assumption about nesting-based ordering
-		 * has been satisified.  I.e. that the list is ordered
-		 * with the most deeply nested FromTables first.
-		 */
+        /* Make sure our assumption about nesting-based ordering
+         * has been satisified.  I.e. that the list is ordered
+         * with the most deeply nested FromTables first.
+         */
         if(SanityManager.DEBUG){
             int prevNL=targetNestingLevel;
             for(int i=1;i<size;i++){
@@ -406,28 +413,28 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
         for(int index=0;index<size;index++){
             fromTable=(FromTable)elementAt(index);
             if(targetNestingLevel!=fromTable.getLevel()){
-				/* We only expand result columns for tables at the
-				 * target nesting level.  Since the FromTables are
-				 * sorted based on nesting level, we're done if we
-				 * get here.
-				 */
+                /* We only expand result columns for tables at the
+                 * target nesting level.  Since the FromTables are
+                 * sorted based on nesting level, we're done if we
+                 * get here.
+                 */
                 break;
             }
 
-			/* We let the FromTable decide if there is a match on
-			 * the exposed name.  (A JoinNode will not have an
-			 * exposed name, so it will need to pass the info to its
-			 * left and right children.)
-			 */
+            /* We let the FromTable decide if there is a match on
+             * the exposed name.  (A JoinNode will not have an
+             * exposed name, so it will need to pass the info to its
+             * left and right children.)
+             */
             tempRCList=fromTable.getAllResultColumns(allTableName);
 
             if(tempRCList==null){
                 continue;
             }
 
-			/* Expand the column list and append to the list that
-			 * we will return.
-			 */
+            /* Expand the column list and append to the list that
+             * we will return.
+             */
             if(resultColumnList==null){
                 resultColumnList=tempRCList;
             }else{
@@ -435,9 +442,9 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
             }
         }
 
-		/* Give an error if the qualification name did not match 
-		 * an exposed name 
-		 */
+        /* Give an error if the qualification name did not match
+         * an exposed name
+         */
         if(resultColumnList==null){
             throw StandardException.newException(SQLState.LANG_EXPOSED_NAME_NOT_FOUND,allTableName);
         }
@@ -479,18 +486,18 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
         ResultColumn resultColumn;
         String crTableName=columnReference.getTableName();
 
-		/*
-		** Find the first table with matching column name.  If there
-		** is more than one table with a matching column name at the same
-		** nesting level, give an error.
-		*/
+        /*
+        ** Find the first table with matching column name.  If there
+        ** is more than one table with a matching column name at the same
+        ** nesting level, give an error.
+        */
         int size=size();
         for(int index=0;index<size;index++){
             fromTable=(FromTable)elementAt(index);
 
-			/* We can stop if we've found a matching column or table name 
-			 * at the previous nesting level.
-			 */
+            /* We can stop if we've found a matching column or table name
+             * at the previous nesting level.
+             */
             currentLevel=fromTable.getLevel();
             if(previousLevel!=currentLevel){
                 if(columnNameMatch){
@@ -501,7 +508,7 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
                     break;
                 }
             }
-			/* Simpler to always set previousLevel then to test and set */
+            /* Simpler to always set previousLevel then to test and set */
             previousLevel=currentLevel;
 
             resultColumn=fromTable.getMatchingColumn(columnReference);
@@ -516,9 +523,9 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
                      */
                     matchingRC=resultColumn;
                     columnReference.setSource(resultColumn);
-					/* Set the nesting level at which the CR appears and the nesting level
-					 * of its source RC.
-					 */
+                    /* Set the nesting level at which the CR appears and the nesting level
+                     * of its source RC.
+                     */
                     columnReference.setNestingLevel(((FromTable)elementAt(0)).getLevel());
                     columnReference.setSourceLevel(currentLevel);
                     columnNameMatch=true;
@@ -531,9 +538,9 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
                 }
             }
 
-			/* Remember if we get a match on the exposed table name, so that
-			 * we can stop at the beginning of the next level.
-			 */
+            /* Remember if we get a match on the exposed table name, so that
+             * we can stop at the beginning of the next level.
+             */
             tableNameMatch=tableNameMatch || (crTableName!=null && crTableName.equals(fromTable.getExposedName()));
         }
 
@@ -589,13 +596,13 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
     public void preprocess(int numTables, GroupByList gbl, ValueNode predicateTree) throws StandardException{
         int size=size();
 
-		/* Preprocess each FromTable in the list */
+        /* Preprocess each FromTable in the list */
         for(int index=0;index<size;index++){
             FromTable ft=(FromTable)elementAt(index);
 
-			/* Transform any outer joins to inner joins where appropriate */
+            /* Transform any outer joins to inner joins where appropriate */
             ft=ft.transformOuterJoins(predicateTree,numTables);
-			/* Preprocess this FromTable */
+            /* Preprocess this FromTable */
             setElementAt(ft.preprocess(numTables,gbl,this),index);
         }
     }
@@ -610,13 +617,15 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
      * @param sql           The SubqueryList from the outer query
      * @param gbl           The group by list, if any
      * @param havingClause  The HAVING clause, if any
+     * @param numTables     maximum number of tables in the query
      * @throws StandardException Thrown on error
      */
     public void flattenFromTables(ResultColumnList rcl,
                                   PredicateList predicateList,
                                   SubqueryList sql,
                                   GroupByList gbl,
-                                  ValueNode havingClause) throws StandardException{
+                                  ValueNode havingClause,
+                                  int numTables) throws StandardException{
         boolean flattened=true;
         List<Integer> flattenedTableNumbers=new ArrayList<>();
 
@@ -624,26 +633,26 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
         assert predicateList!=null: "predicateList is expected to be non-null";
         assert sql!=null: "sql is expected to be non-null";
 
-		/* Loop until all flattenable entries are flattened.
-		 * We restart the inner loop after flattening an in place
-		 * to simplify the logic and so that we don't have to worry
-		 * about walking a list while we are modifying it.
-		 */
+        /* Loop until all flattenable entries are flattened.
+         * We restart the inner loop after flattening an in place
+         * to simplify the logic and so that we don't have to worry
+         * about walking a list while we are modifying it.
+         */
         while(flattened){
             flattened=false;
 
             for(int index=0;index<size() && !flattened;index++){
                 FromTable ft=(FromTable)elementAt(index);
 
-				/* Flatten FromSubquerys and flattenable JoinNodes */
+                /* Flatten FromSubquerys and flattenable JoinNodes */
                 if((ft instanceof FromSubquery) || ft.isFlattenableJoinNode()){
                     //save the table number of the node to be flattened
                     flattenedTableNumbers.add(ft.getTableNumber());
 
-					/* Remove the node from the list and insert its
-					 * FromList here.
-					 */
-                    FromList flatteningFL=ft.flatten( rcl, predicateList, sql, gbl, havingClause);
+                    /* Remove the node from the list and insert its
+                     * FromList here.
+                     */
+                    FromList flatteningFL=ft.flatten( rcl, predicateList, sql, gbl, havingClause, numTables);
                     assert flatteningFL==null || flatteningFL.size()>0: "flatteningFL expected to be null or size>0";
 
                     if(flatteningFL!=null){
@@ -654,23 +663,24 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
                             insertElementAt(flatteningFL.elementAt(inner),index+inner);
                         }
                     }else{
-						/*
-						** If flatten returns null, that means it wants to
-						** be removed from the FromList.
-						*/
+                        /*
+                        ** If flatten returns null, that means it wants to
+                        ** be removed from the FromList.
+                        */
                         removeElementAt(index);
                     }
                     flattened=true;
                 }
             }
         }
-		
-		/* fix up dependency maps for exists base tables since they might have a
-		 * dependency on this join node
-		 */
+
+        /* fix up dependency maps for tables in the from list since they might have a
+         * dependency on these join nodes
+         */
         if(!flattenedTableNumbers.isEmpty()){
             for(int i=0;i<size();i++){
                 FromTable ft=(FromTable)elementAt(i);
+                ft.clearDependency(flattenedTableNumbers);
                 if(ft instanceof ProjectRestrictNode){
                     ResultSetNode rst=((ProjectRestrictNode)ft).getChildResult();
                     if(rst instanceof FromBaseTable){
@@ -690,18 +700,43 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
     void pushPredicates(PredicateList predicateList) throws StandardException{
         assert predicateList!=null: "predicateList is expected to be non-null";
 
-		/* We can finally categorize each Predicate and try to push them down.
-		 * NOTE: The PredicateList may be empty, but that's okay, we still
-		 * call pushExpressions() for each entry in the FromList because that's
-		 * where any outer join conditions will get pushed down.
-		 */
+        /* We can finally categorize each Predicate and try to push them down.
+         * NOTE: The PredicateList may be empty, but that's okay, we still
+         * call pushExpressions() for each entry in the FromList because that's
+         * where any outer join conditions will get pushed down.
+         */
         predicateList.categorize();
+
+        // When left outer join is flattend, its ON clause condition could be released to the WHERE clause but
+        // with an outerJoinLevel > 0. These predicates cannot be pushed to tables whose outerJoinLevel does not match.
+        // As a simplification, we don't push predicates down whoe OuterJoinLevel is greater than 0.
+        PredicateList levelZeroPredicateList = (PredicateList)getNodeFactory().getNode(C_NodeTypes.PREDICATE_LIST,getContextManager());
+        for (int i = predicateList.size()-1; i >= 0 ; i--) {
+            Predicate pred = predicateList.elementAt(i);
+            if (pred.getOuterJoinLevel() == 0) {
+                levelZeroPredicateList.addOptPredicate(pred);
+                predicateList.removeOptPredicate(i);
+            }
+        }
+
 
         int size=size();
         for(int index=0;index<size;index++){
             FromTable fromTable=(FromTable)elementAt(index);
-            fromTable.pushExpressions(predicateList);
+            // To simplify the logic and preserve the existing behavior,
+            // we will not push where clause condition(including flattened outer join
+            // ON clause condition) to right of outer join for now, it can be enhanced in the future
+            if (fromTable.getOuterJoinLevel() > 0)
+                continue;
+            fromTable.pushExpressions(levelZeroPredicateList);
         }
+
+        // append the predicates that are not pushed down back to the original predicatelist
+        for ( int i=0; i < levelZeroPredicateList.size(); i++) {
+            predicateList.addOptPredicate(levelZeroPredicateList.elementAt(i));
+        }
+        levelZeroPredicateList.removeAllPredicates();
+
     }
 
 
@@ -727,11 +762,11 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
     public void setProperties(Properties props) throws StandardException{
         properties=props;
 
-		/*
-		** Validate the properties list now.  This is possible because
-		** there is nothing in this properties list that relies on binding
-		** or optimization to validate.
-		*/
+        /*
+        ** Validate the properties list now.  This is possible because
+        ** there is nothing in this properties list that relies on binding
+        ** or optimization to validate.
+        */
         Enumeration e=properties.keys();
         while(e.hasMoreElements()){
             String key=(String)e.nextElement();
@@ -756,6 +791,15 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
                         throw StandardException.newException(SQLState.LANG_INVALID_STATISTICS_SPEC,value);
                     }
                     break;
+                case "tableLimitForExhaustiveSearch":
+                    try {
+                        tableLimitForExhaustiveSearch = Integer.parseInt(value);
+                    } catch (NumberFormatException nfe) {
+                        throw StandardException.newException(SQLState.LANG_INVALID_TABLE_LIMIT_FOR_EXHAUSTIVE_SEARCH, value);
+                    }
+                    if (tableLimitForExhaustiveSearch <= 0)
+                        throw StandardException.newException(SQLState.LANG_INVALID_TABLE_LIMIT_FOR_EXHAUSTIVE_SEARCH, value);
+                    break;
                 default:
                     throw StandardException.newException(SQLState.LANG_INVALID_FROM_LIST_PROPERTY,key,value);
             }
@@ -771,12 +815,12 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
                 SanityManager.THROWASSERT("In reOrder(), FromList.size()=="+size()+",but joinOrder.length=="+joinOrder.length);
             }
 
-			/*
-			** Determine that the values in the list are unique and in range.
-			** The easiest way to determine that they are unique is to add
-			** them all up and see whether the result is what's expected
-			** for that array size.
-			*/
+            /*
+            ** Determine that the values in the list are unique and in range.
+            ** The easiest way to determine that they are unique is to add
+            ** them all up and see whether the result is what's expected
+            ** for that array size.
+            */
             int sum=0;
             int joLength=joinOrder.length-1;
             for(int i=0;i<joinOrder.length;i++){
@@ -788,9 +832,9 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
                 sum+=jo;
             }
 
-			/*
-			** The sum of all integers from 0 through n is (n * (n - 1)) / 2.
-			*/
+            /*
+            ** The sum of all integers from 0 through n is (n * (n - 1)) / 2.
+            */
             if(sum!=((joinOrder.length*(joinOrder.length-1))/2)){
                 StringBuilder arrayVals= new StringBuilder();
                 for(int aJoinOrder : joinOrder) arrayVals.append(aJoinOrder).append(" ");
@@ -798,17 +842,17 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
             }
         }
 
-		/* Form a list that's in the order we want */
+        /* Form a list that's in the order we want */
         QueryTreeNode[] orderedFL=new FromTable[joinOrder.length];
         for(posn=0;posn<joinOrder.length;posn++){
-			/*
-			** Get the element at the i'th join order position from the
-			** current list and make it the next element of orderedList.
-			*/
+            /*
+            ** Get the element at the i'th join order position from the
+            ** current list and make it the next element of orderedList.
+            */
             orderedFL[posn]=elementAt(joinOrder[posn]);
         }
 
-		/* Now orderedList has been built, so set this list to the same order */
+        /* Now orderedList has been built, so set this list to the same order */
         for(posn=0;posn<joinOrder.length;posn++){
             setElementAt(orderedFL[posn],posn);
         }
@@ -875,10 +919,10 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
             FromTable fromTable=(FromTable)elementAt(index);
             fromTable.decrementLevel(decrement);
 
-			/* Decrement the level of any CRs in single table
-			 * predicates that are interesting to transitive
-			 * closure.
-			 */
+            /* Decrement the level of any CRs in single table
+             * predicates that are interesting to transitive
+             * closure.
+             */
             ProjectRestrictNode prn=(ProjectRestrictNode)fromTable;
             PredicateList pl=prn.getRestrictionList();
             if(pl!=null){
@@ -976,12 +1020,12 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
         for(int index=0;index<wherePredicatesSize;index++)
             predicatesTemp.addPredicate(wherePredicates.elementAt(index));
 
-		/* When considering subquery flattening, we are interested
-		 * in the 1st (and only) entry in the RCL.  (The RCL will be
-		 * null if result column is not of interest for subquery flattening.)
-		 * We are interested in all entries in the RCL for distinct
-		 * elimination.
-		 */
+        /* When considering subquery flattening, we are interested
+         * in the 1st (and only) entry in the RCL.  (The RCL will be
+         * null if result column is not of interest for subquery flattening.)
+         * We are interested in all entries in the RCL for distinct
+         * elimination.
+         */
         if(rcl!=null){
             ResultColumn rc=rcl.elementAt(0);
             if(rc.getExpression() instanceof ColumnReference){
@@ -989,9 +1033,9 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
             }
         }
 
-		/* First see if all entries are FromBaseTables.  No point
-		 * in continuing if not.
-		 */
+        /* First see if all entries are FromBaseTables.  No point
+         * in continuing if not.
+         */
         int size=size();
         for(int index=0;index<size;index++){
             FromTable fromTable=(FromTable)elementAt(index);
@@ -1070,17 +1114,17 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
             }
         }
 
-		/* Build an array of tableNumbers from this query block.
-		 * We will use that array to find out if we have at least
-		 * one table with a uniqueness condition based only on
-		 * constants, parameters and correlation columns.
-		 */
+        /* Build an array of tableNumbers from this query block.
+         * We will use that array to find out if we have at least
+         * one table with a uniqueness condition based only on
+         * constants, parameters and correlation columns.
+         */
         tableNumbers=getTableNumbers();
         JBitSet[][] tableColMap=new JBitSet[size][size];
         boolean[] oneRow=new boolean[size];
         boolean oneRowResult;
 
-		/* See if each table has a uniqueness condition */
+        /* See if each table has a uniqueness condition */
         for(int index=0;index<size;index++){
             ProjectRestrictNode prn=(ProjectRestrictNode)elementAt(index);
             FromBaseTable fbt=(FromBaseTable)prn.getChildResult();
@@ -1103,36 +1147,36 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
                 resultColTable=true;
             }
 
-			/* Now see if there are any equality conditions
-			 * of interest in the where clause.
-			 */
+            /* Now see if there are any equality conditions
+             * of interest in the where clause.
+             */
             if(whereClause!=null){
                 whereClause.checkTopPredicatesForEqualsConditions(tableNumber,eqOuterCols,tableNumbers,colMap,resultColTable);
             }
 
-			/* Now see if there are any equality conditions
-			 * of interest in the where predicates.
-			 */
+            /* Now see if there are any equality conditions
+             * of interest in the where predicates.
+             */
             predicatesTemp.checkTopPredicatesForEqualsConditions(tableNumber,eqOuterCols,tableNumbers,colMap,resultColTable);
 
-			/* Now see if there are any equality conditions
-			 * of interest that were already pushed down to the
-			 * PRN above the FBT. (Single table predicates.)
-			 */
+            /* Now see if there are any equality conditions
+             * of interest that were already pushed down to the
+             * PRN above the FBT. (Single table predicates.)
+             */
             if(prn.getRestrictionList()!=null){
                 prn.getRestrictionList().checkTopPredicatesForEqualsConditions(tableNumber,eqOuterCols,tableNumbers,colMap,resultColTable);
             }
 
-			/* We can finally check to see if the marked columns
-			 * are a superset of any unique index.
-			 */
+            /* We can finally check to see if the marked columns
+             * are a superset of any unique index.
+             */
             if(!fbt.supersetOfUniqueIndex(colMap)){
                 return false;
             }
-			
-			/* Do we have at least 1 table whose equality condition
-			 * is based solely on constants, parameters and correlation columns.
-			 */
+
+            /* Do we have at least 1 table whose equality condition
+             * is based solely on constants, parameters and correlation columns.
+             */
             oneRowResult=fbt.supersetOfUniqueIndex(eqOuterCols);
             if(oneRowResult){
                 oneRow[index]=true;
@@ -1140,20 +1184,20 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
             }
         }
 
-		/* Have we met all of the criteria */
+        /* Have we met all of the criteria */
         if(satisfiesOuter){
-			/* check that all the tables are joined by unique indexes 
-			 * or only produce 1 row
-			 */
+            /* check that all the tables are joined by unique indexes
+             * or only produce 1 row
+             */
             boolean foundOneRow=true;
             while(foundOneRow){
                 foundOneRow=false;
                 for(int index=0;index<size;index++){
                     if(oneRow[index]){
                         for(int i=0;i<size;i++){
-							/* unique key join - exists tables already marked as 
-							 * 1 row - so don't need to look at them
-							 */
+                            /* unique key join - exists tables already marked as
+                             * 1 row - so don't need to look at them
+                             */
                             if(!oneRow[i] && tableColMap[i][index].get(0)){
                                 oneRow[i]=true;
                                 foundOneRow=true;
@@ -1162,7 +1206,7 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
                     }
                 }
             }
-			/* does any table produce more than one row */
+            /* does any table produce more than one row */
             for(int index=0;index<size;index++){
                 if(!oneRow[index]){
                     satisfiesOuter=false;
@@ -1208,7 +1252,7 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
         // We currently only flatten single table from lists
         assert size()==1: "size() expected to be 1, not "+ size();
 
-		/* Create the dependency map */
+        /* Create the dependency map */
         int size=size();
         for(int index=0;index<size;index++){
             ResultSetNode ft=((ProjectRestrictNode)elementAt(index)).getChildResult();
@@ -1217,15 +1261,15 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
             }
         }
 
-		/* Degenerate case - If flattening a non-correlated EXISTS subquery
-		 * then we need to make the table that is getting flattened dependendent on
-		 * all of the tables in the outer query block.  Gross but true.  Otherwise
-		 * that table can get chosen as an outer table and introduce duplicates.
-		 * The reason that duplicates can be introduced is that we do special processing
-		 * in the join to make sure only one qualified row from the right side is
-		 * returned.  If the exists table is on the left, we can return all the
-		 * qualified rows. 
-		 */
+        /* Degenerate case - If flattening a non-correlated EXISTS subquery
+         * then we need to make the table that is getting flattened dependendent on
+         * all of the tables in the outer query block.  Gross but true.  Otherwise
+         * that table can get chosen as an outer table and introduce duplicates.
+         * The reason that duplicates can be introduced is that we do special processing
+         * in the join to make sure only one qualified row from the right side is
+         * returned.  If the exists table is on the left, we can return all the
+         * qualified rows.
+         */
         if(dependencyMap.getFirstSetBit()==-1){
             int outerSize=outerFromList.size();
             for(int outer=0;outer<outerSize;outer++) {
@@ -1238,7 +1282,7 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
             }
         }
 
-		/* Do the marking */
+        /* Do the marking */
         for(int index=0;index<size;index++){
             FromTable fromTable=(FromTable)elementAt(index);
             if(fromTable instanceof ProjectRestrictNode){
@@ -1248,6 +1292,9 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
                     fbt.setExistsTable(true,isNotExists, matchRowId);
                     fbt.setDependencyMap((JBitSet)dependencyMap.clone());
                 }
+                // set the same for the parent PR node:
+                prn.setExistsTable(true, isNotExists, matchRowId);
+                prn.setDependencyMap((JBitSet)dependencyMap.clone());
             }
         }
     }
@@ -1352,7 +1399,7 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
         return properties;
     }
 
-    public void setDependencyMapForSSQ(int numTables) {
+    public void moveSSQAndSetDependencyMap(int numTables) {
         // iterate through the list to collect the tablenumber
         JBitSet dependencyMap = new JBitSet(numTables);
         for(int i=0; i<size(); i++) {
@@ -1361,11 +1408,63 @@ public class FromList extends QueryTreeNodeVector<QueryTreeNode> implements Opti
                 dependencyMap.or(fromTable.getReferencedTableMap());
         }
 
-        // set dependencyMap
-        for (int i=0; i<size(); i++) {
-            FromTable fromTable = (FromTable) elementAt(i);
-            if (fromTable.getFromSSQ())
+        ArrayList<FromTable> ssqList = new ArrayList<>();
+        Iterator<QueryTreeNode> itr = iterator();
+        while (itr.hasNext()) {
+            FromTable fromTable = (FromTable)itr.next();
+            if (fromTable.getFromSSQ()) {
                 fromTable.setDependencyMap((JBitSet)dependencyMap.clone());
+                itr.remove();
+                ssqList.add(fromTable);
+            }
         }
+        if (!ssqList.isEmpty()) {
+            for (FromTable fromTable: ssqList)
+                addElement(fromTable);
+        }
+    }
+
+    /// add something that might be used later by ORDER BY for aliases resolving
+    public void addAlias(ResultColumn vn) {
+        if( vn != null && vn.getName() != null )
+            aliases.add(vn);
+    }
+
+    /// check if the columnReference is referencing an alias.
+    /// this should only happen when ColumnReferences that are in ValueNodes of ORDER BY part of ResultColumnList
+    /// callee should then replace the reference to the aliases by the expression that this alias points too
+    public ValueNode getAlias(ColumnReference columnReference) throws StandardException {
+        if( !aliasesUsable ) return null;
+        ResultColumn rc = aliases.stream().filter(c -> c.getName().equals(columnReference.columnName))
+                                 .findFirst().orElse(null);
+        if( rc != null ) {
+            // we might have to replace this with rc.getExpression().getClone() (and fix all getClone())
+            return rc.getExpression();
+        }
+        else
+            return null;
+    }
+
+    /**
+     * we have to call useAliases to make aliases accessible,
+     * otherwise SELECT would also have access to aliases left-to-right
+     */
+    public void useAliases() {
+        aliasesUsable = true;
+    }
+    /// clear aliases so that they're not usable from HAVING or GROUP BY
+    // this is intentional currently, as it's not clear if the current approach in FromList.getAlias
+    // is valid in WHERE, HAVING and GROUP BY statements. maybe we would need to do a copy of the expression,
+    // not only a reference
+    public void clearAliases()
+    {
+        aliases.clear();
+        aliasesUsable = false;
+    }
+
+    @Override
+    public int getTableLimitForExhaustiveSearch()
+    {
+        return tableLimitForExhaustiveSearch;
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -18,6 +18,7 @@ import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.conn.ControlExecutionLimiter;
 import com.splicemachine.db.iapi.sql.execute.ExecRow;
+import com.splicemachine.db.impl.sql.compile.ExplainNode;
 import com.splicemachine.derby.iapi.sql.execute.DataSetProcessorFactory;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.impl.sql.execute.operations.SpliceBaseOperation;
@@ -28,14 +29,16 @@ import com.splicemachine.derby.stream.iapi.RemoteQueryClient;
 import com.splicemachine.derby.stream.utils.ForwardingDataSetProcessor;
 import com.splicemachine.si.impl.driver.SIDriver;
 import com.splicemachine.utils.SpliceLogUtils;
+import com.splicemachine.system.CsvOptions;
 import org.apache.log4j.Logger;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+
 import javax.annotation.Nullable;
 import java.util.Iterator;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.List;
+
+import static com.splicemachine.db.impl.sql.compile.ExplainNode.SparkExplainKind.NONE;
 
 /**
  * A DataSetProcessor Factory which only generates Control-Side DataSet processors. This is because memory
@@ -140,7 +143,7 @@ public class ControlOnlyDataSetProcessorFactory implements DataSetProcessorFacto
         }
 
         @Override
-        public StructType getExternalFileSchema(String storedAs, String location, boolean mergeSchema) {
+        public StructType getExternalFileSchema(String storedAs, String location, boolean mergeSchema, CsvOptions csvOptions) {
             if (LOG.isTraceEnabled())
             SpliceLogUtils.trace(LOG, "DistributedWrapper#getExternalFileSchema()");
             //no-op
@@ -154,5 +157,23 @@ public class ControlOnlyDataSetProcessorFactory implements DataSetProcessorFacto
             //no-op
             return false;
         }
+
+        // Operations specific to native spark explains
+        // have no effect on non-spark queries.
+        @Override public boolean isSparkExplain() { return false; }
+        @Override public ExplainNode.SparkExplainKind getSparkExplainKind() { return NONE; }
+        @Override public void setSparkExplain(ExplainNode.SparkExplainKind newValue) {  }
+
+        @Override public void prependSpliceExplainString(String explainString) { }
+        @Override public void appendSpliceExplainString(String explainString) { }
+        @Override public void prependSparkExplainStrings(List<String> stringsToAdd, boolean firstOperationSource, boolean lastOperationSource) { }
+        @Override public void popSpliceOperation() { }
+        @Override public void finalizeTempOperationStrings() { }
+
+        @Override public List<String> getNativeSparkExplain() { return null; }
+        @Override public int getOpDepth() { return 0; }
+        @Override public void incrementOpDepth() { }
+        @Override public void decrementOpDepth() { }
+        @Override public void resetOpDepth() { }
     }
 }

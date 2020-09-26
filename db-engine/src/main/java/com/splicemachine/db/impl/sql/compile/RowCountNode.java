@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -92,20 +92,23 @@ public final class RowCountNode extends SingleChildResultSetNode{
      * @param predicates     The PredicateList to optimize.  This should
      *                       be a join predicate.
      * @param outerRows      The number of outer joining rows
+     * @param forSpark
      * @throws StandardException Thrown on error
      * @return ResultSetNode    The top of the optimized subtree
      */
     @Override
     public ResultSetNode optimize(DataDictionary dataDictionary,
                                   PredicateList predicates,
-                                  double outerRows) throws StandardException{
-		/* We need to implement this method since a NRSN can appear above a
-		 * SelectNode in a query tree.
-		 */
+                                  double outerRows,
+                                  boolean forSpark) throws StandardException{
+        /* We need to implement this method since a NRSN can appear above a
+         * SelectNode in a query tree.
+         */
         childResult=childResult.optimize(
                 dataDictionary,
                 predicates,
-                outerRows);
+                outerRows,
+                forSpark);
 
         Optimizer optimizer=
                 getOptimizer(
@@ -116,6 +119,7 @@ public final class RowCountNode extends SingleChildResultSetNode{
                         predicates,
                         dataDictionary,
                         null);
+        optimizer.setForSpark(forSpark);
         costEstimate=optimizer.newCostEstimate();
         fixCost();
         return this;
@@ -133,12 +137,12 @@ public final class RowCountNode extends SingleChildResultSetNode{
      */
     @Override
     public CostEstimate getFinalCostEstimate(boolean useSelf) throws StandardException{
-		/*
-		** The cost estimate will be set here if either optimize() or
-		** optimizeIt() was called on this node.  It's also possible
-		** that optimization was done directly on the child node,
-		** in which case the cost estimate will be null here.
-		*/
+        /*
+        ** The cost estimate will be set here if either optimize() or
+        ** optimizeIt() was called on this node.  It's also possible
+        ** that optimization was done directly on the child node,
+        ** in which case the cost estimate will be null here.
+        */
         if(costEstimate==null) {
             costEstimate = childResult.getFinalCostEstimate(true).cloneMe();
             fixCost();
@@ -239,11 +243,11 @@ public final class RowCountNode extends SingleChildResultSetNode{
     }
 
     @Override
-    public String printExplainInformation(String attrDelim, int order) throws StandardException {
+    public String printExplainInformation(String attrDelim) throws StandardException {
         StringBuilder sb = new StringBuilder();
         sb.append(spaceToLevel())
                 .append("Limit(")
-                .append("n=").append(order)
+                .append("n=").append(getResultSetNumber())
                 .append(attrDelim).append(getFinalCostEstimate(false).prettyProcessingString(attrDelim));
                 if (offset != null && offset instanceof NumericConstantNode) {
                     sb.append(attrDelim).append("offset=").append( ((NumericConstantNode)offset).getValue());

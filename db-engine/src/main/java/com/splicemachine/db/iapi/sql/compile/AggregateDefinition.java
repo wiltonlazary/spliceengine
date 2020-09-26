@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -88,6 +88,7 @@ public interface AggregateDefinition {
 		COUNT_FUNCTION("COUNT"),
 		//no need to over complicate with sub type functions, treat count as count star
 		COUNT_STAR_FUNCTION("COUNT(*)"),
+		STRING_AGG("STRING_AGG"),
 		DENSE_RANK_FUNCTION("DENSE_RANK"),
 		RANK_FUNCTION("RANK"),
 		FIRST_VALUE_FUNCTION("FIRST_VALUE"),

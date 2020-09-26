@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -38,7 +38,19 @@ public final class EmbedConnectionMaker {
      */
 //    @Override
     public Connection createNew(Properties dbProperties) throws SQLException {
-        return driver.connect(JDBC_URL,dbProperties);
+        return createNew(JDBC_URL, dbProperties);
+    }
+
+    /**
+     * Creates a Connection to the DB specified by jdbcString using dbProperties.
+     * 
+     * @param jdbcString
+     * @param dbProperties
+     * @return
+     * @throws SQLException
+     */
+    public Connection createNew(String jdbcString, Properties dbProperties) throws SQLException {
+        return driver.connect(jdbcString, dbProperties);
     }
 
     /**

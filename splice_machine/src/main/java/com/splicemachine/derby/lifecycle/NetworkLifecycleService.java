@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -27,7 +27,7 @@ import com.splicemachine.derby.logging.DerbyOutputLoggerWriter;
 import com.splicemachine.lifecycle.DatabaseLifecycleService;
 import com.splicemachine.utils.SpliceLogUtils;
 import org.apache.zookeeper.ZKUtil;
-import org.spark_project.guava.net.HostAndPort;
+import splice.com.google.common.net.HostAndPort;
 
 /**
  * @author Scott Fines

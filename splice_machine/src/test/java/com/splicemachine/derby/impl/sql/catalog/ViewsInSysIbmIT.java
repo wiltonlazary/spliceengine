@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -20,7 +20,6 @@ import com.splicemachine.derby.test.framework.SpliceWatcher;
 import com.splicemachine.homeless.TestUtils;
 import com.splicemachine.test.HBaseTest;
 import com.splicemachine.test_tools.TableCreator;
-import org.apache.commons.io.FileUtils;
 import org.apache.log4j.Logger;
 import org.junit.*;
 import org.junit.experimental.categories.Category;
@@ -39,6 +38,26 @@ public class ViewsInSysIbmIT extends SpliceUnitTest {
     public static final String CLASS_NAME = ViewsInSysIbmIT.class.getSimpleName().toUpperCase();
     protected static SpliceWatcher spliceClassWatcher = new SpliceWatcher(CLASS_NAME);
     protected static SpliceSchemaWatcher spliceSchemaWatcher = new SpliceSchemaWatcher(CLASS_NAME);
+
+    static File tempDir;
+
+    @BeforeClass
+    public static void createTempDirectory() throws Exception
+    {
+        tempDir = createTempDirectory(CLASS_NAME);
+    }
+
+    @AfterClass
+    public static void deleteTempDirectory() throws Exception
+    {
+        deleteTempDirectory(tempDir);
+    }
+
+    /// this will return the temp directory, that is created on demand once for each test
+    public String getExternalResourceDirectory() throws Exception
+    {
+        return tempDir.toString() + "/";
+    }
 
     @ClassRule
     public static TestRule chain = RuleChain.outerRule(spliceClassWatcher)
@@ -73,24 +92,16 @@ public class ViewsInSysIbmIT extends SpliceUnitTest {
                 .withCreate("create table t6 (a6 int not null unique, b6 int not null, c6 int, d6 int not null, primary key(d6), constraint unique_con1 unique(a6,b6))")
                 .create();
 
-        conn.commit();
-    }
+        new TableCreator(conn)
+                .withCreate("create table t7 (a7 int, b7 int default 999, c7 date default '2019-01-01', d7 float, e7 varchar(10) default 'aaa', f7 char(10) default 'AAA', g7 timestamp default current timestamp)")
+                .create();
 
-    public static void cleanoutDirectory() {
-        try {
-            File file = new File(getExternalResourceDirectory());
-            if (file.exists())
-                FileUtils.deleteDirectory(new File(getExternalResourceDirectory()));
-            file.mkdir();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        conn.commit();
     }
 
     @BeforeClass
     public static void createDataSet() throws Exception {
-        cleanoutDirectory();
-        createData(spliceClassWatcher.getOrCreateConnection());
+        createData( spliceClassWatcher.getOrCreateConnection());
     }
 
     @Test
@@ -150,7 +161,25 @@ public class ViewsInSysIbmIT extends SpliceUnitTest {
         String expected = "NAME    | CREATOR |TYPE |COLCOUNT |KEYCOLUMNS | KEYUNIQUE |CODEPAGE |\n" +
                 "------------------------------------------------------------------------\n" +
                 "SYSCOLUMNS |   SYS   |  T  |   13    |     0     |     0     |  1208   |\n" +
-                " SYSTABLES |   SYS   |  T  |   15    |     0     |     0     |  1208   |";
+                " SYSTABLES |   SYS   |  T  |   16    |     0     |     0     |  1208   |";
+
+        ResultSet rs = methodWatcher.executeQuery(sqlText);
+        Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
+        rs.close();
+    }
+
+    @Test
+    public void testColumnDefault() throws Exception {
+        String sqlText = format("select name, tbname, tbcreator, '-'||coltype||'-', nulls, codepage, length, scale, colno, typename, longlength, keyseq, \"DEFAULT\" from sysibm.syscolumns where tbname='T7' and TBCREATOR='%s'", CLASS_NAME);
+        String expected = "NAME |TBNAME |   TBCREATOR    |     4     | NULLS |CODEPAGE |LENGTH | SCALE | COLNO |TYPENAME  |LONGLENGTH |KEYSEQ |     DEFAULT      |\n" +
+                "---------------------------------------------------------------------------------------------------------------------------------------\n" +
+                " A7  |  T7   |VIEWSINSYSIBMIT |-INTEGER - |   Y   |    0    |   4   |   0   |   0   | INTEGER  |     4     | NULL  |      NULL        |\n" +
+                " B7  |  T7   |VIEWSINSYSIBMIT |-INTEGER - |   Y   |    0    |   4   |   0   |   1   | INTEGER  |     4     | NULL  |       999        |\n" +
+                " C7  |  T7   |VIEWSINSYSIBMIT |-DATE    - |   Y   |    0    |   4   |   0   |   2   |  DATE    |     4     | NULL  |  '2019-01-01'    |\n" +
+                " D7  |  T7   |VIEWSINSYSIBMIT |-DOUBLE  - |   Y   |    0    |   8   |   0   |   3   | DOUBLE   |     8     | NULL  |      NULL        |\n" +
+                " E7  |  T7   |VIEWSINSYSIBMIT |-VARCHAR - |   Y   |  1208   |  10   |   0   |   4   | VARCHAR  |    10     | NULL  |      'aaa'       |\n" +
+                " F7  |  T7   |VIEWSINSYSIBMIT |-CHAR    - |   Y   |  1208   |  10   |   0   |   5   |CHARACTER |    10     | NULL  |      'AAA'       |\n" +
+                " G7  |  T7   |VIEWSINSYSIBMIT |-TIMESTMP- |   Y   |    0    |  10   |   6   |   6   |TIMESTAMP |    10     | NULL  |current timestamp |";
 
         ResultSet rs = methodWatcher.executeQuery(sqlText);
         Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
@@ -194,11 +223,11 @@ public class ViewsInSysIbmIT extends SpliceUnitTest {
 
         // check syscolumns content
         String sqlText = format("select * from sysibm.syscolumns where tbname='ORC_PART_2ND' and TBCREATOR='%s'", CLASS_NAME);
-        String expected = "NAME |   TBNAME    |   TBCREATOR    | COLTYPE | NULLS |CODEPAGE |LENGTH | SCALE | COLNO |TYPENAME |LONGLENGTH |KEYSEQ |\n" +
-                "-----------------------------------------------------------------------------------------------------------------------\n" +
-                "COL1 |ORC_PART_2ND |VIEWSINSYSIBMIT | INTEGER |   Y   |    0    |   4   |   0   |   0   | INTEGER |     4     | NULL  |\n" +
-                "COL2 |ORC_PART_2ND |VIEWSINSYSIBMIT | INTEGER |   Y   |    0    |   4   |   0   |   1   | INTEGER |     4     | NULL  |\n" +
-                "COL3 |ORC_PART_2ND |VIEWSINSYSIBMIT | VARCHAR |   Y   |  1208   |  10   |   0   |   2   | VARCHAR |    10     | NULL  |";
+        String expected = "NAME |   TBNAME    |   TBCREATOR    | COLTYPE | NULLS |CODEPAGE |LENGTH | SCALE | COLNO |TYPENAME |LONGLENGTH |KEYSEQ | DEFAULT |\n" +
+                "---------------------------------------------------------------------------------------------------------------------------------\n" +
+                "COL1 |ORC_PART_2ND |VIEWSINSYSIBMIT | INTEGER |   Y   |    0    |   4   |   0   |   0   | INTEGER |     4     | NULL  |  NULL   |\n" +
+                "COL2 |ORC_PART_2ND |VIEWSINSYSIBMIT | INTEGER |   Y   |    0    |   4   |   0   |   1   | INTEGER |     4     | NULL  |  NULL   |\n" +
+                "COL3 |ORC_PART_2ND |VIEWSINSYSIBMIT | VARCHAR |   Y   |  1208   |  10   |   0   |   2   | VARCHAR |    10     | NULL  |  NULL   |";
 
         ResultSet rs = methodWatcher.executeQuery(sqlText);
         Assert.assertEquals("\n" + sqlText + "\n", expected, TestUtils.FormattedResult.ResultFactory.toString(rs));
@@ -215,10 +244,5 @@ public class ViewsInSysIbmIT extends SpliceUnitTest {
         rs.close();
 
         methodWatcher.executeUpdate(format("drop table %s.orc_part_2nd", CLASS_NAME));
-    }
-
-
-    public static String getExternalResourceDirectory() {
-        return SpliceUnitTest.getHBaseDirectory()+"/target/external2/";
     }
 }

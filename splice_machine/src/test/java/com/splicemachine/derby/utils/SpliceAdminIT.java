@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,7 +14,6 @@
 
 package com.splicemachine.derby.utils;
 
-import java.io.File;
 import java.sql.CallableStatement;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -23,13 +22,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import com.splicemachine.db.client.am.Connection;
 import com.splicemachine.db.shared.common.reference.SQLState;
 import com.splicemachine.derby.test.framework.*;
-import com.splicemachine.test.SerialTest;
 import com.splicemachine.test_dao.TableDAO;
 import org.apache.commons.dbutils.DbUtils;
-import org.apache.commons.io.FileUtils;
 import org.junit.*;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.RuleChain;
@@ -66,12 +62,6 @@ public class SpliceAdminIT extends SpliceUnitTest{
     @Before
     public void initTableDAO() throws Exception {
         tableDAO = new TableDAO(methodWatcher.getOrCreateConnection());
-    }
-
-    @AfterClass
-    public static void cleanup() throws Exception {
-        spliceClassWatcher.execute("call SYSCS_UTIL.SYSCS_DROP_USER('testuser1')");
-        spliceClassWatcher.execute("call SYSCS_UTIL.SYSCS_DROP_USER('testuser2')");
     }
 
     private static final String SQL = "\tsum(l_extendedprice* (1 - l_discount)) as revenue\n" +
@@ -496,7 +486,7 @@ public class SpliceAdminIT extends SpliceUnitTest{
         connection.execute("grant execute on procedure syscs_util.syscs_get_running_operations to testuser1");
 
         // User execute routine to populate cache
-        TestConnection userConnection = methodWatcher.createConnection("testuser1", "testuser1");
+        TestConnection userConnection = methodWatcher.connectionBuilder().user("testuser1").password("testuser1").build();
         userConnection.execute("call syscs_util.syscs_get_running_operations()");
 
         // Update system procedures
@@ -504,6 +494,9 @@ public class SpliceAdminIT extends SpliceUnitTest{
 
         // The user should be able to execute again
         userConnection.execute("call syscs_util.syscs_get_running_operations()");
+
+        // Cleanup
+        spliceClassWatcher.execute("call SYSCS_UTIL.SYSCS_DROP_USER('testuser1')");
     }
 
     @Test
@@ -516,7 +509,7 @@ public class SpliceAdminIT extends SpliceUnitTest{
         connection.execute("grant execute on procedure syscs_util.syscs_get_running_operations to testuser2");
 
         // User execute routine to populate cache
-        TestConnection userConnection = methodWatcher.createConnection("testuser2", "testuser2");
+        TestConnection userConnection = methodWatcher.connectionBuilder().user("testuser2").password("testuser2").build();
         userConnection.execute("call syscs_util.syscs_get_running_operations()");
 
         // Update system procedures
@@ -525,5 +518,8 @@ public class SpliceAdminIT extends SpliceUnitTest{
 
         // The user should be able to execute again
         userConnection.execute("call syscs_util.syscs_get_running_operations()");
+
+        // Cleanup
+        spliceClassWatcher.execute("call SYSCS_UTIL.SYSCS_DROP_USER('testuser2')");
     }
 }

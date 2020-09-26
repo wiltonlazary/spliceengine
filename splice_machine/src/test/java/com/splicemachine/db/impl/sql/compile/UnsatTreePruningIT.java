@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -523,7 +523,7 @@ public class UnsatTreePruningIT extends SpliceUnitTest {
         String sqlText = " select * from t1, t2 where a1=a2 and 1=0 union all select * from t3,t4 where a3=a4 order by 1";
 
         String expected =
-                "1 | 2  | 3  | 4 | 5  | 6  |\n" +
+                "A1 |B1  |C1  |A2 |B2  |C2  |\n" +
                         "----------------------------\n" +
                         " 1 |aaa |1.0 | 1 |aaa |1.0 |\n" +
                         " 2 |bbb |2.0 | 2 |bbb |2.0 |";
@@ -536,7 +536,7 @@ public class UnsatTreePruningIT extends SpliceUnitTest {
         sqlText = "select * from t1, t2 where a1=a2 union all select * from t3,t4 where a3=a4 and 1=0 order by 1";
 
         expected =
-                "1 | 2  | 3  | 4 | 5  | 6  |\n" +
+                "A1 |B1  |C1  |A2 |B2  |C2  |\n" +
                         "----------------------------\n" +
                         " 1 |aaa |1.0 | 1 |aaa |1.0 |\n" +
                         " 2 |bbb |2.0 | 2 |bbb |2.0 |";
@@ -548,7 +548,7 @@ public class UnsatTreePruningIT extends SpliceUnitTest {
         sqlText = "select * from t1, t2 where a1=a2 and 1=0 union select * from t3,t4 where a3>a4";
 
         expected =
-                "1 | 2  | 3  | 4 | 5  | 6  |\n" +
+                "A1 |B1  |C1  |A2 |B2  |C2  |\n" +
                         "----------------------------\n" +
                         " 2 |bbb |2.0 | 1 |aaa |1.0 |";
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -21,8 +21,8 @@ import com.splicemachine.test_tools.TableCreator;
 import org.junit.*;
 import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
-import org.spark_project.guava.collect.Lists;
-import org.spark_project.guava.primitives.Ints;
+import splice.com.google.common.collect.Lists;
+import splice.com.google.common.primitives.Ints;
 
 import java.io.File;
 import java.sql.*;
@@ -474,7 +474,7 @@ public class UpportIT extends SpliceUnitTest {
         ResultSet resultSet = statement.executeQuery();
         //make sure that the bad records list is good
         //all 5 rows are updated, no extra row inserted
-        validateMergeResults(resultSet,5,0, 0);
+        validateMergeResults(resultSet,5,5,0, 0);
 
         //make sure that the data matches
         List<int[]> actualData = Lists.newArrayListWithExpectedSize(size);
@@ -517,7 +517,7 @@ public class UpportIT extends SpliceUnitTest {
         ResultSet resultSet = statement.executeQuery();
         //make sure that the bad records list is good
         //no row should be updated, as we only use the pk column for the merge_data_from_file call
-        validateMergeResults(resultSet,0,0, 0);
+        validateMergeResults(resultSet,0,0,0, 0);
 
         //make sure that the data matches
         List<int[]> actualData = Lists.newArrayListWithExpectedSize(size);
@@ -548,7 +548,7 @@ public class UpportIT extends SpliceUnitTest {
 
         ResultSet resultSet = statement.executeQuery();
         //make sure that the bad records list is good
-        validateMergeResults(resultSet,0,size,0);
+        validateMergeResults(resultSet,size, 0,size,0);
 
         //make sure that the data matches
         List<int[]> actualData = Lists.newArrayListWithExpectedSize(size);
@@ -578,7 +578,7 @@ public class UpportIT extends SpliceUnitTest {
 
         ResultSet resultSet = statement.executeQuery();
         //make sure that the bad records list is good
-        validateMergeResults(resultSet,0, size,0);
+        validateMergeResults(resultSet,size,0, size,0);
 
         //make sure that the data matches
         List<int[]> actualData = Lists.newArrayListWithExpectedSize(size);
@@ -633,7 +633,7 @@ public class UpportIT extends SpliceUnitTest {
         ResultSet resultSet = statement.executeQuery();
         //make sure that the bad records list is good
         //we should have two rows inserted (0,0) and (4,8)
-        validateMergeResults(resultSet,3,2,0);
+        validateMergeResults(resultSet,5, 3,2,0);
 
         sqlText = "select a,b,c,d from "+ tableWithAutoCol.tableName + " order by 1";
 
@@ -689,7 +689,7 @@ public class UpportIT extends SpliceUnitTest {
         ResultSet resultSet = statement.executeQuery();
         //make sure that the bad records list is good
         //we should have two rows inserted (0,0) and (4,8)
-        validateMergeResults(resultSet,3,2,0);
+        validateMergeResults(resultSet,5,3,2,0);
 
         sqlText = "select a,b,c,d from "+ tableWithDefaultCol.tableName + " order by 1";
 
@@ -733,7 +733,7 @@ public class UpportIT extends SpliceUnitTest {
         ResultSet resultSet = statement.executeQuery();
         //make sure that the bad records list is good
         //all 5 rows are updated, no extra row inserted
-        validateMergeResults(resultSet,5,0, 0);
+        validateMergeResults(resultSet,5, 5,0, 0);
 
         // set back the schema
         conn.setSchema(schema.schemaName);
@@ -856,7 +856,7 @@ public class UpportIT extends SpliceUnitTest {
         ResultSet resultSet = statement.executeQuery();
         //make sure that the bad records list is good
         //all 5 rows are updated, no extra row inserted
-        validateMergeResults(resultSet,5,0,1);
+        validateMergeResults(resultSet,5,5,0,1);
     }
 
 
@@ -883,9 +883,7 @@ public class UpportIT extends SpliceUnitTest {
     }
 
     private static TestConnection createConnection() throws Exception {
-        Connection baseConn = SpliceNetConnection.getConnectionAs(
-                SpliceNetConnection.DEFAULT_USER,
-                SpliceNetConnection.DEFAULT_USER_PASSWORD);
+        Connection baseConn = SpliceNetConnection.getDefaultConnection();
         TestConnection conn = new TestConnection(baseConn);
         conn.setSchema(schema.schemaName);
         return conn;

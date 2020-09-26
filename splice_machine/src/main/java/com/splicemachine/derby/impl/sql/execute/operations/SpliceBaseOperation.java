@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -18,12 +18,13 @@ import com.splicemachine.EngineDriver;
 import com.splicemachine.client.SpliceClient;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.reference.SQLState;
+import com.splicemachine.db.iapi.services.io.FormatableArrayHolder;
 import com.splicemachine.db.iapi.services.io.FormatableBitSet;
 import com.splicemachine.db.iapi.sql.Activation;
 import com.splicemachine.db.iapi.sql.ResultColumnDescriptor;
 import com.splicemachine.db.iapi.sql.ResultDescription;
 import com.splicemachine.db.iapi.sql.ResultSet;
-import com.splicemachine.db.iapi.sql.compile.CompilerContext;
+import com.splicemachine.db.iapi.sql.compile.DataSetProcessorType;
 import com.splicemachine.db.iapi.sql.conn.LanguageConnectionContext;
 import com.splicemachine.db.iapi.sql.conn.ResubmitDistributedException;
 import com.splicemachine.db.iapi.sql.conn.StatementContext;
@@ -31,8 +32,10 @@ import com.splicemachine.db.iapi.sql.execute.*;
 import com.splicemachine.db.iapi.store.access.TransactionController;
 import com.splicemachine.db.iapi.store.access.conglomerate.TransactionManager;
 import com.splicemachine.db.iapi.store.raw.Transaction;
+import com.splicemachine.db.iapi.types.DataTypeDescriptor;
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.iapi.types.RowLocation;
+import com.splicemachine.db.impl.sql.GenericStorablePreparedStatement;
 import com.splicemachine.db.impl.sql.execute.ValueRow;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperation;
 import com.splicemachine.derby.iapi.sql.execute.SpliceOperationContext;
@@ -48,14 +51,14 @@ import com.splicemachine.utils.SpliceLogUtils;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 
 import java.io.*;
 import java.sql.SQLWarning;
 import java.sql.Timestamp;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed, Externalizable{
     private static final long serialVersionUID=4l;
@@ -69,7 +72,6 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
     protected boolean isTopResultSet=false;
     protected ExecRow currentRow;
     protected RowLocation currentRowLocation;
-    protected boolean executed=false;
     protected OperationContext operationContext;
     protected volatile boolean isOpen=true;
     protected int resultSetNumber;
@@ -84,6 +86,8 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
     protected long[] modifiedRowCount = new long [] {0};
     protected long badRecords = 0;
     protected boolean returnedRows = false;
+    protected int resultColumnTypeArrayItem;
+    protected DataTypeDescriptor[] resultDataTypeDescriptors;
     private volatile UUID uuid = null;
     private volatile boolean isKilled = false;
     private volatile boolean isTimedout = false;
@@ -97,6 +101,7 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
     public SpliceBaseOperation(OperationInformation information) throws StandardException{
         this.operationInformation=information;
         this.resultSetNumber=operationInformation.getResultSetNumber();
+        this.resultColumnTypeArrayItem = -1;
     }
 
     @SuppressFBWarnings(value = "UR_UNINIT_READ",justification = "Intentionally creates a Null BitDataField")
@@ -112,6 +117,23 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
         if(activation.getLanguageConnectionContext().getStatementContext()==null){
             SpliceLogUtils.trace(LOG,"Cannot get StatementContext from Activation's lcc");
         }
+        resultColumnTypeArrayItem = -1;
+    }
+
+    public SpliceBaseOperation(Activation activation,
+                               int  resultColumnTypeArrayItem,
+                               int resultSetNumber,
+                               double optimizerEstimatedRowCount,
+                               double optimizerEstimatedCost) throws StandardException{
+        this.operationInformation=new DerbyOperationInformation(activation,optimizerEstimatedRowCount,optimizerEstimatedCost,resultSetNumber);
+        this.activation=activation;
+        this.resultSetNumber=resultSetNumber;
+        this.optimizerEstimatedRowCount=optimizerEstimatedRowCount;
+        this.optimizerEstimatedCost=optimizerEstimatedCost;
+        if(activation.getLanguageConnectionContext().getStatementContext()==null){
+            SpliceLogUtils.trace(LOG,"Cannot get StatementContext from Activation's lcc");
+        }
+        this.resultColumnTypeArrayItem = resultColumnTypeArrayItem;
     }
 
     public ExecutionFactory getExecutionFactory(){
@@ -124,6 +146,8 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
         this.optimizerEstimatedRowCount=in.readDouble();
         this.operationInformation=(OperationInformation)in.readObject();
         isTopResultSet=in.readBoolean();
+        explainPlan = in.readUTF();
+        this.resultColumnTypeArrayItem = in.readInt();
     }
 
     @Override
@@ -133,6 +157,8 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
         out.writeDouble(optimizerEstimatedRowCount);
         out.writeObject(operationInformation);
         out.writeBoolean(isTopResultSet);
+        out.writeUTF(explainPlan);
+        out.writeInt(resultColumnTypeArrayItem);
     }
 
     @Override
@@ -159,7 +185,7 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
             activation.addWarning(StandardException.newWarning(SQLState.LANG_MODIFIED_ROW_COUNT_TOO_LARGE, modifiedRowCount));
             return new long[]{ -1 };
         }
-        return this.modifiedRowCount;
+        return Arrays.copyOf(this.modifiedRowCount, this.modifiedRowCount.length);
     }
 
     @Override
@@ -176,8 +202,7 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
         // No difference. We can change that later if needed.
         // Right now this is only used by Spark UI, so don't change it
         // unless you want to change that UI.
-        CompilerContext.DataSetProcessorType type = this.activation.getLanguageConnectionContext().getDataSetProcessorType();
-        if (type == CompilerContext.DataSetProcessorType.SPARK || type == CompilerContext.DataSetProcessorType.FORCED_SPARK)
+        if (this.activation.datasetProcessorType().isSpark())
             explainPlan=(plan==null?"":plan.replace("n=","RS=").replace("->","").trim());
     }
 
@@ -336,6 +361,11 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
         this.activation=context.getActivation();
         this.operationInformation.initialize(context);
         this.resultSetNumber=operationInformation.getResultSetNumber();
+        if (resultColumnTypeArrayItem != -1) {
+            GenericStorablePreparedStatement statement = context.getPreparedStatement();
+            FormatableArrayHolder arrayHolder = (FormatableArrayHolder)statement.getSavedObject(resultColumnTypeArrayItem);
+            resultDataTypeDescriptors = (DataTypeDescriptor [])arrayHolder.getArray(DataTypeDescriptor.class);
+        }
     }
 
     protected ExecRow getFromResultDescription(ResultDescription resultDescription) throws StandardException{
@@ -403,6 +433,9 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
         isKilled = false;
         isTimedout = false;
         modifiedRowCount = new long[] {0};
+        badRecords = 0;
+        returnedRows = false;
+        startTime = System.nanoTime();
         for (SpliceOperation op : getSubOperations()) {
             op.reset();
         }
@@ -410,6 +443,7 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
 
     public void openCore(DataSetProcessor dsp) throws StandardException{
         try {
+            this.execRowIterator = Collections.emptyIterator();
             if (LOG.isTraceEnabled())
                 LOG.trace(String.format("openCore %s", this));
             reset();
@@ -440,9 +474,14 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
     }
 
     protected void resubmitDistributed(ResubmitDistributedException e) throws StandardException {
+        // Rethrow the exception if we're not the top-level statement because we need
+        // to roll back results at each level, and submitting a partial operation tree
+        // causes incorrect execution of nested triggers (and likely other nested statements as well).
+        if (activation.isSubStatement())
+            throw e;
         LOG.warn("The query consumed too many resources running in control mode, resubmitting in Spark");
         close();
-        activation.getPreparedStatement().setDatasetProcessorType(CompilerContext.DataSetProcessorType.FORCED_SPARK);
+        activation.getPreparedStatement().setDatasetProcessorType(DataSetProcessorType.FORCED_SPARK);
         openDistributed();
     }
 
@@ -460,7 +499,8 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
         // otherwise deal with it normally
     }
 
-    protected boolean isOlapServer() {
+    @Override
+    public boolean isOlapServer() {
         return Thread.currentThread().currentThread().getName().startsWith("olap-worker");
     }
 
@@ -989,6 +1029,7 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
         return false;
     }
 
+    @Override
     public UUID getUuid() {
         return uuid;
     }
@@ -1008,5 +1049,59 @@ public abstract class SpliceBaseOperation implements SpliceOperation, ScopeNamed
         for(SpliceOperation op : getSubOperations()){
             op.setRecursiveUnionReference(recursiveUnionReference);
         }
+    }
+
+    @Override
+    public void handleSparkExplain(DataSet<ExecRow> dataSet, DataSet<ExecRow> sourceDataSet, DataSetProcessor dsp) {
+        if (dsp.isSparkExplain()) {
+            if (!dataSet.isNativeSpark()) {
+                if (sourceDataSet.isNativeSpark())
+                    dsp.prependSparkExplainStrings(sourceDataSet.
+                                                   buildNativeSparkExplain(dsp.getSparkExplainKind()), true, true);
+                dsp.prependSpliceExplainString(this.explainPlan);
+            }
+        }
+    }
+
+    @Override
+    public void handleSparkExplain(DataSet<ExecRow> dataSet,
+                                   DataSet<ExecRow> leftDataSet,
+                                   DataSet<ExecRow> rightDataSet,
+                                   DataSetProcessor dsp) {
+        if (dsp.isSparkExplain()) {
+            if (!dataSet.isNativeSpark()) {
+
+                dsp.finalizeTempOperationStrings();
+                if (leftDataSet.isNativeSpark())
+                    dsp.prependSparkExplainStrings(leftDataSet.
+                                                   buildNativeSparkExplain(dsp.getSparkExplainKind()), true, false);
+                else
+                    dsp.popSpliceOperation();
+                if (rightDataSet.isNativeSpark())
+                    dsp.prependSparkExplainStrings(rightDataSet.
+                                                   buildNativeSparkExplain(dsp.getSparkExplainKind()), false, true);
+                else
+                    dsp.popSpliceOperation();
+                dsp.prependSpliceExplainString(this.explainPlan);
+            }
+        }
+    }
+
+    @Override
+    public DataTypeDescriptor[] getResultColumnDataTypes() {
+        return resultDataTypeDescriptors;
+    }
+
+
+    @Override
+    public StructType schema() throws StandardException {
+        if (resultDataTypeDescriptors == null)
+            return getExecRowDefinition().schema();
+
+        int ncols = resultDataTypeDescriptors.length;
+        StructField[] fields = new StructField[ncols];
+        for (int i = 0; i < ncols;i++)
+            fields[i] = resultDataTypeDescriptors[i].getStructField(ValueRow.getNamedColumn(i));
+        return DataTypes.createStructType(fields);
     }
 }

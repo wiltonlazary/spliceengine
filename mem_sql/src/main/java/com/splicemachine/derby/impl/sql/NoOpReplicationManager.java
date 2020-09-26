@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,8 +14,11 @@
 
 package com.splicemachine.derby.impl.sql;
 
+import com.splicemachine.access.api.ReplicationPeerDescription;
 import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.replication.ReplicationManager;
+
+import java.util.List;
 
 /**
  * Created by jyuan on 2/6/19.
@@ -30,7 +33,7 @@ public class NoOpReplicationManager implements ReplicationManager {
     private NoOpReplicationManager(){ }
 
     @Override
-    public void addPeer(short peerId, String clusterKey) throws StandardException {
+    public void addPeer(short peerId, String peerClusterKey) throws StandardException {
 
     }
 
@@ -40,7 +43,7 @@ public class NoOpReplicationManager implements ReplicationManager {
     }
 
     @Override
-    public void enablePeer(short peerId) {
+    public void enablePeer(String clusterKey, short peerId, String peerClusterKey) {
 
     }
 
@@ -60,22 +63,27 @@ public class NoOpReplicationManager implements ReplicationManager {
     }
 
     @Override
-    public void setupReplicationSink() throws StandardException {
+    public void setReplicationRole(String role) throws StandardException {
 
     }
 
     @Override
-    public void setupReplicationSinkLocal() throws StandardException {
+    public String getReplicationRole() throws StandardException {
+        return null;
+    }
+
+    @Override
+    public List<ReplicationPeerDescription> getReplicationPeers() throws StandardException {
+        return null;
+    }
+
+    @Override
+    public void monitorReplication(String primaryClusterKey, String replicaClusterKey) throws StandardException {
 
     }
 
     @Override
-    public void shutdownReplicationSink() throws StandardException {
-
-    }
-
-    @Override
-    public void shutdownReplicationSinkLocal() throws StandardException {
-
+    public String dumpUnreplicatedWals() throws StandardException {
+        return null;
     }
 }

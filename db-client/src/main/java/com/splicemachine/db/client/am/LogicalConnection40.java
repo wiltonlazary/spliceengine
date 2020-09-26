@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -51,7 +51,7 @@ import java.util.Map;
 public class LogicalConnection40
     extends LogicalConnection {
 
-    public LogicalConnection40(Connection physicalConnection,
+    public LogicalConnection40(ClientConnection physicalConnection,
                                ClientPooledConnection pooledConnection) 
         throws SqlException {
         super(physicalConnection, pooledConnection);

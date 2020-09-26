@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
 
 public class MaskPatternLayout extends PatternLayout {
 
-    private String maskString = "***MASKED SENSITIVE INFO***";
+    private String maskString = "********";
     private Pattern maskPattern = null;
     private Logger logger = Logger.getLogger(this.getClass());
 

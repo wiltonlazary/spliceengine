@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -24,9 +24,10 @@ import com.splicemachine.si.impl.ForwardingTxnView;
 import com.splicemachine.si.impl.txn.WritableTxn;
 import com.splicemachine.timestamp.api.TimestampSource;
 import com.splicemachine.utils.ByteSlice;
-import org.spark_project.guava.collect.Lists;
-import org.spark_project.guava.primitives.Longs;
+import splice.com.google.common.collect.Lists;
+import splice.com.google.common.primitives.Longs;
 import java.io.IOException;
+import java.sql.Timestamp;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
@@ -310,6 +311,11 @@ public class TestingTxnStore implements TxnStore{
             }
         });
         return txns;
+    }
+
+    @Override
+    public long getTxnAt(long ts) throws IOException {
+        return 0;
     }
 
     @Override

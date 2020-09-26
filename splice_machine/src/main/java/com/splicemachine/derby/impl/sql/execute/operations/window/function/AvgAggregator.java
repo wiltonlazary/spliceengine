@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -68,6 +68,8 @@ public class AvgAggregator extends SpliceGenericWindowFunction {
 
     public DataValueDescriptor getResult() throws StandardException {
         // Iterate through each chunk, compute the max/min of each chunk
+        if (chunks.isEmpty() || chunks.get(0).isEmpty())
+            return null;
         WindowChunk first = chunks.get(0);
         long count = first.last - first.first;
         NumberDataValue result = (NumberDataValue)first.getResult().cloneValue(false);

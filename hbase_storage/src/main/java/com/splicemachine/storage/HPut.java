@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -19,7 +19,7 @@ import com.splicemachine.si.constants.SIConstants;
 import com.splicemachine.utils.ByteSlice;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.spark_project.guava.collect.Iterables;
+import splice.com.google.common.collect.Iterables;
 
 import java.io.IOException;
 import java.util.Map;
@@ -50,16 +50,32 @@ public class HPut implements HMutation,DataPut{
     @Override
     public void tombstone(long txnIdLong){
         put.addColumn(SIConstants.DEFAULT_FAMILY_BYTES,
-                SIConstants.SNAPSHOT_ISOLATION_TOMBSTONE_COLUMN_BYTES,
+                SIConstants.TOMBSTONE_COLUMN_BYTES,
                 txnIdLong,SIConstants.EMPTY_BYTE_ARRAY);
     }
 
     @Override
     public void antiTombstone(long txnIdLong){
         put.addColumn(SIConstants.DEFAULT_FAMILY_BYTES,
-                SIConstants.SNAPSHOT_ISOLATION_TOMBSTONE_COLUMN_BYTES,
+                SIConstants.TOMBSTONE_COLUMN_BYTES,
                 txnIdLong,
-                SIConstants.SNAPSHOT_ISOLATION_ANTI_TOMBSTONE_VALUE_BYTES);
+                SIConstants.ANTI_TOMBSTONE_VALUE_BYTES);
+    }
+
+    @Override
+    public void addFirstWriteToken(byte[] family, long txnIdLong) {
+        put.addColumn(family,
+                SIConstants.FIRST_OCCURRENCE_TOKEN_COLUMN_BYTES,
+                txnIdLong,
+                SIConstants.EMPTY_BYTE_ARRAY);
+    }
+
+    @Override
+    public void addDeleteRightAfterFirstWriteToken(byte[] family, long txnIdLong) {
+        put.addColumn(family,
+                SIConstants.FIRST_OCCURRENCE_TOKEN_COLUMN_BYTES,
+                txnIdLong,
+                SIConstants.DELETE_RIGHT_AFTER_FIRST_WRITE_VALUE_BYTES);
     }
 
     @Override
@@ -126,5 +142,10 @@ public class HPut implements HMutation,DataPut{
     @Override
     public Mutation unwrapHbaseMutation(){
         return put;
+    }
+
+    @Override
+    public String toString() {
+        return put.toString();
     }
 }

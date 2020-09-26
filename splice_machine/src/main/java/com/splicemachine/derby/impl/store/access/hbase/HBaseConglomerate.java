@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -26,6 +26,7 @@ import com.splicemachine.db.iapi.store.access.conglomerate.TransactionManager;
 import com.splicemachine.db.iapi.store.raw.Transaction;
 import com.splicemachine.db.iapi.types.DataValueDescriptor;
 import com.splicemachine.db.impl.store.access.conglomerate.ConglomerateUtil;
+import com.splicemachine.derby.impl.store.access.BaseSpliceTransaction;
 import com.splicemachine.derby.impl.store.access.SpliceTransaction;
 import com.splicemachine.derby.impl.store.access.SpliceTransactionManager;
 import com.splicemachine.derby.impl.store.access.base.OpenSpliceConglomerate;
@@ -91,10 +92,11 @@ public class HBaseConglomerate extends SpliceConglomerate{
                 isExternal,
                 containerId,
                 this,
-                ((SpliceTransaction)rawtran).getTxn(),
+                ((BaseSpliceTransaction)rawtran).getTxnInformation(),
                 properties.getProperty(SIConstants.SCHEMA_DISPLAY_NAME_ATTR),
                 properties.getProperty(SIConstants.TABLE_DISPLAY_NAME_ATTR),
                 properties.getProperty(SIConstants.INDEX_DISPLAY_NAME_ATTR),
+                properties.getProperty(SIConstants.CATALOG_VERSION_ATTR),
                 pSize,
                 splitKeys);
     }

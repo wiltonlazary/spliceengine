@@ -12,7 +12,7 @@
  *
  * Splice Machine, Inc. has modified this file.
  *
- * All Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the License; you may not use this file except in
  * compliance with the License.
  *
@@ -24,16 +24,13 @@
  */
 package com.splicemachine.db.client.net;
 
-import com.splicemachine.db.client.am.ClientMessageId;
-import com.splicemachine.db.client.am.Configuration;
-import com.splicemachine.db.client.am.ProductLevel;
-import com.splicemachine.db.client.am.SqlException;
+import com.splicemachine.db.client.am.*;
 import com.splicemachine.db.shared.common.reference.SQLState;
 
 import java.sql.RowIdLifetime;
 import java.sql.SQLException;
 
-public class NetDatabaseMetaData extends com.splicemachine.db.client.am.DatabaseMetaData {
+public class NetDatabaseMetaData extends ClientDatabaseMetaData {
 
     public NetDatabaseMetaData(NetAgent netAgent, NetConnection netConnection) {
         // Consider setting product level during parse

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -124,7 +124,9 @@ public class ScalarAggregateOperation extends GenericAggregateOperation {
             throw new IllegalStateException("Operation is not open");
 
         OperationContext<ScalarAggregateOperation> operationContext = dsp.createOperationContext(this);
+        dsp.incrementOpDepth();
         DataSet<ExecRow> dsSource = source.getDataSet(dsp);
+        dsp.decrementOpDepth();
         DataSet<ExecRow> dataSetWithNativeSparkAggregation = null;
 
         if (nativeSparkForced())
@@ -138,11 +140,13 @@ public class ScalarAggregateOperation extends GenericAggregateOperation {
                 dsSource.applyNativeSparkAggregation(null, aggregates,
                                                      false, operationContext);
         if (dataSetWithNativeSparkAggregation != null) {
+            dsp.finalizeTempOperationStrings();
             nativeSparkUsed = true;
             return dataSetWithNativeSparkAggregation;
         }
         DataSet<ExecRow> ds = dsSource.mapPartitions(new ScalarAggregateFlatMapFunction(operationContext, false), false, /*pushScope=*/true, "First Aggregation");
         DataSet<ExecRow> ds2 = ds.coalesce(1, /*shuffle=*/true, /*isLast=*/false, operationContext, /*pushScope=*/true, "Coalesce");
+        handleSparkExplain(ds2, dsSource, dsp);
         return ds2.mapPartitions(new ScalarAggregateFlatMapFunction(operationContext, true), /*isLast=*/true, /*pushScope=*/true, "Final Aggregation");
     }
 }

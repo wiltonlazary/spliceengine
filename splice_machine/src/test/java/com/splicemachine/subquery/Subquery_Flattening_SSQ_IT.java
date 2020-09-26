@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -25,7 +25,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 
 import java.sql.SQLException;
 import java.util.Collection;
@@ -139,4 +139,57 @@ public class Subquery_Flattening_SSQ_IT extends SpliceUnitTest {
             assertEquals("Incorrect sql state returned! Message: "+se.getMessage(), correctSqlState, se.getSQLState());
         }
     }
+
+    @Test
+    public void testSSQflattenedToBaseTableWithCorrelationInSingleTableCondition() throws Exception {
+        /* test correlation in "a1<>2" where a1 is from the outer table */
+        String sql = String.format(
+                "select d1, (select d2 from  t2 --splice-properties joinStrategy=%s, useSpark=%s\n" +
+                        "where a1 = a2 and a1<>2 and b2<2) as D from t1", this.joinStrategy,this.useSparkString);
+
+        String expected = "D1 |  D  |\n" +
+                "----------\n" +
+                " 1 |  1  |\n" +
+                "11 |  1  |\n" +
+                " 2 |NULL |\n" +
+                " 3 |NULL |\n" +
+                " 4 |NULL |";
+
+        SubqueryITUtil.assertUnorderedResult(methodWatcher.getOrCreateConnection(), sql, SubqueryITUtil.ZERO_SUBQUERY_NODES, expected);
+    }
+
+    @Test
+    public void testSSQflattenedToBaseTableWithCorrelationInInListCondition() throws Exception {
+        String sql = String.format(
+                "select d1, (select d2 from  t2 --splice-properties joinStrategy=%s, useSpark=%s\n" +
+                        "where a1 = a2 and a1 in (1,3,4) and b2>=3) as D from t1", this.joinStrategy,this.useSparkString);
+
+        String expected = "D1 |  D  |\n" +
+                "----------\n" +
+                " 1 |NULL |\n" +
+                "11 |NULL |\n" +
+                " 2 |NULL |\n" +
+                " 3 |NULL |\n" +
+                " 4 |  4  |";
+
+        SubqueryITUtil.assertUnorderedResult(methodWatcher.getOrCreateConnection(), sql, SubqueryITUtil.ZERO_SUBQUERY_NODES, expected);
+    }
+
+    @Test
+    public void testSSQWithCorrelationInORConditionNotFlattened() throws Exception {
+        String sql = String.format(
+                "select d1, (select d2 from  t2 --splice-properties useSpark=%s\n" +
+                        "where a1 = a2 and (a1=1 or a1=3 or a1=4) and b2>=3) as D from t1", this.joinStrategy,this.useSparkString);
+
+        String expected = "D1 |  D  |\n" +
+                "----------\n" +
+                " 1 |NULL |\n" +
+                "11 |NULL |\n" +
+                " 2 |NULL |\n" +
+                " 3 |NULL |\n" +
+                " 4 |  4  |";
+
+        SubqueryITUtil.assertUnorderedResult(methodWatcher.getOrCreateConnection(), sql, SubqueryITUtil.ONE_SUBQUERY_NODE, expected);
+    }
+
 }

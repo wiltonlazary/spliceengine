@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -37,7 +37,7 @@ import org.hamcrest.core.IsInstanceOf;
 import org.junit.*;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
-import org.spark_project.guava.collect.Lists;
+import splice.com.google.common.collect.Lists;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
@@ -73,8 +73,8 @@ public class SITransactorTest {
 
     @BeforeClass
     public static void classSetUp() throws IOException {
-        if(testEnv==null){
-            testEnv =SITestEnvironment.loadTestEnvironment();
+        if(testEnv == null) {
+            testEnv = SITestEnvironment.loadTestEnvironment();
             transactorSetup = new TestTransactionSetup(testEnv,true);
         }
         testEnv.initialize(); // reinitialize from scratch
@@ -104,7 +104,6 @@ public class SITransactorTest {
     public void writeRead() throws IOException {
         Txn t1 = control.beginTransaction();
         t1 = t1.elevateToWritable(Bytes.toBytes("t"));
-//				Txn t1 = control.beginTransaction();
         Assert.assertEquals("joe9 absent", testUtility.read(t1, "joe9"));
         testUtility.insertAge(t1, "joe9", 20);
         Assert.assertEquals("joe9 age=20 job=null", testUtility.read(t1, "joe9"));

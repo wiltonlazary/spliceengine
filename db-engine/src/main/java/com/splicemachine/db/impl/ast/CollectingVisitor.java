@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -34,8 +34,8 @@ package com.splicemachine.db.impl.ast;
 import com.splicemachine.db.iapi.sql.compile.Visitable;
 import com.splicemachine.db.iapi.sql.compile.Visitor;
 import com.splicemachine.db.impl.sql.compile.QueryTreeNode;
-import org.spark_project.guava.base.Predicate;
-import org.spark_project.guava.base.Predicates;
+import splice.com.google.common.base.Predicate;
+import splice.com.google.common.base.Predicates;
 import java.util.LinkedList;
 import java.util.List;
 

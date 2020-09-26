@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -224,6 +224,9 @@ public abstract class StatementNode extends QueryTreeNode{
         ActivationClassBuilder generatingClass=new ActivationClassBuilder(
                 superClass,
                 getCompilerContext());
+
+        // Set Spark
+        generatingClass.setDataSetProcessorType(getCompilerContext().getDataSetProcessorType());
 
         /*
          * Generate the code to execute this statement.

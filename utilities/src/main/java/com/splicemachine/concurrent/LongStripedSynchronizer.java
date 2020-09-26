@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -14,8 +14,8 @@
 
 package com.splicemachine.concurrent;
 
-import org.spark_project.guava.base.Supplier;
-import org.spark_project.guava.primitives.Longs;
+import com.google.common.base.Supplier;
+import com.google.common.primitives.Longs;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;

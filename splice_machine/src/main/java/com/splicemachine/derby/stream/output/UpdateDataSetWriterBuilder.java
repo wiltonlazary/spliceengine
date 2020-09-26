@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -23,8 +23,6 @@ import com.splicemachine.db.iapi.sql.execute.ExecRow;
  */
 public interface UpdateDataSetWriterBuilder extends DataSetWriterBuilder{
 
-    UpdateDataSetWriterBuilder execRowDefinition(ExecRow execRow);
-
     UpdateDataSetWriterBuilder execRowTypeFormatIds(int[] execRowTypeFormatIds);
 
     UpdateDataSetWriterBuilder pkCols(int[] pkCols);
@@ -36,6 +34,4 @@ public interface UpdateDataSetWriterBuilder extends DataSetWriterBuilder{
     UpdateDataSetWriterBuilder columnOrdering(int[] colOrdering);
 
     UpdateDataSetWriterBuilder heapList(FormatableBitSet heapList);
-
-    UpdateDataSetWriterBuilder tableVersion(String tableVersion);
 }

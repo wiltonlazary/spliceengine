@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -19,15 +19,13 @@ package com.splicemachine.storage;
  *         Date: 1/7/16
  */
 public class HPartitionLoad implements PartitionLoad{
-    private final int storefileSizeMB;
-    private final int memStoreSizeMB;
-    private final int storefileIndexSizeMB;
+    private final long storefileSize;
+    private final long memStoreSize;
     private final String name;
 
-    public HPartitionLoad(String name,int storefileSizeMB,int memStoreSizeMB,int storefileIndexSizeMB){
-        this.storefileSizeMB=storefileSizeMB;
-        this.memStoreSizeMB=memStoreSizeMB;
-        this.storefileIndexSizeMB=storefileIndexSizeMB;
+    public HPartitionLoad(String name,long storefileSize, long memStoreSize){
+        this.storefileSize=storefileSize;
+        this.memStoreSize=memStoreSize;
         this.name = name;
     }
 
@@ -37,17 +35,17 @@ public class HPartitionLoad implements PartitionLoad{
     }
 
     @Override
-    public int getStorefileSizeMB(){
-        return storefileSizeMB;
+    public long getStorefileSize(){
+        return storefileSize;
     }
 
     @Override
-    public int getMemStoreSizeMB(){
-        return memStoreSizeMB;
+    public long getMemStoreSize(){
+        return memStoreSize;
     }
 
     @Override
-    public int getStorefileIndexSizeMB(){
-        return storefileIndexSizeMB;
+    public long getStorefileIndexSize(){
+        return 0;
     }
 }

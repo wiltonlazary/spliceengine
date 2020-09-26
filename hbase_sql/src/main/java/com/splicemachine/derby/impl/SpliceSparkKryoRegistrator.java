@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -30,6 +30,9 @@ import com.splicemachine.db.iapi.error.StandardException;
 import com.splicemachine.db.iapi.services.io.*;
 import com.splicemachine.db.iapi.sql.dictionary.IndexRowGenerator;
 import com.splicemachine.db.iapi.sql.dictionary.SchemaDescriptor;
+import com.splicemachine.db.iapi.sql.dictionary.TriggerDescriptor;
+import com.splicemachine.db.iapi.sql.dictionary.TriggerDescriptorV2;
+import com.splicemachine.db.iapi.sql.dictionary.TriggerDescriptorV3;
 import com.splicemachine.db.iapi.stats.ColumnStatisticsImpl;
 import com.splicemachine.db.iapi.stats.ColumnStatisticsMerge;
 import com.splicemachine.db.iapi.stats.FakeColumnStatisticsImpl;
@@ -43,8 +46,11 @@ import com.splicemachine.db.impl.sql.catalog.ManagedCache;
 import com.splicemachine.db.impl.sql.compile.*;
 import com.splicemachine.db.impl.sql.execute.*;
 import com.splicemachine.db.impl.store.access.PC_XenaVersion;
+import com.splicemachine.derby.catalog.TriggerNewTransitionRows;
+import com.splicemachine.derby.catalog.TriggerOldTransitionRows;
 import com.splicemachine.derby.ddl.*;
 import com.splicemachine.derby.impl.kryo.SparkValueRowSerializer;
+import com.splicemachine.derby.impl.sql.execute.TriggerRowHolderImpl;
 import com.splicemachine.derby.impl.sql.execute.actions.DeleteConstantOperation;
 import com.splicemachine.derby.impl.sql.execute.actions.InsertConstantOperation;
 import com.splicemachine.derby.impl.sql.execute.actions.UpdateConstantOperation;
@@ -76,10 +82,11 @@ import com.splicemachine.utils.kryo.KryoPool;
 import de.javakaffee.kryoserializers.ArraysAsListSerializer;
 import de.javakaffee.kryoserializers.UUIDSerializer;
 import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.lang3.mutable.MutableDouble;
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.serializer.KryoRegistrator;
-import org.spark_project.guava.base.Optional;
+import splice.com.google.common.base.Optional;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -163,6 +170,7 @@ public class SpliceSparkKryoRegistrator implements KryoRegistrator, KryoPool.Kry
         instance.register(RowMultiSetImpl.class,EXTERNALIZABLE_SERIALIZER);
         instance.register(RoutineAliasInfo.class,EXTERNALIZABLE_SERIALIZER);
         instance.register(SparkOperationContext.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(SparkLeanOperationContext.class,EXTERNALIZABLE_SERIALIZER);
 
         instance.register(IndexConglomerate.class,EXTERNALIZABLE_SERIALIZER);
         instance.register(HBaseConglomerate.class,EXTERNALIZABLE_SERIALIZER);
@@ -254,10 +262,11 @@ public class SpliceSparkKryoRegistrator implements KryoRegistrator, KryoPool.Kry
             }
 
             @Override
+            @SuppressFBWarnings(value = "RR_NOT_CHECKED", justification = "DB-9304")
             protected void readValue(Kryo kryo, Input input, SQLBit dvd) throws StandardException {
                 byte[] data = new byte[input.readInt()];
                 //noinspection ResultOfMethodCallIgnored
-                input.read(data);
+                input.readBytes(data);
                 dvd.setValue(data);
             }
         });
@@ -270,10 +279,11 @@ public class SpliceSparkKryoRegistrator implements KryoRegistrator, KryoPool.Kry
             }
 
             @Override
+            @SuppressFBWarnings(value = "RR_NOT_CHECKED", justification = "DB-9304")
             protected void readValue(Kryo kryo, Input input, SQLVarbit dvd) throws StandardException {
                 byte[] data = new byte[input.readInt()];
                 //noinspection ResultOfMethodCallIgnored
-                input.read(data);
+                input.readBytes(data);
                 dvd.setValue(data);
             }
         });
@@ -286,10 +296,11 @@ public class SpliceSparkKryoRegistrator implements KryoRegistrator, KryoPool.Kry
             }
 
             @Override
+            @SuppressFBWarnings(value = "RR_NOT_CHECKED", justification = "DB-9304")
             protected void readValue(Kryo kryo, Input input, SQLLongVarbit dvd) throws StandardException {
                 byte[] data = new byte[input.readInt()];
                 //noinspection ResultOfMethodCallIgnored
-                input.read(data);
+                input.readBytes(data);
                 dvd.setValue(data);
             }
         });
@@ -512,10 +523,11 @@ public class SpliceSparkKryoRegistrator implements KryoRegistrator, KryoPool.Kry
             }
 
             @Override
+            @SuppressFBWarnings(value = "RR_NOT_CHECKED", justification = "DB-9304")
             protected void readValue(Kryo kryo, Input input, SQLBlob dvd) throws StandardException {
                 byte[] data = new byte[input.readInt()];
                 //noinspection ResultOfMethodCallIgnored
-                input.read(data);
+                input.readBytes(data);
                 dvd.setValue(data);
             }
         });
@@ -668,11 +680,11 @@ public class SpliceSparkKryoRegistrator implements KryoRegistrator, KryoPool.Kry
                 Object[] arguments = e.getArguments();
                 if (arguments != null) {
                     output.writeInt(arguments.length);
+                    for (Object arg : arguments) {
+                        kryo.writeClassAndObject(output, arg);
+                    }
                 } else {
                     output.writeInt(0);
-                }
-                for (Object arg : arguments) {
-                    kryo.writeClassAndObject(output, arg);
                 }
                 output.writeString(e.getMessageId());
             }
@@ -925,5 +937,13 @@ public class SpliceSparkKryoRegistrator implements KryoRegistrator, KryoPool.Kry
         instance.register(BroadcastFullOuterJoinOperation.class,EXTERNALIZABLE_SERIALIZER);
         instance.register(MergeSortFullOuterJoinOperation.class,EXTERNALIZABLE_SERIALIZER);
         instance.register(FakeColumnStatisticsImpl.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(TriggerNewTransitionRows.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(TriggerOldTransitionRows.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(TriggerRowHolderImpl.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(TriggerDescriptor.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(TriggerDescriptorV2.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(TriggerDescriptorV3.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(StringAggregator.class,EXTERNALIZABLE_SERIALIZER);
+        instance.register(StringBuilder.class);
     }
 }

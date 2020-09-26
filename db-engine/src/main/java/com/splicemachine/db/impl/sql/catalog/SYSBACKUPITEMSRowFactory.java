@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -43,7 +43,7 @@ import java.sql.Types;
 
 public class SYSBACKUPITEMSRowFactory extends CatalogRowFactory {
 
-    private static final String TABLENAME_STRING = "SYSBACKUPITEMS";
+    public static final String TABLENAME_STRING = "SYSBACKUPITEMS";
     private static final int BACKUPITEMS_COLUMN_COUNT = 4;
 
     private static final int BACKUP_ID = 1;
@@ -71,13 +71,13 @@ public class SYSBACKUPITEMSRowFactory extends CatalogRowFactory {
             "a0527143-4f6b-42df-98ab-b1dff6bea7db"
     };
 
-    public SYSBACKUPITEMSRowFactory(UUIDFactory uuidf, ExecutionFactory ef, DataValueFactory dvf) {
-        super(uuidf, ef, dvf);
+    public SYSBACKUPITEMSRowFactory(UUIDFactory uuidf, ExecutionFactory ef, DataValueFactory dvf, DataDictionary dd) {
+        super(uuidf, ef, dvf, dd);
         initInfo(BACKUPITEMS_COLUMN_COUNT, TABLENAME_STRING, indexColumnPositions, uniqueness, uuids);
     }
 
     @Override
-    public ExecRow makeRow(TupleDescriptor td, TupleDescriptor parent) throws StandardException {
+    public ExecRow makeRow(boolean latestVersion, TupleDescriptor td, TupleDescriptor parent) throws StandardException {
 
         long backupId = 0;
         String item = null;
@@ -85,6 +85,8 @@ public class SYSBACKUPITEMSRowFactory extends CatalogRowFactory {
         DateTime endTimestamp = null;
 
         if (td != null) {
+            if (!(td instanceof BackupItemsDescriptor))
+                throw new RuntimeException("Unexpected TupleDescriptor " + td.getClass().getName());
             BackupItemsDescriptor d = (BackupItemsDescriptor)td;
             backupId = d.getBackupId();
             item = d.getItem();

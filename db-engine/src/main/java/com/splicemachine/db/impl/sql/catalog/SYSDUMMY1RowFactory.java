@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -68,9 +68,10 @@ public class SYSDUMMY1RowFactory extends CatalogRowFactory
      */
     public SYSDUMMY1RowFactory(UUIDFactory uuidf,
                                ExecutionFactory ef,
-                               DataValueFactory dvf)
+                               DataValueFactory dvf,
+                               DataDictionary dd)
     {
-        super(uuidf,ef,dvf);
+        super(uuidf,ef,dvf,dd);
 
         initInfo(SYSDUMMY1_COLUMN_COUNT, "SYSDUMMY1",
                  null, null, uuids);
@@ -86,7 +87,7 @@ public class SYSDUMMY1RowFactory extends CatalogRowFactory
      * @exception   StandardException thrown on failure
      */
 
-    public ExecRow makeRow(TupleDescriptor td, TupleDescriptor parent)
+    public ExecRow makeRow(boolean latestVersion, TupleDescriptor td, TupleDescriptor parent)
         throws StandardException
     {
         ExecRow row = getExecutionFactory().getValueRow(SYSDUMMY1_COLUMN_COUNT);

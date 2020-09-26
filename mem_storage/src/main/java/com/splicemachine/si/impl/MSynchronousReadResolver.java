@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -130,7 +130,7 @@ public class MSynchronousReadResolver implements KeyedReadResolver{
 
         DataPut put=new MPut(rowKey.getByteCopy());
         put.addCell(SIConstants.DEFAULT_FAMILY_BYTES,
-                SIConstants.SNAPSHOT_ISOLATION_COMMIT_TIMESTAMP_COLUMN_BYTES,txnId,
+                SIConstants.COMMIT_TIMESTAMP_COLUMN_BYTES,txnId,
                 Bytes.toBytes(commitTimestamp));
         put.addAttribute(SIConstants.SI_EXEMPT,SIConstants.TRUE_BYTES);
         put.addAttribute(SIConstants.SUPPRESS_INDEXING_ATTRIBUTE_NAME,SIConstants.SUPPRESS_INDEXING_ATTRIBUTE_VALUE);
@@ -153,8 +153,8 @@ public class MSynchronousReadResolver implements KeyedReadResolver{
 
         DataDelete delete=new MDelete(rowKey.getByteCopy())
                 .deleteColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.PACKED_COLUMN_BYTES,txnId) //delete all the columns for our family only
-                .deleteColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.SNAPSHOT_ISOLATION_TOMBSTONE_COLUMN_BYTES,txnId) //delete all the columns for our family only
-                .deleteColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.SNAPSHOT_ISOLATION_ANTI_TOMBSTONE_VALUE_BYTES,txnId); //delete all the columns for our family only
+                .deleteColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.TOMBSTONE_COLUMN_BYTES,txnId) //delete all the columns for our family only
+                .deleteColumn(SIConstants.DEFAULT_FAMILY_BYTES,SIConstants.ANTI_TOMBSTONE_VALUE_BYTES,txnId); //delete all the columns for our family only
         delete.addAttribute(SIConstants.SUPPRESS_INDEXING_ATTRIBUTE_NAME,SIConstants.SUPPRESS_INDEXING_ATTRIBUTE_VALUE);
         try{
             region.delete(delete);

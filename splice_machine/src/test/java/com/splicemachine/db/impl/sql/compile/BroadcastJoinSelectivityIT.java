@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -66,9 +66,9 @@ public class BroadcastJoinSelectivityIT extends BaseJoinSelectivityIT {
     public void rightOuterJoin() throws Exception {
         try(Statement s = methodWatcher.getOrCreateConnection().createStatement()){
             rowContainsQuery(s,
-                    new int[]{3},
+                    new int[]{4},
                     "explain select * from ts_10_npk --splice-properties joinStrategy=BROADCAST\n right outer join ts_5_npk on ts_10_npk.c1 = ts_5_npk.c1",
-                    "BroadcastRightOuterJoin");
+                    "BroadcastLeftOuterJoin");
         }
     }
 

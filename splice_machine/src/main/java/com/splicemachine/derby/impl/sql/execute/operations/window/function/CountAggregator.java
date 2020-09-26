@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -64,6 +64,9 @@ public class CountAggregator extends SpliceGenericWindowFunction {
     public DataValueDescriptor getResult() throws StandardException {
         // Iterate through each chunk, compute the max/min of each chunk
         long count = 0;
+        if (chunks.isEmpty() || chunks.get(0).isEmpty())
+            return new SQLLongint(count);
+
         for (WindowChunk chunk : chunks) {
             count += chunk.getResult().getLong();
         }

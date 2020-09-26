@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -221,6 +221,21 @@ public class SpliceTransactionFactory implements ModuleControl, ModuleSupportabl
         trans.setTransactionName(transName);
 
         SpliceTransactionContext context=new SpliceTransactionContext(contextMgr,contextName,trans,abortAll,hbaseStore);
+
+        if(LOG.isTraceEnabled())
+            SpliceLogUtils.trace(LOG,"transaction type=%s,%s",context.getIdName(),transName);
+
+        return trans;
+    }
+
+    public SpliceTransaction createPastTransaction(HBaseStore hbaseStore,
+                                                   ContextManager contextMgr,
+                                                   String transName,
+                                                   long transactionId) {
+        SpliceTransaction trans=new PastTransaction(NoLockSpace.INSTANCE,this,dataValueFactory,transName, transactionId);
+        trans.setTransactionName(transName);
+
+        SpliceTransactionContext context=new SpliceTransactionContext(contextMgr, USER_CONTEXT_ID, trans,false,hbaseStore);
 
         if(LOG.isTraceEnabled())
             SpliceLogUtils.trace(LOG,"transaction type=%s,%s",context.getIdName(),transName);

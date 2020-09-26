@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -55,19 +55,23 @@ public class SYSPHYSICALSTATISTICSRowFactory extends CatalogRowFactory {
             "08264013-014b-c29c-947b-000003009390",
             "08264013-014b-c29c-947b-000003009390"
     };
-    public SYSPHYSICALSTATISTICSRowFactory(UUIDFactory uuidFactory, ExecutionFactory exFactory, DataValueFactory dvf) {
-        super(uuidFactory,exFactory,dvf);
+    public SYSPHYSICALSTATISTICSRowFactory(UUIDFactory uuidFactory, ExecutionFactory exFactory, DataValueFactory dvf,
+                                           DataDictionary dd) {
+        super(uuidFactory,exFactory,dvf,dd);
         initInfo(COLUMN_COUNT,TABLENAME_STRING,null,null,uuids);
     }
 
     @Override
-    public ExecRow makeRow(TupleDescriptor td, TupleDescriptor parent) throws StandardException {
+    public ExecRow makeRow(boolean latestVersion, TupleDescriptor td, TupleDescriptor parent) throws StandardException {
         String hostName = null;
         int numCpus = 0;
         long maxHeap = 0;
         int numIpc = 0;
 
         if(td!=null){
+            if (!(td instanceof PhysicalStatsDescriptor))
+                throw new RuntimeException("Unexpected TupleDescriptor " + td.getClass().getName());
+
             PhysicalStatsDescriptor psd = (PhysicalStatsDescriptor)td;
             hostName = psd.getHostName();
             numCpus = psd.getNumCores();

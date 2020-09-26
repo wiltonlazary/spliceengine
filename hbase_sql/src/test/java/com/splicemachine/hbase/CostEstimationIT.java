@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -225,15 +225,15 @@ public class CostEstimationIT extends SpliceUnitTest {
             The plan is similar to the following:
             --------------------------------------------------------------------
             Cursor(n=10,rows=1,updateMode=READ_ONLY (1),engine=control)
-              ->  ScrollInsensitive(n=9,totalCost=131.717,outputRows=1,outputHeapSize=0 B,partitions=1)
-                ->  ProjectRestrict(n=8,totalCost=29.575,outputRows=1,outputHeapSize=0 B,partitions=1)
-                  ->  GroupBy(n=7,totalCost=29.575,outputRows=1,outputHeapSize=0 B,partitions=1)
-                    ->  ProjectRestrict(n=6,totalCost=24.84,outputRows=219,outputHeapSize=296 B,partitions=1)
-                      ->  BroadcastJoin(n=5,totalCost=24.84,outputRows=219,outputHeapSize=296 B,partitions=1,preds=[(A1[8:1] = A2[8:2])])
-                        ->  BroadcastLeftOuterJoin(n=4,totalCost=12.28,outputRows=18,outputHeapSize=78 B,partitions=1,preds=[(A2[6:1] = A3[6:2])])
-                          ->  TableScan[T33(1920)](n=3,totalCost=4.04,scannedRows=20,outputRows=20,outputHeapSize=78 B,partitions=1)
-                          ->  TableScan[T22(1904)](n=2,totalCost=4.04,scannedRows=20,outputRows=18,outputHeapSize=18 B,partitions=1,preds=[(A2[2:1] = 90)])
-                        ->  TableScan[T11(1888)](n=1,totalCost=4.6,scannedRows=300,outputRows=270,outputHeapSize=270 B,partitions=1,preds=[(A1[0:1] = 90)])
+              ->  ScrollInsensitive(n=9,totalCost=141.458,outputRows=1,outputHeapSize=0 B,partitions=1)
+                ->  ProjectRestrict(n=8,totalCost=39.315,outputRows=1,outputHeapSize=0 B,partitions=1)
+                  ->  GroupBy(n=7,totalCost=39.315,outputRows=1,outputHeapSize=0 B,partitions=1)
+                    ->  ProjectRestrict(n=6,totalCost=21.497,outputRows=219,outputHeapSize=332 B,partitions=1)
+                      ->  BroadcastLeftOuterJoin(n=5,totalCost=21.497,outputRows=219,outputHeapSize=332 B,partitions=1,preds=[(A2[8:2] = A3[8:3])])
+                        ->  TableScan[T33(48224)](n=4,totalCost=4.04,scannedRows=20,outputRows=20,outputHeapSize=332 B,partitions=1)
+                        ->  BroadcastJoin(n=3,totalCost=13.039,outputRows=219,outputHeapSize=272 B,partitions=1,preds=[(A1[4:1] = A2[4:2])])
+                          ->  TableScan[T22(48208)](n=2,totalCost=4.04,scannedRows=20,outputRows=18,outputHeapSize=272 B,partitions=1,preds=[(A2[2:1] = 90)])
+                          ->  TableScan[T11(48192)](n=1,totalCost=4.6,scannedRows=300,outputRows=270,outputHeapSize=270 B,partitions=1,preds=[(A1[0:1] = 90)])
 
             10 rows selected
          */
@@ -241,7 +241,7 @@ public class CostEstimationIT extends SpliceUnitTest {
                         "t11  --splice-properties useDefaultRowCount=300\n" +
                         ", t22 left join t33 --splice-properties joinStrategy=broadcast\n" +
                         "on a2=a3 where a1=a2 and a1=90", methodWatcher,
-                "outputRows=1", "outputRows=1", "outputRows=1", "outputRows=219", "outputRows=219", "outputRows=18", "outputRows=20", "outputRows=18", "outputRows=270");
+                "outputRows=1", "outputRows=1", "outputRows=1", "outputRows=219", "outputRows=219", "outputRows=20", "outputRows=219", "outputRows=18", "outputRows=270");
 
     }
 
@@ -367,5 +367,83 @@ public class CostEstimationIT extends SpliceUnitTest {
         rowContainsQuery(new int[]{5,6}, sqlText, methodWatcher,
                 new String[] {"TableScan[T3", "scannedRows=1,outputRows=1"},
                 new String[] {"TableScan[T11", "scannedRows=20,outputRows=20"});
+    }
+
+    @Test
+    public void testUnionAllAsRightOfAJoinWithSubselect() throws Exception {
+        /* the plan should look like the following:
+        Plan
+        ----
+        Cursor(n=11,rows=59736,updateMode=READ_ONLY (1),engine=Spark (cost))
+          ->  ScrollInsensitive(n=10,totalCost=29274.433,outputRows=59736,outputHeapSize=521.382 KB,partitions=1)
+            ->  ProjectRestrict(n=9,totalCost=9552.096,outputRows=59736,outputHeapSize=521.382 KB,partitions=1)
+              ->  MergeSortJoin(n=8,totalCost=9552.096,outputRows=59736,outputHeapSize=521.382 KB,partitions=1,preds=[(T1.A1[14:1] = B.A2[14:2])])
+                ->  Union(n=7,totalCost=182.482,outputRows=73748,outputHeapSize=288.039 KB,partitions=2)
+                  ->  TableScan[T33(2000)](n=6,totalCost=4.04,scannedRows=20,outputRows=20,outputHeapSize=20 B,partitions=1)
+                  ->  ProjectRestrict(n=5,totalCost=130.205,outputRows=73728,outputHeapSize=288.02 KB,partitions=1)
+                    ->  BroadcastJoin(n=4,totalCost=130.205,outputRows=73728,outputHeapSize=288.02 KB,partitions=1,preds=[(A1[6:1] = A2[6:2])])
+                      ->  TableScan[T22(1984)](n=3,totalCost=4.04,scannedRows=20,outputRows=20,outputHeapSize=288.02 KB,partitions=1)
+                      ->  IndexScan[IDX1_T111(1937)](n=2,totalCost=48.237,scannedRows=40960,outputRows=40960,outputHeapSize=160 KB,partitions=1,baseTable=T111(1920))
+                ->  TableScan[T1(1856)](n=1,totalCost=4.045,scannedRows=40,outputRows=40,outputHeapSize=160 B,partitions=1)
+
+        11 rows selected
+         */
+        String sqlText = "explain\n" +
+                "select 1 from --splice-properties joinOrder=fixed\n" +
+                "t1,\n" +
+                "(select a2 from t22, t111 where a1=a2\n" +
+                "union all\n" +
+                "select a3 from t33) b\n" +
+                "where t1.a1=b.a2";
+
+        rowContainsQuery(new int[]{4,5,6,7,8,9,10,11}, sqlText, methodWatcher,
+                new String[] {"MergeSortJoin", "outputRows=59736"},
+                new String[] {"Union", "outputRows=73748"},
+                new String[] {"TableScan[T33", "outputRows=20"},
+                new String[] {"ProjectRestrict", "outputRows=73728"},
+                new String[] {"BroadcastJoin", "outputRows=73728"},
+                new String[] {"TableScan[T22", "outputRows=20"},
+                new String[] {"IndexScan[IDX1_T111", "outputRows=40960"},
+                new String[] {"TableScan[T1", "outputRows=40"}
+                );
+    }
+
+    @Test
+    public void testIntersectAsRightOfAJoinWithSubselect() throws Exception {
+        /* the plan should look like the following:
+        Plan
+        ----
+        Cursor(n=11,rows=32,updateMode=READ_ONLY (1),engine=Spark (cost))
+          ->  ScrollInsensitive(n=10,totalCost=23598.674,outputRows=32,outputHeapSize=74.393 KB,partitions=1)
+            ->  ProjectRestrict(n=9,totalCost=18113.006,outputRows=32,outputHeapSize=74.393 KB,partitions=1)
+              ->  BroadcastJoin(n=8,totalCost=18113.006,outputRows=32,outputHeapSize=74.393 KB,partitions=1,preds=[(T1.A1[14:1] = B.SQLCol2[14:2])])
+                ->  Intersect(n=7,totalCost=16416.922,outputRows=10,outputHeapSize=74.267 KB,partitions=1)
+                  ->  TableScan[T33(1728)](n=6,totalCost=4.04,scannedRows=20,outputRows=20,outputHeapSize=20 B,partitions=1)
+                  ->  ProjectRestrict(n=5,totalCost=130.205,outputRows=73728,outputHeapSize=288.02 KB,partitions=1)
+                    ->  BroadcastJoin(n=4,totalCost=130.205,outputRows=73728,outputHeapSize=288.02 KB,partitions=1,preds=[(A1[6:1] = A2[6:2])])
+                      ->  TableScan[T22(1712)](n=3,totalCost=4.04,scannedRows=20,outputRows=20,outputHeapSize=288.02 KB,partitions=1)
+                      ->  IndexScan[IDX1_T111(1665)](n=2,totalCost=48.237,scannedRows=40960,outputRows=40960,outputHeapSize=160 KB,partitions=1,baseTable=T111(1648))
+                ->  TableScan[T1(1584)](n=1,totalCost=4.045,scannedRows=40,outputRows=40,outputHeapSize=160 B,partitions=1)
+
+        11 rows selected
+         */
+        String sqlText = "explain\n" +
+                "select 1 from --splice-properties joinOrder=fixed\n" +
+                "t1,\n" +
+                "(select a2 from t22, t111 where a1=a2\n" +
+                "intersect \n" +
+                "select a3 from t33) b(a2)\n" +
+                "where t1.a1=b.a2";
+
+        rowContainsQuery(new int[]{4,5,6,7,8,9,10,11}, sqlText, methodWatcher,
+                new String[] {"BroadcastJoin", "outputRows=32"},
+                new String[] {"Intersect", "outputRows=10"},
+                new String[] {"TableScan[T33", "outputRows=20"},
+                new String[] {"ProjectRestrict", "outputRows=73728"},
+                new String[] {"BroadcastJoin", "outputRows=73728"},
+                new String[] {"TableScan[T22", "outputRows=20"},
+                new String[] {"IndexScan[IDX1_T111", "outputRows=40960"},
+                new String[] {"TableScan[T1", "outputRows=40"}
+        );
     }
 }

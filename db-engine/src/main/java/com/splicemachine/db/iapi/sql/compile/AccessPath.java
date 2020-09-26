@@ -25,7 +25,7 @@
  *
  * Splice Machine, Inc. has modified the Apache Derby code in this file.
  *
- * All such Splice Machine modifications are Copyright 2012 - 2019 Splice Machine, Inc.,
+ * All such Splice Machine modifications are Copyright 2012 - 2020 Splice Machine, Inc.,
  * and are licensed to you under the GNU Affero General Public License.
  */
 
@@ -176,4 +176,7 @@ public interface AccessPath {
 	 * @param missingHashKeyOK {@code true} if the join strategy was is hashable with no hash key, {@code false} otherwise.
 	 */
 	void setMissingHashKeyOK(boolean missingHashKeyOK);
+
+	boolean getSpecialMaxScan();
+	void setSpecialMaxScan(boolean value);
 }

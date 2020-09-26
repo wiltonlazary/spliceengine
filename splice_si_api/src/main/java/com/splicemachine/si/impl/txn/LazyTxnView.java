@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -96,6 +96,12 @@ public class LazyTxnView implements TxnView {
     public boolean descendsFrom(TxnView potentialParent) {
         lookup(false);
         return delegate.descendsFrom(potentialParent);
+    }
+
+    @Override
+    public boolean hasActiveWriteableOrRolledBackTransactionInLineage(TxnView ancestor, boolean checkForRollbackOnly) {
+        lookup(false);
+        return delegate.hasActiveWriteableOrRolledBackTransactionInLineage(ancestor, checkForRollbackOnly);
     }
 
     @Override
@@ -213,6 +219,7 @@ public class LazyTxnView implements TxnView {
     public boolean equivalent(TxnView o) {
         if (this == o) return true;
         if (!(o instanceof TxnView)) return false;
+        if (o instanceof PastTxn) return false;
         return (txnId & SIConstants.TRANSANCTION_ID_MASK) == (o.getTxnId() & SIConstants.TRANSANCTION_ID_MASK);
     }
 

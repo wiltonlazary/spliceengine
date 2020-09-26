@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 - 2019 Splice Machine, Inc.
+ * Copyright (c) 2012 - 2020 Splice Machine, Inc.
  *
  * This file is part of Splice Machine.
  * Splice Machine is free software: you can redistribute it and/or modify it under the terms of the
@@ -49,7 +49,6 @@ public class SMInputFormat extends AbstractSMInputFormat<RowLocation, ExecRow> {
         String tableName = conf.get(MRConstants.SPLICE_INPUT_TABLE_NAME);
         String conglomerate = conf.get(MRConstants.SPLICE_INPUT_CONGLOMERATE);
         String tableScannerAsString = conf.get(MRConstants.SPLICE_SCAN_INFO);
-        splits = conf.getInt(MRConstants.SPLICE_SPLITS_PER_TABLE, 0);
         spark = tableScannerAsString!=null;
         conf.setBoolean("splice.spark", spark);
         String jdbcString = conf.get(MRConstants.SPLICE_JDBC_STR);
